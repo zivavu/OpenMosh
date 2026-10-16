@@ -206,9 +206,11 @@ export class SequenceMixer {
 		const ctx = this.#ctx;
 		if (!ctx) return;
 		const t = this.#now() + (fromNow ? 0 : LEAD);
-		stopNodes(this.#nodes);
+		const handover = ctx.currentTime + LEAD;
+		// Running on, the old sound plays until the new takes over; a jump cuts it now.
+		stopNodes(this.#nodes, fromNow ? undefined : handover);
 		this.#anchorTime = t;
-		this.#anchorCtx = ctx.currentTime + LEAD;
+		this.#anchorCtx = handover;
 		this.#anchorWall = performance.now() + LEAD * 1000;
 		const loop = this.#loopRange();
 		if (loop && t < loop.end) {

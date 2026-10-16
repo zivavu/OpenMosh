@@ -17,6 +17,8 @@ class FakeNode {
 	buffer: unknown = null;
 	startedAt: number | null = null;
 	stopped = false;
+	stoppedAt: number | null = null;
+	onended: (() => void) | null = null;
 	fftSize = 0;
 	frequencyBinCount = 8;
 	constructor(context: FakeContext) {
@@ -27,8 +29,9 @@ class FakeNode {
 	start(at: number) {
 		this.startedAt = at;
 	}
-	stop() {
+	stop(at?: number) {
 		this.stopped = true;
+		this.stoppedAt = at ?? this.context.currentTime;
 	}
 }
 
@@ -148,6 +151,19 @@ describe("a looping mix", () => {
 		expect(fresh).toHaveLength(2);
 		// Picked up where it was, 2s in: the new next pass waits for the new end, at 4.
 		expect(fresh[1].startedAt! - fresh[0].startedAt!).toBeCloseTo(2, 5);
+		mixer.pause();
+		dispose();
+	});
+
+	it("keeps the sound going while the span moves under it", () => {
+		const { mixer, dispose } = looping({ start: 2, end: 3 });
+		mixer.play();
+		const playing = ctx.sources.slice();
+		mixer.spanStart = 1;
+		frame();
+		const fresh = ctx.sources.slice(playing.length);
+		// Stopped as the new sound starts, not cut ahead of it.
+		for (const old of playing) expect(old.stoppedAt).toBe(fresh[0].startedAt);
 		mixer.pause();
 		dispose();
 	});

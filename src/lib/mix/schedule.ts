@@ -82,15 +82,21 @@ function reversedBuffer(buffer: AudioBuffer): AudioBuffer {
 	return out;
 }
 
-export function stopNodes(nodes: ScheduledNode[]): void {
+/** Stop the nodes now, or at context time `at`: handing over to fresh sound, the old
+ * stops just as the new starts, so nothing drops out between them. */
+export function stopNodes(nodes: ScheduledNode[], at?: number): void {
 	for (const { node, trim } of nodes) {
+		const release = () => {
+			node.disconnect();
+			// The fade hangs off the trim; still wired to the bus, the pair outlives the stop.
+			trim.disconnect();
+		};
 		try {
-			node.stop();
+			node.stop(at);
 		} catch {
 			// Never started.
 		}
-		node.disconnect();
-		// The fade hangs off the trim; still wired to the bus, the pair outlives the stop.
-		trim.disconnect();
+		if (at === undefined) release();
+		else node.onended = release;
 	}
 }
