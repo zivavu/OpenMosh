@@ -44,7 +44,7 @@ export interface ProjectFileResult {
 	blob: Blob;
 	/** The download name, with its mode's extension. */
 	name: string;
-	/** Pool files whose bytes were gone from storage and so weren't saved. */
+	/** Pool files and songs that were gone from storage and so weren't saved. */
 	missing: number;
 }
 
@@ -254,9 +254,13 @@ export async function buildProjectFile(
 
 	const songs: ProjectSongEntry[] = [];
 	const songParts: ZipEntryInput[] = [];
+	let missingSongs = 0;
 	for (const trackId of songIdsOf(content)) {
 		const track = await getTrack(trackId).catch(() => null);
-		if (!track) continue;
+		if (!track) {
+			missingSongs++;
+			continue;
+		}
 		const fileName = track.fileName ?? track.name;
 		const path = `songs/${songs.length}.${extOf(fileName, track.blob.type)}`;
 		songs.push({
@@ -312,7 +316,11 @@ export async function buildProjectFile(
 		...fontParts,
 	]);
 
-	return { blob, name: projectFileName(name, content.mode), missing };
+	return {
+		blob,
+		name: projectFileName(name, content.mode),
+		missing: missing + missingSongs,
+	};
 }
 
 /** Build the file and download it, with a toast while it builds and when it's done. */
