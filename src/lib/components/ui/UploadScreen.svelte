@@ -347,18 +347,19 @@
 		".webm",
 		".mov",
 	];
-	function getExtension(name: string) {
-		return name.slice(name.lastIndexOf(".")).toLowerCase();
-	}
+	const HEIC_ACCEPT = ["image/heic", "image/heif", ".heic", ".heif"];
 
 	/** The slideshow has no redraw-at-output-size for SVGs; the other modes do. */
 	let takesSvg = $derived(selectedMode !== "slideshow");
+	/** The slideshow's own intake turns HEIC down, so it isn't offered there. */
+	let takesHeic = $derived(selectedMode !== "slideshow");
 
+	/** Reads `file.type`, so intake types a file from its name first. */
 	function isAcceptedFile(file: File) {
 		if (isMeshFile(file)) return selectedMode === "sequence";
 		if (isSvgFile(file)) return takesSvg;
-		if (file.type) return ACCEPTED_TYPES.includes(file.type);
-		return ACCEPTED_EXTENSIONS.includes(getExtension(file.name));
+		if (HEIC_ACCEPT.includes(file.type)) return takesHeic;
+		return ACCEPTED_TYPES.includes(file.type);
 	}
 
 	/** A saved project file of any mode; one from another mode is turned down with
@@ -372,9 +373,12 @@
 	}
 
 	let supportedLabel = $derived(
-		takesSvg
-			? "PNG, JPG, WEBP, GIF, HEIC, SVG, MP4, WEBM, MOV"
-			: "PNG, JPG, WEBP, GIF, HEIC, MP4, WEBM, MOV",
+		[
+			"PNG, JPG, WEBP, GIF",
+			...(takesHeic ? ["HEIC"] : []),
+			...(takesSvg ? ["SVG"] : []),
+			"MP4, WEBM, MOV",
+		].join(", "),
 	);
 
 	/** 3D files in a format we can't read, and why; the dialog is up while there are any. */
@@ -586,8 +590,9 @@
 	function getAcceptTypes() {
 		const models = selectedMode === "sequence" ? [MESH_ACCEPT] : [];
 		return [
-			...ACCEPTED_TYPES,
-			...ACCEPTED_EXTENSIONS,
+			...[...ACCEPTED_TYPES, ...ACCEPTED_EXTENSIONS].filter(
+				(t) => takesHeic || !HEIC_ACCEPT.includes(t),
+			),
 			...(takesSvg ? ["image/svg+xml", ".svg"] : []),
 			...models,
 			PROJECT_EXTENSIONS[selectedMode],
