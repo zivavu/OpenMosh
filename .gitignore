@@ -31,6 +31,8 @@ probe
 .cursor/*
 .zed/*
 !.vscode/extensions.json
+!.vscode/settings.json
+!.zed/settings.json
 .idea
 .DS_Store
 *.suo

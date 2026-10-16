@@ -1,0 +1,28 @@
+{
+	"editor.formatOnSave": true,
+	"editor.defaultFormatter": "esbenp.prettier-vscode",
+	"editor.detectIndentation": false,
+	"editor.insertSpaces": false,
+	"editor.tabSize": 2,
+	"editor.rulers": [80],
+	"files.eol": "\n",
+	"files.insertFinalNewline": true,
+	"files.trimTrailingWhitespace": true,
+	"[svelte]": {
+		"editor.defaultFormatter": "esbenp.prettier-vscode"
+	},
+	"files.exclude": {
+		"dist": true,
+		"dist-e2e": true,
+		"test-results": true,
+		"playwright-report": true
+	},
+	"search.exclude": {
+		"bun.lock": true,
+		"CHANGELOG.md": true,
+		"dist": true,
+		"dist-e2e": true,
+		"test-results": true,
+		"playwright-report": true
+	}
+}
