@@ -26,6 +26,9 @@ import { createMediaChainSource, laneSourceIds } from "../media";
 import type { MediaTimeline, ResolvedMediaLayer, SourceEdit } from "../media";
 import type { SequenceSource } from "./sequence-sources.svelte";
 
+const SEEK_FAILED =
+	"The export stopped because the video couldn't be read past this point.";
+
 export interface RecordingContext {
 	fps: number;
 	recordDuration: number;
@@ -218,14 +221,24 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 		}
 	}
 
+	// A video that errors never fires `seeked`, which would stall the export unannounced.
 	const seekBeforeRender = async (_frameIndex: number, time: number) => {
-		videoEl!.currentTime = sourceTimeAt(time);
-		await new Promise<void>((resolve) => {
-			videoEl!.addEventListener("seeked", () => resolve(), {
-				once: true,
-			});
+		const video = videoEl!;
+		if (video.error) throw new Error(SEEK_FAILED);
+		await new Promise<void>((resolve, reject) => {
+			const settle = (failed: boolean) => {
+				video.removeEventListener("seeked", onSeeked);
+				video.removeEventListener("error", onError);
+				if (failed) reject(new Error(SEEK_FAILED));
+				else resolve();
+			};
+			const onSeeked = () => settle(false);
+			const onError = () => settle(true);
+			video.addEventListener("seeked", onSeeked);
+			video.addEventListener("error", onError);
+			video.currentTime = sourceTimeAt(time);
 		});
-		renderer.updateSourceFrame(videoEl!);
+		renderer.updateSourceFrame(video);
 	};
 
 	// Single mode's video: one sample per recorder frame, uploaded as it lands.
