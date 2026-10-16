@@ -121,6 +121,7 @@ export class SequenceSourceRegistry {
 	#disposed = false;
 	#onReady: (() => void) | undefined;
 	#onPersist: ((write: Promise<void>) => void) | undefined;
+	#onUnreadable: ((sources: SequenceSource[]) => void) | undefined;
 	/** Generated images follow the output size; a re-render swaps the URL and drops the decode. */
 	#sizeSync = new GeneratedSizeSync((id, url) => {
 		const live = this.get(id);
@@ -136,13 +137,16 @@ export class SequenceSourceRegistry {
 	});
 
 	/** Notified when a lazy decode lands, so a paused preview can redraw. `onPersist`
-	 * follows each write of added media to storage. */
+	 * follows each write of added media to storage. `onUnreadable` hears of images
+	 * the browser couldn't decode, already out of the pool, once per add. */
 	constructor(
 		onReady?: () => void,
 		onPersist?: (write: Promise<void>) => void,
+		onUnreadable?: (sources: SequenceSource[]) => void,
 	) {
 		this.#onReady = onReady;
 		this.#onPersist = onPersist;
+		this.#onUnreadable = onUnreadable;
 	}
 
 	get(id: string | null | undefined): SequenceSource | undefined {
@@ -493,6 +497,7 @@ export class SequenceSourceRegistry {
 
 	/** Fills in image thumbnails once chips are on screen; also the validation pass. */
 	async #fillThumbnails(list: SequenceSource[]) {
+		const unreadable: SequenceSource[] = [];
 		let next = 0;
 		const worker = async () => {
 			while (next < list.length && !this.#disposed) {
@@ -505,6 +510,7 @@ export class SequenceSourceRegistry {
 					continue;
 				}
 				if (!thumb) {
+					unreadable.push(live);
 					this.remove(src.id);
 					continue;
 				}
@@ -518,6 +524,9 @@ export class SequenceSourceRegistry {
 		await Promise.all(
 			Array.from({ length: Math.min(THUMB_CONCURRENCY, list.length) }, worker),
 		);
+		if (unreadable.length > 0 && !this.#disposed) {
+			this.#onUnreadable?.(unreadable);
+		}
 	}
 
 	#revoke(src: SequenceSource) {
