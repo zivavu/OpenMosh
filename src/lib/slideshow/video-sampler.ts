@@ -105,6 +105,8 @@ export class SlideVideoSampler {
 	#reverse: ReverseFrames | null = null;
 	/** Where the forward decoder waits out a backward pass: the turn back to forward. */
 	#parkedAt: number | null = null;
+	/** The backward pass's frame on screen: standing still, it isn't sent again. */
+	#reverseShown: number | null = null;
 	/** Whether a frame has been returned since the last (re)start at 0. */
 	#delivered = false;
 	/** Guards against overlapping at() calls from the preview rAF loop. */
@@ -166,8 +168,14 @@ export class SlideVideoSampler {
 			const want = ((t % this.duration) + this.duration) % this.duration;
 			if (bounce?.reverse) {
 				this.#park(bounce.turnAt);
-				return await this.#reverseFrames().frameAt(want);
+				const frame = await this.#reverseFrames().frameAt(
+					want,
+					lost ? null : this.#reverseShown,
+				);
+				if (frame) this.#reverseShown = frame.timestamp;
+				return frame;
 			}
+			this.#reverseShown = null;
 			this.#parkedAt = null;
 			if (bounce && bounce.turnAt - want < TURN_LEAD) {
 				this.#reverseFrames().prefetch(bounce.turnAt);

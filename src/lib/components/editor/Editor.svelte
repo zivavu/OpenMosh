@@ -1675,8 +1675,15 @@
 
 	// Every piece of media the project can draw; sourceTick bumps when a late upload lands.
 	let sourceTick = $state(0);
+	let sourceTickQueued = false;
+	// Once a frame: a redraw whose upload asks for another redraw can't spin without yielding.
 	const bumpSourceTick = () => {
-		if (!seqPlaying()) sourceTick++;
+		if (sourceTickQueued || seqPlaying()) return;
+		sourceTickQueued = true;
+		requestAnimationFrame(() => {
+			sourceTickQueued = false;
+			if (!seqPlaying()) sourceTick++;
+		});
 	};
 
 	/** Once per session: a browser that won't store files refuses every add. */

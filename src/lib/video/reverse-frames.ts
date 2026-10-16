@@ -32,9 +32,12 @@ export class ReverseFrames {
 		this.#maxSide = maxSide;
 	}
 
-	/** The frame due at `t` on a backward pass, once its chunk has decoded. Also
-	 * starts on the chunk the pass reaches next. */
-	async frameAt(t: number): Promise<VideoFrame | null> {
+	/** The frame due at `t` on a backward pass, once its chunk has decoded; null when
+	 * it's `shown`, the one already up. Also starts on the chunk the pass reaches next. */
+	async frameAt(
+		t: number,
+		shown: number | null = null,
+	): Promise<VideoFrame | null> {
 		const index = chunkIndex(t);
 		this.#keep(index, index - 1);
 		const chunk = this.#want(index);
@@ -44,7 +47,8 @@ export class ReverseFrames {
 		if (!chunk.ready) await chunk.loaded;
 		if (chunk.dropped) return null;
 		const due = dueFrame(chunk.frames, t);
-		return due && new VideoFrame(due.image, { timestamp: due.timestamp });
+		if (!due || due.timestamp === shown) return null;
+		return new VideoFrame(due.image, { timestamp: due.timestamp });
 	}
 
 	/** Decode the chunk a backward pass starting at `t` shows first, ahead of the turn. */
