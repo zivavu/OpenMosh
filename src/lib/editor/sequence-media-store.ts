@@ -3,6 +3,7 @@
 import { getAllTrackIds } from "../audio/track-library";
 import { request, transact } from "../idb";
 import { requestPersistentStorage } from "../persistent-storage";
+import { mediaTypeForName } from "../media/file-type";
 import { PROXY_BUILD } from "../video/proxy";
 
 export interface StoredSequenceMedia {
@@ -528,7 +529,8 @@ async function pruneTimelines(
 /** Rebuilds a `File`; the constructor defaults `lastModified` to `Date.now()`. */
 export function storedMediaToFile(entry: StoredSequenceMedia): File {
 	return new File([entry.blob], entry.name, {
-		type: entry.type || entry.blob.type,
+		// Stored untyped before intake typed files from their names.
+		type: entry.type || entry.blob.type || mediaTypeForName(entry.name),
 		lastModified: entry.lastModified ?? lastModifiedFromId(entry.id),
 	});
 }

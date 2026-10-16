@@ -35,6 +35,7 @@
 	import { lazy } from "../../lazy";
 	import { isMeshFile, MESH_ACCEPT } from "../../mesh";
 	import { isSvgFile } from "../../media/svg";
+	import { withMediaType } from "../../media/file-type";
 	import {
 		diagnoseModel,
 		isOtherModelFile,
@@ -403,7 +404,8 @@
 		);
 	}
 
-	function handleFile(file: File) {
+	function handleFile(untyped: File) {
+		const file = withMediaType(untyped);
 		if (isProjectFile(file)) {
 			onProjectFile(file, selectedMode);
 			return;
@@ -416,7 +418,7 @@
 	}
 
 	function handleMultiFiles(files: FileList | File[]) {
-		const all = Array.from(files);
+		const all = Array.from(files, withMediaType);
 		const project = all.find(isProjectFile);
 		if (project) {
 			onProjectFile(project, selectedMode);
@@ -507,7 +509,7 @@
 
 	/** Single mode takes one file; say so rather than silently dropping the rest. */
 	function handleSingleFile(files: FileList | File[]) {
-		const all = Array.from(files);
+		const all = Array.from(files, withMediaType);
 		const file = all[0];
 		if (!file) return;
 		if (all.length > 1 && isAcceptedFile(file)) {
@@ -528,7 +530,7 @@
 		if (!files || files.length === 0) return;
 
 		// A project file opens the Editor whatever mode is showing.
-		const all = Array.from(files);
+		const all = Array.from(files, withMediaType);
 		const project = all.find(isProjectFile);
 		if (project) {
 			onProjectFile(project, selectedMode);
@@ -595,7 +597,8 @@
 		return isMultiMode;
 	}
 
-	function handleAudioFile(file: File) {
+	function handleAudioFile(untyped: File) {
+		const file = withMediaType(untyped);
 		if (!isAudioFile(file)) {
 			showToast(`"${file.name}" isn't an audio file`, "error");
 			return;

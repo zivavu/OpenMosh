@@ -321,6 +321,7 @@
 		specRender,
 	} from "../../generators";
 	import { isSvgFile, rasterizeSvg } from "../../media/svg";
+	import { withMediaType } from "../../media/file-type";
 
 	const loadShortcutsModal = lazy(() => import("../ui/ShortcutsModal.svelte"));
 	const loadGeneratePanel = lazy(
@@ -4352,7 +4353,7 @@
 
 	/** Audio sets the track; media replaces the file in single mode, joins the pool in sequence. */
 	function handleDroppedFiles(files: FileList) {
-		const all = Array.from(files);
+		const all = Array.from(files, withMediaType);
 		const audioFiles = all.filter((f) => f.type.startsWith("audio/"));
 		if (isSequenceMode && audioFiles.length > 0) {
 			void addAudioFiles(audioFiles);
