@@ -76,7 +76,7 @@ export function computeEffectsForBeat(
 	switch (config.moshMode) {
 		case "random": {
 			const effects = cloneEffects(baseEffects);
-			generateMosh(effects, moshOptions);
+			generateMosh(effects, { ...moshOptions, moshStyle: "curated" });
 			return effects;
 		}
 		case "consistent":
