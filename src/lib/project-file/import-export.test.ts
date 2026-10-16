@@ -179,6 +179,17 @@ describe("a project file round trip", () => {
 		expect(built.missing).toBe(1);
 	});
 
+	test("counts songs that were deleted from the library", async () => {
+		const key = "proj-no-song";
+		const song = await seedTrack("song.wav", 50);
+		await store.saveMediaPool(key, []);
+		await store.putTimeline(`seq:${key}`, { v: 3, length: 10, song });
+		await tracks.deleteTrack(song);
+
+		const built = await buildProjectFile(key);
+		expect(built.missing).toBe(1);
+	});
+
 	test("turns down a file damaged in transit, storing none of it", async () => {
 		const key = "proj-damaged";
 		const a = await seedMedia("a.png", 100, 1000);
