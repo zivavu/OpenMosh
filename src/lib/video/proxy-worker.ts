@@ -17,6 +17,7 @@ import {
 	VideoSampleSink,
 	type VideoSampleTransformationDescription,
 } from "mediabunny";
+import { decoderOptions } from "./decoder-options";
 
 export type ProxyWorkerRequest =
 	{ type: "convert"; id: number; file: File } | { type: "cancel"; id: number };
@@ -47,7 +48,7 @@ const BENCH_WALL_MS = 1500;
  * null when it can't be decoded. */
 async function benchmarkDecode(track: InputVideoTrack): Promise<number | null> {
 	try {
-		const sink = new VideoSampleSink(track);
+		const sink = new VideoSampleSink(track, decoderOptions(track));
 		const start = performance.now();
 		let media = 0;
 		for await (const sample of sink.samples(0, BENCH_MEDIA_SECONDS)) {

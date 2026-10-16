@@ -3,6 +3,7 @@
  * awaits at every step, so on the main thread it starves the decoder feeding it. */
 // Statically imported: a dynamic import would split the worker bundle Vite can't emit.
 import { ALL_FORMATS, BlobSource, Input, VideoSampleSink } from "mediabunny";
+import { decoderOptions } from "./decoder-options";
 
 export type DecodeWorkerRequest =
 	| { type: "open"; id: number; file: File; depth: number }
@@ -108,7 +109,7 @@ async function open(id: number, file: File, depth: number) {
 		}
 		streams.set(id, {
 			input,
-			sink: new VideoSampleSink(track),
+			sink: new VideoSampleSink(track, decoderOptions(track)),
 			depth,
 			gen: 0,
 			credit: 0,

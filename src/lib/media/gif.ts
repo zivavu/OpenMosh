@@ -44,13 +44,14 @@ export async function gifToVideo(untyped: File): Promise<File> {
 			Output,
 			QUALITY_VERY_HIGH,
 		} = await import("mediabunny");
-		const codec = await getFirstEncodableVideoCodec(["vp9", "vp8", "av1"], {
-			width: gif.width,
-			height: gif.height,
-		});
+		const size = evenSize(gif);
+		const codec = await getFirstEncodableVideoCodec(
+			["vp9", "vp8", "av1"],
+			size,
+		);
 		if (!codec) return file;
 
-		const canvas = new OffscreenCanvas(gif.width, gif.height);
+		const canvas = new OffscreenCanvas(size.width, size.height);
 		const ctx = canvas.getContext("2d");
 		if (!ctx) return file;
 		const target = new BufferTarget();
@@ -83,6 +84,15 @@ export async function gifToVideo(untyped: File): Promise<File> {
 	} catch {
 		return file;
 	}
+}
+
+/** Hardware decoders take 4:2:0 frames in even sizes only: Chrome on a GPU decodes an
+ * odd-sized one to nothing. The odd last row or column is dropped. */
+export function evenSize(size: { width: number; height: number }) {
+	return {
+		width: Math.max(2, size.width & ~1),
+		height: Math.max(2, size.height & ~1),
+	};
 }
 
 export function gifsToVideo(files: File[]): Promise<File[]> {
