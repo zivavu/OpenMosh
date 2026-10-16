@@ -52,6 +52,7 @@
 	import MaskPaintLayer from "./MaskPaintLayer.svelte";
 	import MaskKeyLayer from "./MaskKeyLayer.svelte";
 	import MaskShapeLayer from "./MaskShapeLayer.svelte";
+	import { SOURCE_DND_TYPE } from "../../editor/sequence-source-ui";
 	import { fade } from "svelte/transition";
 	import { cubicOut } from "svelte/easing";
 
@@ -128,6 +129,9 @@
 		/** Dragging a text layer moves the anchor of the clip on screen, live. */
 		onTextMove?: ((clipId: string, x: number, y: number) => void) | null;
 		onTextDragStart?: ((clipId: string) => void) | null;
+		/** A pool thumb dropped on the picture, with where it landed, normalized. */
+		onDropSource?:
+			((sourceId: string, at: { x: number; y: number }) => void) | null;
 		/** Live FFT bins for the audio-bars effect; the AnalyserNode mutates one array in place. */
 		spectrum?: Uint8Array | null;
 		/** Sample rate of the context that produced `spectrum`, to place its bins in Hz. */
@@ -178,6 +182,7 @@
 		onLayerDragStart = null,
 		onTextMove = null,
 		onTextDragStart = null,
+		onDropSource = null,
 	}: Props = $props();
 
 	let frameTimes: number[] = [];
@@ -429,7 +434,7 @@
 	}
 
 	/** The pointer in output pixels, or null when it is off the picture. */
-	function framePoint(e: PointerEvent): { x: number; y: number } | null {
+	function framePoint(e: MouseEvent): { x: number; y: number } | null {
 		const fit = frameFit();
 		if (!fit || !canvasEl) return null;
 		const x = (e.clientX - fit.left) / fit.s;
@@ -438,6 +443,45 @@
 			return null;
 		}
 		return { x, y };
+	}
+
+	/** Set while a pool thumb is held over the picture. */
+	let sourceOver = $state(false);
+
+	function isSourceDrag(e: DragEvent): boolean {
+		return !!onDropSource && !!e.dataTransfer?.types.includes(SOURCE_DND_TYPE);
+	}
+
+	function sourceDragOver(e: DragEvent) {
+		if (!isSourceDrag(e)) return;
+		// Without preventDefault the browser refuses the drop entirely.
+		e.preventDefault();
+		sourceOver = !!framePoint(e);
+		if (e.dataTransfer)
+			e.dataTransfer.dropEffect = sourceOver ? "copy" : "none";
+	}
+
+	function sourceDragLeave(e: DragEvent) {
+		// Crossing onto the area's own children fires a leave too.
+		if (
+			e.relatedTarget instanceof Node &&
+			previewArea.contains(e.relatedTarget)
+		)
+			return;
+		sourceOver = false;
+	}
+
+	function sourceDrop(e: DragEvent) {
+		if (!isSourceDrag(e)) return;
+		e.preventDefault();
+		sourceOver = false;
+		const p = framePoint(e);
+		const sourceId = e.dataTransfer?.getData(SOURCE_DND_TYPE);
+		if (!p || !sourceId || !canvasEl) return;
+		onDropSource?.(sourceId, {
+			x: p.x / canvasEl.width,
+			y: p.y / canvasEl.height,
+		});
 	}
 
 	function hitAt(x: number, y: number) {
@@ -1326,7 +1370,11 @@
 <div
 	class="preview-area"
 	bind:this={previewArea}
+	class:source-over={sourceOver}
 	style:cursor={hoverCursor || null}
+	ondragover={sourceDragOver}
+	ondragleave={sourceDragLeave}
+	ondrop={sourceDrop}
 	onpointerdown={pickLayerAt}
 	onpointermove={dragMove}
 	onpointerup={endDrag}
@@ -1442,6 +1490,12 @@
 		overflow: hidden;
 		background: var(--ink);
 		user-select: none;
+	}
+
+	/* A pool thumb held over the picture: dropping it lays it in on a lane of its own. */
+	.preview-area.source-over :global(.preview-canvas) {
+		outline: 2px solid var(--live);
+		outline-offset: -2px;
 	}
 
 	/* :global: the pre-warmed canvas is moved in via the DOM, so it never gets scoped. */

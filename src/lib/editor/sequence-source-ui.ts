@@ -1,8 +1,24 @@
 /** Presentation helpers shared by the sequence media pool's grid view and rail. */
 
-/** dataTransfer type marking a drag that carries a source id. The timeline accepts
- * drops by this type, so a drag can start in the grid without shared state. */
+import { sourcePlayLength, type SourceEdit } from "../media/source-edit";
+
+/** dataTransfer type marking a drag that carries a source id. The timeline and the
+ * preview accept drops by this type, so a drag can start in the grid without shared state. */
 export const SOURCE_DND_TYPE = "application/x-openmosh-source";
+
+/** The least a drop from the pool lays down; a shorter video loops to fill it. */
+const DROPPED_CLIP_LENGTH = 20;
+
+/** How long a clip dropped from the pool wants to be, before the lane's room trims it. */
+export function droppedClipLength(
+	source: { duration?: number },
+	edit: SourceEdit | undefined,
+): number {
+	return Math.max(
+		DROPPED_CLIP_LENGTH,
+		sourcePlayLength(edit, source.duration ?? 0),
+	);
+}
 
 /** A stable colour per position in the pool. */
 export function sourceColor(n: number): string {

@@ -25,7 +25,6 @@
 		pasteMediaClips,
 		pasteMediaContentOnto,
 		setMediaClipSources,
-		sourcePlayLength,
 		splitMediaClipAt,
 		updateMediaLane,
 		type MediaClip,
@@ -35,7 +34,10 @@
 		type SourceEdit,
 	} from "../../media";
 	import type { SequenceSource } from "../../editor/sequence-sources.svelte";
-	import { SOURCE_DND_TYPE } from "../../editor/sequence-source-ui";
+	import {
+		droppedClipLength,
+		SOURCE_DND_TYPE,
+	} from "../../editor/sequence-source-ui";
 	import { draggedSourceId } from "../../editor/source-drag.svelte";
 	import { stackIndex, type LayerRef } from "../../timeline/layer-order";
 	import ChainClipBar from "../timeline/ChainClipBar.svelte";
@@ -47,8 +49,6 @@
 	import { updateMediaClips } from "../../media/resolve";
 
 	const DEFAULT_CLIP_LENGTH = 2;
-	/** The least a drop from the pool lays down; a shorter video loops to fill it. */
-	const DROPPED_CLIP_LENGTH = 20;
 	const LANE_HEIGHT = 30;
 	/** A folded lane: clips stay readable, but not at a height that pays for the
 	 * text inside. */
@@ -481,10 +481,7 @@
 	): { start: number; end: number } | null {
 		const source = sourceById(sourceId ?? null);
 		const want = source
-			? Math.max(
-					DROPPED_CLIP_LENGTH,
-					sourcePlayLength(edits[source.id], source.duration ?? 0),
-				)
+			? droppedClipLength(source, edits[source.id])
 			: DEFAULT_CLIP_LENGTH;
 		return newClipSpan(lane, time, trackDuration, want);
 	}
