@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.9.21](https://github.com/zivavu/OpenMosh/compare/v0.9.20...v0.9.21) (2026-10-16)
+
+Drag a thumb from the media pool onto the preview to lay it on a new lane, centred where you drop it. AVIF images open in every mode, and slideshow random mode rolls curated moshes. The editor no longer freezes when paused on a clip bouncing backward, or when the timeline holds a WebM from a browser recorder. Odd-sized GIFs and videos play in Chrome instead of showing a blank canvas, looped audio keeps playing while you drag the span, and the slideshow remembers its volume. Media without a file type opens, and HEIC photos the browser can't read are turned down up front. You're told when an image can't be read or a slide will export blank, exports stop with a reason when a video can't be read or the graphics card resets, and saving a project file counts missing songs as well as missing media.
+
+Saved projects open as before. Slideshows now share the volume you set anywhere in the app, so one saved with its own volume opens at the shared level. Slideshows in random mode roll curated moshes, so their playback and exports look different. A GIF added from now on loses its last row or column of pixels when that side is odd; GIFs already in a project stay as they were and now play in Chrome too.
+
+
+### Added
+
+* Drag media from the pool onto the preview ([ec77914](https://github.com/zivavu/OpenMosh/commit/ec779147fe304c95b8f4c3eb80136de19b639ff0))
+* Open AVIF images in every mode ([9acff07](https://github.com/zivavu/OpenMosh/commit/9acff07f86efd1424a1b940433ac8847799e759d))
+* Roll curated moshes in slideshow random mode ([6b5ffe7](https://github.com/zivavu/OpenMosh/commit/6b5ffe7719b0bd0f43072df4808733788f7adc84))
+
+
+### Fixed
+
+* Stop paused bouncing clips and recorder WebMs from freezing the editor ([fe4e4d7](https://github.com/zivavu/OpenMosh/commit/fe4e4d7ce1e630cf736066c202cbd5a6b641a83b), [f56f40b](https://github.com/zivavu/OpenMosh/commit/f56f40bd3f492cf06c102e080dbd853f9812c1f9))
+* Play odd-sized GIFs and videos in Chrome ([8fbf836](https://github.com/zivavu/OpenMosh/commit/8fbf836a388c20168333119d87eda6b6b055f1c5))
+* Keep looped audio playing while the span moves ([312dcda](https://github.com/zivavu/OpenMosh/commit/312dcdadf9ad6d663f587393be2a3466236e2aec))
+* Remember the slideshow's volume ([9eaf8a9](https://github.com/zivavu/OpenMosh/commit/9eaf8a9b6d87573e4820249fcb901a0822ff3fd8))
+* Open media that arrives without a file type ([8fc204e](https://github.com/zivavu/OpenMosh/commit/8fc204efbaf474bbf1707c761409dfdf25975f40))
+* Turn down HEIC photos the browser can't open, and stop offering them to slideshows ([9a05800](https://github.com/zivavu/OpenMosh/commit/9a05800cdbb4ce5333bcff837af541fb0ee8763b), [df1bbaf](https://github.com/zivavu/OpenMosh/commit/df1bbafe892f9d05c860ad0c6f5b8fec7bf479e7))
+* Say when an image can't be read or a slide will export blank ([25f6424](https://github.com/zivavu/OpenMosh/commit/25f64243d68e8b888bd4c55d31a3d08a924db766), [f030f8e](https://github.com/zivavu/OpenMosh/commit/f030f8ebc9fdd3eddfbed40d36a3feaf59d661d3))
+* Stop an export when its video can't be read or the graphics card resets ([9f62ddd](https://github.com/zivavu/OpenMosh/commit/9f62ddd8efc189532a1ee8b6dd29b76a37910509), [31cf8c3](https://github.com/zivavu/OpenMosh/commit/31cf8c3905cb18bc450206546de495627a18ac35))
+* Count missing songs when saving a project file ([637c1ca](https://github.com/zivavu/OpenMosh/commit/637c1cac3f37951e9d75ceab34eec6320e604162))
+
 ## [0.9.20](https://github.com/zivavu/OpenMosh/compare/v0.9.19...v0.9.20) (2026-10-15)
 
 Single edits and slideshows save to project files now, as editor projects do, and each mode has a file type of its own. Every project file and backup goes straight to your Downloads. Opening a project file shows how far along it is, and opening one you already have offers the stored project instead of a second copy. Any open that takes a while shows a loading card, a notification stays up while you point at it, the effects search finds a whole family such as warp or rgb, and a slideshow's preview plays fullscreen. Two slideshows on one song keep their own settings, Safari no longer fails a download that starts late, and the upload screen stays still when you switch modes.
