@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { Github } from "lucide-svelte";
+	import { Icon } from "lucide-svelte";
+	import { githubIcon } from "./brand-icons";
 </script>
 
 <a
@@ -10,7 +11,7 @@
 	title="View on GitHub"
 	aria-label="View on GitHub"
 >
-	<Github size={14} />
+	<Icon iconNode={githubIcon} size={14} />
 </a>
 
 <style>

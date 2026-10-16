@@ -58,6 +58,9 @@ Outside CI a run reuses whatever already serves its port, so when my dev server 
 - Parsers of dropped files (`media/gif.ts`, `mesh/*`) run on the main thread over untrusted
   bytes: bound every loop and size every allocation by the bytes actually there, never by a
   count the file states. A hang can't be caught; each parser has a crafted-input test.
+- `draco3d` is pinned at exactly 1.5.7: 1.5.8's decoder no longer exposes `HEAPU8`, which
+  `mesh/glb-unpack.ts` reads Draco output through. The Draco test in `glb-unpack.test.ts`
+  fails on a version that drops it.
 - The renderer runs `u_time` at an effect's rate param (`rateParam`, default `speed`), so a
   shader must never multiply by that param again (a test holds it); `rateExponent` keeps
   the feel of one that once did.
