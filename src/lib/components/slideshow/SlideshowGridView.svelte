@@ -53,6 +53,7 @@
 		"image/png",
 		"image/jpeg",
 		"image/webp",
+		"image/avif",
 		"image/gif",
 		"video/mp4",
 		"video/webm",

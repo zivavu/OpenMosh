@@ -26,6 +26,7 @@ describe("withMediaType", () => {
 	test("reads audio and dotless names", () => {
 		expect(mediaTypeForName("song.flac")).toBe("audio/flac");
 		expect(mediaTypeForName("voice.m4a")).toBe("audio/mp4");
+		expect(mediaTypeForName("still.AVIF")).toBe("image/avif");
 		expect(mediaTypeForName("README")).toBe("");
 	});
 });
