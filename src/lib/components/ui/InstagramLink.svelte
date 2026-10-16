@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { Instagram } from "lucide-svelte";
+	import { Icon } from "lucide-svelte";
+	import { instagramIcon } from "./brand-icons";
 </script>
 
 <a
@@ -10,7 +11,7 @@
 	title="Moshes on Instagram"
 	aria-label="Moshes on Instagram"
 >
-	<Instagram size={14} />
+	<Icon iconNode={instagramIcon} size={14} />
 </a>
 
 <style>

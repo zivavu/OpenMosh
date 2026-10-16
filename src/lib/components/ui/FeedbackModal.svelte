@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { modalDialog } from "../../actions/modal-dialog";
-	import { X, Github, Check } from "lucide-svelte";
+	import { X, Check, Icon } from "lucide-svelte";
+	import { githubIcon } from "./brand-icons";
 	import ButtonGroup from "./ButtonGroup.svelte";
 	import { untrack } from "svelte";
 	import {
@@ -169,7 +170,7 @@
 					target="_blank"
 					rel="noopener noreferrer"
 				>
-					<Github size={12} />
+					<Icon iconNode={githubIcon} size={12} />
 					Open an issue instead
 				</a>
 				<div class="spacer"></div>

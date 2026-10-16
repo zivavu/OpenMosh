@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { Youtube } from "lucide-svelte";
+	import { Icon } from "lucide-svelte";
+	import { youtubeIcon } from "./brand-icons";
 </script>
 
 <a
@@ -10,7 +11,7 @@
 	title="See what's been made with OpenMosh"
 	aria-label="See what's been made with OpenMosh"
 >
-	<Youtube size={14} />
+	<Icon iconNode={youtubeIcon} size={14} />
 </a>
 
 <style>
