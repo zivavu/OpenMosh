@@ -213,6 +213,7 @@
 		type ModelProblem,
 	} from "../../mesh/support";
 	import { SingleProxy } from "../../editor/single-proxy.svelte";
+	import { droppedClipLength } from "../../editor/sequence-source-ui";
 	import type { ProxyAction } from "../../video/proxy-status";
 	import {
 		addClip,
@@ -651,6 +652,42 @@
 			`Take on ${next.lanes.find((l) => l.id === laneId)?.name}`,
 			"info",
 		);
+	}
+
+	/** A pool thumb dropped on the picture: a lane of its own on top, centred where it
+	 * landed, its clip under the playhead. */
+	function dropSourceOnCanvas(sourceId: string, at: { x: number; y: number }) {
+		const source = sourceRegistry.get(sourceId);
+		const duration = seqMasterDuration;
+		if (!source || duration <= 0) return;
+		if (mediaTimeline.lanes.length >= MAX_MEDIA_LANES) {
+			showToast("No room for another lane: every lane is full", "error");
+			return;
+		}
+		const next = appendMediaLane(
+			mediaTimeline,
+			source.id,
+			nextLayerZ(layerOrder),
+		);
+		const lane = next.lanes[next.lanes.length - 1]!;
+		const span = newClipSpan(
+			lane,
+			seqMasterTime(),
+			duration,
+			droppedClipLength(source, sourceRegistry.edits[source.id]),
+		);
+		if (!span) return;
+		const clip = createMediaClip(span.start, span.end);
+		pushMediaHistory();
+		setMediaTimeline(
+			updateMediaLaneIn(next, lane.id, (l) => ({
+				...addClip(l, clip, duration),
+				style: { ...l.style, x: at.x, y: at.y },
+			})),
+		);
+		selectedMediaClipId = clip.id;
+		selectedMediaClipIds = [clip.id];
+		void revealLaneRow(lane.id);
 	}
 
 	function useGenerated(files: File[]) {
@@ -4739,6 +4776,7 @@
 				sourceEdits={sourceRegistry.edits}
 				{sourceDurations}
 				onPickLayer={pickLayer}
+				onDropSource={isSequenceMode ? dropSourceOnCanvas : null}
 				onLayerDragStart={() => pushMediaHistory()}
 				onTextDragStart={() => pushTextHistory()}
 				onTextMove={(clipId, x, y) => {

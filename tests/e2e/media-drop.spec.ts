@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import {
 	addMediaLane,
 	canvasStats,
@@ -10,6 +10,7 @@ import {
 	mediaDropGhost,
 	nearestColor,
 	openEditor,
+	PREVIEW_CANVAS,
 	railThumbs,
 	waitForRender,
 } from "./app";
@@ -206,3 +207,61 @@ test("dragging a rail thumb onto another reorders the pool", async ({
 	// The same dragstart feeds both drops; a reorder must not become a lane drop.
 	await expect.poll(names).not.toEqual(before);
 });
+
+test("dropping a thumb on the preview lays it on a new lane, centred where it landed", async ({
+	page,
+}) => {
+	await openEditor(page, {
+		sources: SOURCES,
+		track: { seconds: TRACK_SECONDS },
+	});
+	await waitForRender(page);
+	const lanes = page.locator('.tl-row[data-lane-kind="media"]');
+	await expect(lanes).toHaveCount(1);
+
+	const canvas = page.locator(PREVIEW_CANVAS);
+	const box = (await canvas.boundingBox())!;
+	const from = (await railThumbs(page).nth(1).boundingBox())!;
+	await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+	await page.mouse.down();
+	// Clear the drag threshold first: one jump to the target can land before a drag starts.
+	await page.mouse.move(from.x + from.width / 2, from.y - 20, { steps: 4 });
+	const to = { x: box.x + box.width * 0.25, y: box.y + box.height * 0.25 };
+	await page.mouse.move(to.x, to.y, { steps: 12 });
+	await page.mouse.move(to.x, to.y);
+	await page.mouse.up();
+
+	await expect(lanes).toHaveCount(2);
+	await expect(lanes.locator(".clip:not(.ghost)")).toHaveCount(2);
+	// The blue layer sits over the drop point; the red one under it still shows opposite.
+	await expect
+		.poll(async () => nearestColor(await colorAt(page, 0.25, 0.25), PALETTE))
+		.toBe("blue");
+	expect(nearestColor(await colorAt(page, 0.75, 0.75), PALETTE)).toBe("red");
+});
+
+/** The preview's colour at a point, as fractions of the frame. */
+async function colorAt(page: Page, fx: number, fy: number) {
+	return page.evaluate(
+		([selector, x, y]) =>
+			new Promise<{ r: number; g: number; b: number }>((resolve) => {
+				const source = document.querySelector(selector) as HTMLCanvasElement;
+				// Read inside a frame, after the app's own draw.
+				requestAnimationFrame(() => {
+					const off = document.createElement("canvas");
+					off.width = source.width;
+					off.height = source.height;
+					const ctx = off.getContext("2d")!;
+					ctx.drawImage(source, 0, 0);
+					const [r, g, b] = ctx.getImageData(
+						Math.floor(source.width * x),
+						Math.floor(source.height * y),
+						1,
+						1,
+					).data;
+					resolve({ r, g, b });
+				});
+			}),
+		[PREVIEW_CANVAS, fx, fy] as const,
+	);
+}
