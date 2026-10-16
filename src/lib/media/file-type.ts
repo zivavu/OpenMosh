@@ -6,6 +6,7 @@ const TYPE_BY_EXTENSION: Record<string, string> = {
 	jpg: "image/jpeg",
 	jpeg: "image/jpeg",
 	webp: "image/webp",
+	avif: "image/avif",
 	gif: "image/gif",
 	heic: "image/heic",
 	heif: "image/heif",

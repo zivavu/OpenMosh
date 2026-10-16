@@ -328,6 +328,7 @@
 		"image/jpeg",
 		"image/jpg",
 		"image/webp",
+		"image/avif",
 		"image/gif",
 		"image/heic",
 		"image/heif",
@@ -340,6 +341,7 @@
 		".jpg",
 		".jpeg",
 		".webp",
+		".avif",
 		".gif",
 		".heic",
 		".heif",
@@ -374,7 +376,7 @@
 
 	let supportedLabel = $derived(
 		[
-			"PNG, JPG, WEBP, GIF",
+			"PNG, JPG, WEBP, AVIF, GIF",
 			...(takesHeic ? ["HEIC"] : []),
 			...(takesSvg ? ["SVG"] : []),
 			"MP4, WEBM, MOV",

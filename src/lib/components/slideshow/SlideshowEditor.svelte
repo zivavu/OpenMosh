@@ -158,7 +158,13 @@
 	let slides: SlideshowSlide[] = $state([]);
 
 	async function addFiles(files: FileList | File[]) {
-		const imageTypes = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+		const imageTypes = [
+			"image/png",
+			"image/jpeg",
+			"image/webp",
+			"image/avif",
+			"image/gif",
+		];
 		const videoTypes = ["video/mp4", "video/webm", "video/quicktime"];
 		const all = await gifsToVideo(Array.from(files));
 		const skipped = all.filter(
@@ -167,7 +173,7 @@
 		if (skipped.length > 0) {
 			showToast(
 				skipped.length === all.length
-					? `Can't add ${skipped.length === 1 ? `"${skipped[0].name}"` : "those files"}. Supported formats: PNG, JPG, WEBP, GIF, MP4, WEBM, MOV`
+					? `Can't add ${skipped.length === 1 ? `"${skipped[0].name}"` : "those files"}. Supported formats: PNG, JPG, WEBP, AVIF, GIF, MP4, WEBM, MOV`
 					: `Skipped ${skipped.length} unsupported file${skipped.length === 1 ? "" : "s"}`,
 				skipped.length === all.length ? "error" : "info",
 				6000,
