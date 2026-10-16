@@ -89,6 +89,17 @@ export async function executeSlideshowRecording(
 			}),
 	]);
 
+	const unreadable = slides.filter((s) =>
+		s.kind === "image" ? !imageMap.has(s.id) : !samplerMap.has(s.id),
+	).length;
+	if (unreadable > 0) {
+		ctx.onNotice?.(
+			unreadable === 1
+				? "1 slide couldn't be read and will be blank in the video"
+				: `${unreadable} slides couldn't be read and will be blank in the video`,
+		);
+	}
+
 	const firstSlide = slides[0];
 	if (firstSlide.kind === "video") {
 		const sampler = samplerMap.get(firstSlide.id);
