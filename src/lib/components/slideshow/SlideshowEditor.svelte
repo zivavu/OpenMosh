@@ -123,6 +123,7 @@
 	} from "../../editor/sequence-media-store";
 	import { needsProxy, startProxyJob, type ProxyJob } from "../../video/proxy";
 	import { gifsToVideo } from "../../media/gif";
+	import { withMediaType } from "../../media/file-type";
 	import {
 		isProxyDisabled,
 		setProxyDisabled,
@@ -1656,9 +1657,10 @@
 	let dragging = $state(false);
 
 	function handleDroppedFiles(files: FileList) {
-		if (files[0].type.startsWith("audio/")) {
+		const first = withMediaType(files[0]);
+		if (first.type.startsWith("audio/")) {
 			clearTrack();
-			audio.trackFile = files[0];
+			audio.trackFile = first;
 		} else {
 			addFiles(files);
 		}

@@ -8,6 +8,7 @@
 	import MediaAddCards from "../ui/MediaAddCards.svelte";
 	import MediaThumb from "../ui/MediaThumb.svelte";
 	import ProxyBadge from "../ui/ProxyBadge.svelte";
+	import { withMediaType } from "../../media/file-type";
 
 	// Preview overlay: nothing loads it until a slide is opened.
 	const loadMediaLightbox = lazy(() => import("../ui/MediaLightbox.svelte"));
@@ -73,7 +74,7 @@
 		const files = e.dataTransfer?.files;
 		if (files && files.length > 0) {
 			const hasMedia = Array.from(files).some((f) =>
-				MEDIA_TYPES.includes(f.type),
+				MEDIA_TYPES.includes(withMediaType(f).type),
 			);
 			if (hasMedia) onAddFiles(files);
 		}

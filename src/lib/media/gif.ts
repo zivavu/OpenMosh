@@ -1,6 +1,8 @@
 /** Animated GIF intake: a GIF is re-encoded to an MP4 once, on the way in, and
  * takes the video path everywhere after that. Browsers can animate a GIF in an
  * <img> but can't seek one, and Firefox has no ImageDecoder. */
+import { withMediaType } from "./file-type";
+
 export interface GifFrame {
 	/** Full-canvas RGBA, disposal already applied. */
 	pixels: Uint8ClampedArray<ArrayBuffer>;
@@ -18,9 +20,11 @@ const MIN_DELAY_MS = 20;
 const DEFAULT_DELAY_MS = 100;
 
 /** Re-encodes an animated GIF as an MP4 `File` with the same name and timestamp,
- * so it lands in the pool as a video. Anything else comes back as it was. MP4
- * rather than WebM: Matroska has no duration on the last block. */
-export async function gifToVideo(file: File): Promise<File> {
+ * so it lands in the pool as a video. Anything else comes back as it was, typed
+ * from its name when the browser left it untyped. MP4 rather than WebM: Matroska
+ * has no duration on the last block. */
+export async function gifToVideo(untyped: File): Promise<File> {
+	const file = withMediaType(untyped);
 	if (file.type !== "image/gif") return file;
 	try {
 		const bytes = new Uint8Array(await file.arrayBuffer());
