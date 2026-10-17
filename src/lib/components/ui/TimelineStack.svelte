@@ -614,6 +614,14 @@
 		touch-action: none;
 	}
 
+	:global(.tl-stack .tl-row:hover > .lane-track) {
+		border-color: var(--line-strong);
+	}
+
+	:global(.tl-stack .tl-row:has(.clip.selected) > .lane-track) {
+		border-color: var(--clip-accent-dim);
+	}
+
 	:global(.tl-stack .clip) {
 		position: absolute;
 		top: 3px;

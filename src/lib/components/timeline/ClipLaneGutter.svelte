@@ -109,6 +109,24 @@
 {/snippet}
 
 <style>
+	/* A faint plate per row keeps the names apart; hovering or selecting a clip in
+	   the lane lifts it. */
+	.tl-gutter {
+		padding: 0 0.25rem;
+		border-radius: 4px;
+		background: rgba(255, 255, 255, 0.02);
+		transition: background var(--t-fast);
+	}
+
+	:global(.tl-row:hover) > .tl-gutter {
+		background: rgba(255, 255, 255, 0.045);
+	}
+
+	:global(.tl-row:has(.clip.selected)) > .tl-gutter {
+		background: color-mix(in srgb, var(--live) 9%, transparent);
+		box-shadow: inset 2px 0 var(--live-dim);
+	}
+
 	.lane-eye,
 	.lane-del,
 	.lane-fold,
