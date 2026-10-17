@@ -552,7 +552,8 @@
 	/** Single mode takes one file; say so rather than silently dropping the rest. */
 	function handleSingleFile(files: FileList | File[]) {
 		const all = Array.from(files, withMediaType);
-		const file = all[0];
+		// The first file it can open, so an unsupported one ahead of it doesn't block it.
+		const file = all.find((f) => isAcceptedFile(f)) ?? all[0];
 		if (!file) return;
 		if (all.length > 1 && isAcceptedFile(file)) {
 			showToast(
