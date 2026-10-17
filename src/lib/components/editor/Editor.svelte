@@ -1531,7 +1531,7 @@
 
 	// Their own undo stack, like the text timeline's; Ctrl+Z reaches it when newest.
 	const fxHistory = createSnapshotHistory<FxLane[]>();
-	/** The project's length, recorded only when its start moves, beside the lanes it shifts. */
+	/** The project's length, beside the lanes a change to it trims or shifts. */
 	const lengthHistory = createSnapshotHistory<number>();
 
 	function pushFxHistory(coalesceKey?: string) {
@@ -2649,34 +2649,40 @@
 	}
 
 	/** The project's length, set by hand. Shorter cuts clips straddling the new end
-	 * back to it, undoably, so their edge stays in reach; clips wholly past it are kept. */
+	 * back to it, so their edge stays in reach; clips wholly past it are kept. One undo
+	 * step with the clips it trims, joining Fit's when called under it. */
 	function setProjectLength(length: number) {
 		pauseTrack();
 		const next = Math.max(1, length);
-		if (next < mixer.duration) {
-			const trim = <L extends ClipLane<TimelineClip>>(lanes: L[]) =>
-				lanes.map((l) => trimClipsAt<TimelineClip, L>(l, next));
-			const media = trim(mediaTimeline.lanes);
-			const audioLanes = trim(mediaTimeline.audioLanes ?? []);
-			if (
-				media.some((l, i) => l !== mediaTimeline.lanes[i]) ||
-				audioLanes.some((l, i) => l !== mediaTimeline.audioLanes?.[i])
-			) {
-				pushMediaHistory();
-				setMediaTimeline({ ...mediaTimeline, lanes: media, audioLanes });
+		if (next === mixer.duration) return;
+		asOneEdit(() => {
+			const seq = sharedEditSeq();
+			if (lengthHistory.undoSeq !== seq) lengthHistory.push(mixer.duration);
+			if (next < mixer.duration) {
+				const trim = <L extends ClipLane<TimelineClip>>(lanes: L[]) =>
+					lanes.map((l) => trimClipsAt<TimelineClip, L>(l, next));
+				const media = trim(mediaTimeline.lanes);
+				const audioLanes = trim(mediaTimeline.audioLanes ?? []);
+				if (
+					media.some((l, i) => l !== mediaTimeline.lanes[i]) ||
+					audioLanes.some((l, i) => l !== mediaTimeline.audioLanes?.[i])
+				) {
+					if (mediaHistory.undoSeq !== seq) pushMediaHistory();
+					setMediaTimeline({ ...mediaTimeline, lanes: media, audioLanes });
+				}
+				const text = trim(textTimeline.lanes);
+				if (text.some((l, i) => l !== textTimeline.lanes[i])) {
+					if (textHistory.undoSeq !== seq) pushTextHistory();
+					setTextTimeline({ ...textTimeline, lanes: text });
+				}
+				const fx = trim(fxLanes);
+				if (fx.some((l, i) => l !== fxLanes[i])) {
+					if (fxHistory.undoSeq !== seq) pushFxHistory();
+					setFxLanes(fx);
+				}
 			}
-			const text = trim(textTimeline.lanes);
-			if (text.some((l, i) => l !== textTimeline.lanes[i])) {
-				pushTextHistory();
-				setTextTimeline({ ...textTimeline, lanes: text });
-			}
-			const fx = trim(fxLanes);
-			if (fx.some((l, i) => l !== fxLanes[i])) {
-				pushFxHistory();
-				setFxLanes(fx);
-			}
-		}
-		mixer.setDuration(next);
+			mixer.setDuration(next);
+		});
 	}
 
 	/** `by` seconds go in before everything (negative takes them back out), and the
@@ -3163,7 +3169,6 @@
 			() => $state.snapshot(mediaTimeline) as MediaTimeline,
 			setMediaTimeline,
 		),
-		// Only the editor's project-start drags record onto it.
 		snapshotUndoSource(
 			lengthHistory,
 			() => mixer.duration,
