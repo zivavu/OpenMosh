@@ -94,6 +94,7 @@ Outside CI a run reuses whatever already serves its port, so when my dev server 
 - A backup (`.openmosh-backup`, `lib/backup/backup.ts`) is the same stored zip holding every
   IndexedDB record and the `openmosh*` localStorage keys, with its own `BACKUP_VERSION`.
   Loading one merges: records keep their ids and replace same-keyed ones; proxies stay out.
+- Locked effects survive a preset Fill or update, the same as a Clear or a mosh.
 - Chain-clip behavior (fill/mosh/clear/static/auto) lives once in `lib/editor/chain-clip.ts`;
   `media/chain.ts` and `fx-lanes.ts` are thin wrappers. New chain-editing paths go through
   `chain-fanout.ts`, or a multi-selection edits only the primary clip. An auto clip rolls a
@@ -102,6 +103,9 @@ Outside CI a run reuses whatever already serves its port, so when my dev server 
 - Undo: `createSnapshotHistory` stores the state _before_ each change. Push before mutating, pass
   the live state to `undo`/`redo`, and keep a coalesce key for one gesture only. Ctrl+Z goes to
   the stack with the newest edit, not the selected one.
+  A clip's roll or arrow step is an edit on its lane's stack, so Ctrl+Z takes it back first;
+  single mode's own chain keeps ←/→ on the mosh history apart from Ctrl+Z. An undo never brings
+  back an effect the user hid. Removing pool media is undoable: the stack keeps the file.
 - Preview and export share the "what's on screen at time t" resolvers; only sampler management
   (decoder keys, LRU cap, latch) is duplicated. Keep both sides feeding the same source times.
 - Source edits (crop, chroma key, erase) are keyed on the source's own media time, not timeline
