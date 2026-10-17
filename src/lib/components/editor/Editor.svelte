@@ -3636,6 +3636,13 @@
 	/** True when nothing else owns a playhead, so the text ruler grows one. */
 	let textNeedsTransport = $derived(!isSequenceMode && seqMasterDuration <= 0);
 	let textTime = $derived(textNeedsTransport ? stillClock : seqMasterTime());
+	/** Clips are half-open, so a playhead parked on the project's end would draw none of
+	 * the ones ending there; the export's last frame shows them. */
+	let previewTime = $derived(
+		isSequenceMode && mixer.duration > 0
+			? Math.min(textTime, mixer.duration - 1e-3)
+			: textTime,
+	);
 	// An export's frame 0 is not the master clock's zero; it starts at the audio span.
 	let textTimeOffset = $derived(
 		isSequenceMode
@@ -4841,7 +4848,7 @@
 				mediaChains={previewMediaChains}
 				textChains={previewTextChains}
 				baseSize={isSequenceMode ? seqBaseSize : null}
-				{textTime}
+				textTime={previewTime}
 				bpm={sequenceBpm}
 				forceAnimation={isLive ||
 					((textTimeline.enabled || mediaTimeline.enabled) && textClockRunning)}
