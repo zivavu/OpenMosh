@@ -1235,6 +1235,7 @@
 			fxHistory.reset();
 			mediaHistory.reset();
 			lengthHistory.reset();
+			bpmHistory.reset();
 		});
 	});
 
@@ -1533,6 +1534,8 @@
 	const fxHistory = createSnapshotHistory<FxLane[]>();
 	/** The project's length, beside the lanes a change to it trims or shifts. */
 	const lengthHistory = createSnapshotHistory<number>();
+	/** BPM set by hand, beside the beat-spaced clips it retimes. */
+	const bpmHistory = createSnapshotHistory<number>();
 
 	function pushFxHistory(coalesceKey?: string) {
 		fxHistory.push($state.snapshot(fxLanes) as FxLane[], coalesceKey);
@@ -2294,6 +2297,7 @@
 		mediaTimeline = next;
 		mediaHistory.reset();
 		lengthHistory.reset();
+		bpmHistory.reset();
 		mixSpanHistory.reset();
 		projectReady = true;
 	}
@@ -2955,6 +2959,14 @@
 		asOneEdit(() => retimeToBpm(bpm));
 	}
 
+	function setSequenceBpmByHand(bpm: number) {
+		if (bpm === sequenceBpm) return;
+		asOneEdit(() => {
+			bpmHistory.push(sequenceBpm);
+			setSequenceBpm(bpm);
+		});
+	}
+
 	function retimeToBpm(bpm: number) {
 		const retimedFx = applyBpmToFxLanes(fxLanes, bpm);
 		if (retimedFx !== fxLanes) {
@@ -3173,6 +3185,12 @@
 			lengthHistory,
 			() => mixer.duration,
 			(length) => mixer.setDuration(length),
+		),
+		// The retimed clips come back from their own stacks, so only the number is set.
+		snapshotUndoSource(
+			bpmHistory,
+			() => sequenceBpm,
+			(bpm) => (sequenceBpm = bpm),
 		),
 		{
 			...fxUndo,
@@ -3977,6 +3995,7 @@
 		selectedMediaClipId = null;
 		mediaHistory.reset();
 		lengthHistory.reset();
+		bpmHistory.reset();
 	}
 
 	/** What a new lane starts on: the first thing in the pool. */
@@ -5523,7 +5542,7 @@
 				bpmDetecting={bpmDetection.detecting}
 				hasTrack={!!audio.trackFile}
 				onDetectBpm={bpmDetection.run}
-				onBpmChange={setSequenceBpm}
+				onBpmChange={setSequenceBpmByHand}
 			/>
 		</div>
 	{/snippet}
