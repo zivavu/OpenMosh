@@ -163,8 +163,9 @@
 				<p class="error">{error}</p>
 			{:else}
 				<p class="hint">
-					Your browser, screen size and current effect chain are attached, so
-					bugs can be reproduced exactly. No image is sent.
+					Your browser, screen size and current effect chain, caption text
+					included, are attached so bugs can be reproduced exactly. No image is
+					sent. It goes through Web3Forms to my inbox.
 				</p>
 			{/if}
 
