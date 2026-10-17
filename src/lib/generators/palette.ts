@@ -1,7 +1,7 @@
 /** Colour ramps shared by every generator: a five-stop ramp with lightness
  * climbing dark to bright, hue drifting smoothly, saturation peaking mid. */
 
-import { randIn, shuffle, type Rand } from "../rng";
+import { randIn, type Rand } from "../rng";
 
 export type Colors = [string, string, string, string, string];
 
@@ -88,17 +88,27 @@ function makeRamp(baseHue: number, r: RampShape): Colors {
 	}) as Colors;
 }
 
-/** Deal `n` slots into buckets by weight, shuffled so runs don't form. */
+/** Deal `n` slots into buckets by weight, in a random order that stays in
+ * proportion at every prefix: the first 8 of a deal of 64 are dealt like 8. */
 export function deal<T>(rng: Rand, n: number, weights: [T, number][]): T[] {
 	const total = weights.reduce((s, [, w]) => s + w, 0);
+	const dealt = weights.map(() => 0);
 	const out: T[] = [];
-	let acc = 0;
-	weights.forEach(([v, w], i) => {
-		acc += w;
-		const upto = i === weights.length - 1 ? n : Math.round((acc / total) * n);
-		while (out.length < upto) out.push(v);
-	});
-	return shuffle(rng, out);
+	for (let i = 1; i <= n; i++) {
+		// The bucket furthest behind its share, jittered by under one slot.
+		let pick = 0;
+		let best = -Infinity;
+		weights.forEach(([, w], k) => {
+			const behind = (i * w) / total - dealt[k] + rng();
+			if (behind > best) {
+				best = behind;
+				pick = k;
+			}
+		});
+		dealt[pick]++;
+		out.push(weights[pick][0]);
+	}
+	return out;
 }
 
 /** One value drawn by weight. `deal` with a single slot can't do this: it

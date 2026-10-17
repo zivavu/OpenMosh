@@ -80,54 +80,68 @@
 		kind === "mix" || DRAWN.some((d) => d.value === kind),
 	);
 	let transparent = $derived(canClear && background === "transparent");
-	let specs = $derived(
+	// Planned as the biggest batch and cut down, so changing the count keeps the
+	// images it already had, the previewed ones included.
+	let plan = $derived((count: number) =>
 		planBatch(seed, {
-			count: total,
+			count,
 			variety,
 			kind,
 			palette: palette || null,
 			transparent,
+			nest: single ? undefined : Number(COUNTS[COUNTS.length - 1].value),
 		}),
 	);
+	let specs = $derived(plan(total));
+	let shown = $derived(plan(Math.min(total, PREVIEW_MAX)));
 	let target = $derived(size ?? ratioSize(ratio, GENERATED_SHORT_SIDE));
 	let aspect = $derived(target.width / target.height);
 
-	/** Object URLs by slot; null where a render failed. */
-	let previews = $state<(string | null)[]>([]);
+	/** Object URLs by slot; null where a render failed, undefined while pending. */
+	let previews = $state<(string | null | undefined)[]>([]);
 	let previewing = $state(false);
+	/** Rendered previews by spec and size, so a re-plan only draws what's new. */
+	const rendered = new Map<string, string | null>();
 
 	$effect(() => {
-		const shown = specs.slice(0, PREVIEW_MAX);
+		const batch = shown;
 		const w = aspect >= 1 ? Math.round(PREVIEW_SHORT * aspect) : PREVIEW_SHORT;
 		const h = aspect >= 1 ? PREVIEW_SHORT : Math.round(PREVIEW_SHORT / aspect);
+		const type = transparent ? "image/png" : "image/jpeg";
+		const keys = batch.map(
+			(spec) => `${w}x${h} ${type} ${JSON.stringify(spec)}`,
+		);
 		let cancelled = false;
 		previewing = true;
+		previews = keys.map((k) => rendered.get(k));
 		(async () => {
-			const urls: (string | null)[] = [];
-			for (const spec of shown) {
-				const type = transparent ? "image/png" : "image/jpeg";
+			for (const [i, spec] of batch.entries()) {
+				if (rendered.has(keys[i])) continue;
 				// renderSpec throws synchronously when a render fails; one bad
 				// image mustn't stop the rest.
 				const blob = await Promise.resolve()
 					.then(() => renderSpec(spec, w, h, type))
 					.catch(() => null);
-				if (cancelled) {
-					urls.forEach((u) => u && URL.revokeObjectURL(u));
-					return;
-				}
-				urls.push(blob && URL.createObjectURL(blob));
+				// Kept even when cancelled: the next run may want it.
+				rendered.set(keys[i], blob && URL.createObjectURL(blob));
+				if (cancelled) return;
 				// Show what's ready as it lands rather than all at the end.
-				previews.forEach((u) => u && URL.revokeObjectURL(u));
-				previews = [...urls];
+				previews = keys.map((k) => rendered.get(k));
 			}
 			previewing = false;
+			// Drop what this batch no longer shows.
+			for (const [k, url] of rendered)
+				if (!keys.includes(k)) {
+					if (url) URL.revokeObjectURL(url);
+					rendered.delete(k);
+				}
 		})();
 		return () => {
 			cancelled = true;
 		};
 	});
 
-	onDestroy(() => previews.forEach((u) => u && URL.revokeObjectURL(u)));
+	onDestroy(() => rendered.forEach((u) => u && URL.revokeObjectURL(u)));
 
 	let busy = $state(false);
 	let done = $state(0);
@@ -243,7 +257,7 @@
 	</div>
 
 	<div class="strip" class:single style:--aspect={aspect}>
-		{#each specs.slice(0, PREVIEW_MAX) as _, i (i)}
+		{#each shown as _, i (i)}
 			<div class="cell">
 				<div
 					class="thumb"
@@ -259,7 +273,7 @@
 	</div>
 	{#if !single && total > PREVIEW_MAX}
 		<p class="hint">
-			First {PREVIEW_MAX} of {total}. Reroll to see another set.
+			Showing {PREVIEW_MAX} of {total}.
 		</p>
 	{/if}
 
