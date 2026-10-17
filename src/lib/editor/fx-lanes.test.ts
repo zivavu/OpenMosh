@@ -25,6 +25,7 @@ import {
 	type FxLaneSettings,
 } from "./fx-lanes";
 import { DEFAULT_AUDIO_RESPONSE } from "../audio/auto-range";
+import { chainClipEffectsAt } from "./chain-clip";
 import type { MoshOptions } from "./mosh";
 
 const OPTIONS: MoshOptions = {
@@ -478,7 +479,7 @@ describe("splitFxClipAt", () => {
 		expect(out.clips[0].id).not.toBe(out.clips[1].id);
 	});
 
-	test("carries the mode, spacing and seed onto both halves", () => {
+	test("carries the mode and spacing onto both halves", () => {
 		const l = lane("a", [
 			{
 				...clip("c1", 0, 10, []),
@@ -490,10 +491,27 @@ describe("splitFxClipAt", () => {
 		]);
 		for (const c of splitFxClipAt(l, 4).clips) {
 			expect(c.mode).toBe("interval");
-			expect(c.seed).toBe(77);
 			expect(c.intervalSec).toBe(0.5);
 			expect(c.intervalBeats).toBe(1);
 		}
+	});
+
+	test("starts an auto clip's right half on the roll playing at the cut", () => {
+		const auto = {
+			...clip("c1", 0, 10, []),
+			mode: "interval" as const,
+			seed: 77,
+			intervalSec: 0.5,
+		};
+		const [head, rest] = splitFxClipAt(lane("a", [auto]), 4.2).clips;
+		const opts = { moshMin: 2, moshMax: 3 } as MoshOptions;
+		const rolled = (c: FxClip, t: number) =>
+			chainClipEffectsAt(c, t, new Map(), false, () => opts).map((e) => [
+				e.defId,
+				e.values,
+			]);
+		expect(head.seed).toBe(77);
+		expect(rolled(rest, 4.2)).toEqual(rolled(auto, 4.2));
 	});
 
 	test("leaves other clips on the lane alone", () => {
