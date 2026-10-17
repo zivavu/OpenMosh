@@ -5,6 +5,7 @@ import {
 	DEFAULT_INTERVAL_SEC,
 	intervalLabel,
 	keepLocked,
+	keepLockedInPreset,
 	rollEffects,
 	withSeededRandom,
 } from "./sequence";
@@ -198,5 +199,29 @@ describe("Masks in a rolled chain", () => {
 			expect(rolled[at].enabled).toBe(true);
 			expect(rolled[at].values).toEqual(base[at].values);
 		}
+	});
+});
+
+describe("keepLockedInPreset", () => {
+	const fx = (defId: string, locked = false) => ({
+		instanceId: defId,
+		defId,
+		enabled: true,
+		locked,
+		expanded: false,
+		values: { v: locked ? 1 : 0 },
+	});
+
+	test("keeps the preset's order with locked effects back where they sat", () => {
+		const from = [fx("a"), fx("lock", true), fx("b")];
+		const preset = [fx("x"), fx("lock"), fx("y"), fx("z")];
+		const out = keepLockedInPreset(preset, from);
+		expect(out.map((e) => e.defId)).toEqual(["x", "lock", "y", "z"]);
+		expect(out[1]).toMatchObject({ locked: true, values: { v: 1 } });
+	});
+
+	test("hands the preset back untouched with nothing locked", () => {
+		const preset = [fx("x")];
+		expect(keepLockedInPreset(preset, [fx("a")])).toBe(preset);
 	});
 });

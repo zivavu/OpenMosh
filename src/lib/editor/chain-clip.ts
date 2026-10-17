@@ -24,6 +24,7 @@ import {
 	handBuiltLabel,
 	isHeld,
 	keepLocked,
+	keepLockedInPreset,
 	randomSeed,
 	rollEffects,
 	type ChainMode,
@@ -115,7 +116,7 @@ export function clearedChainClip<C extends ChainClip>(clip: C): C {
 	};
 }
 
-/** Fill from a preset: a concrete chain under the preset's name. */
+/** Fill from a preset: a concrete chain under the preset's name; locked effects stay. */
 export function filledChainClip<C extends ChainClip>(
 	clip: C,
 	preset: Preset,
@@ -126,7 +127,7 @@ export function filledChainClip<C extends ChainClip>(
 		label: preset.name,
 		presetName: preset.name,
 		modified: false,
-		effects: applyPreset(preset),
+		effects: keepLockedInPreset(applyPreset(preset), clip.effects),
 	};
 }
 
@@ -138,7 +139,11 @@ export function syncedChainClip<C extends ChainClip>(
 	return (clip.mode ?? "static") === "static" &&
 		clip.presetName === preset.name &&
 		!clip.modified
-		? { ...clip, label: preset.name, effects: applyPreset(preset) }
+		? {
+				...clip,
+				label: preset.name,
+				effects: keepLockedInPreset(applyPreset(preset), clip.effects),
+			}
 		: clip;
 }
 

@@ -49,6 +49,7 @@
 	import type { FreqBand } from "../../effects";
 	import { linkBand } from "../../editor/link-band.svelte";
 	import { isMoshable } from "../../editor/mosh";
+	import { keepLockedInPreset } from "../../editor/sequence";
 	import EffectItem from "./EffectItem.svelte";
 	import { showToast } from "./toast.svelte";
 	import { downloadFile } from "../../utils";
@@ -162,7 +163,7 @@
 				enabled: false,
 				expanded: false,
 			}));
-		effects = [...applied, ...rest];
+		effects = keepLockedInPreset([...applied, ...rest], effects);
 		appliedIndex = index;
 		onEffectsReplaced?.();
 		onPresetApplied?.($state.snapshot(presets[index]) as Preset);
