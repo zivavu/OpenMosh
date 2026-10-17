@@ -209,8 +209,7 @@ export async function addCustomFont(input: string): Promise<CustomFont> {
 		);
 	}
 
-	const data = await fetchBytes(fileUrl);
-	return saveFont(name, trimmed, data);
+	return addCustomFontData(name, trimmed, await fetchBytes(fileUrl));
 }
 
 /** Add a font the user picked off disk. Same result as a pasted link, minus the
