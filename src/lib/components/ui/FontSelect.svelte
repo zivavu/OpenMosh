@@ -91,19 +91,13 @@
 		/* Font names are long; without this the select refuses to shrink below its
 		   widest option and pushes the row wider than the panel. */
 		min-width: 0;
-		padding: 0.25rem 0.45rem;
-		background: var(--sunken);
-		border: 1px solid var(--line);
+		padding-block: 0.25rem;
+		padding-left: 0.45rem;
+		background-color: var(--sunken);
 		border-radius: var(--r-2);
 		color: var(--text-2);
 		font-family: var(--font-mono);
 		font-size: 0.66rem;
-		cursor: pointer;
-		outline: none;
-	}
-
-	.font-select select:focus {
-		border-color: var(--line-strong);
 	}
 
 	.add-btn {
