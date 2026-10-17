@@ -462,9 +462,12 @@
 		}));
 		let cancelled = false;
 		let player: VideoPreviewPlayer | null = null;
+		if (!swap)
+			untrack(() => (videoUnplayable = { player: false, element: false }));
 		VideoPreviewPlayer.create(previewFile, media).then((p) => {
 			if (cancelled || !p) {
 				p?.dispose();
+				if (!cancelled && !swap) videoUnplayable.player = true;
 				return;
 			}
 			player = p;
@@ -495,6 +498,18 @@
 			player?.dispose();
 			previewPlayer = null;
 		};
+	});
+
+	/** Which of the two ways to play the single video gave up on it. */
+	let videoUnplayable = $state({ player: false, element: false });
+	$effect(() => {
+		if (!videoUnplayable.player || !videoUnplayable.element) return;
+		const name = untrack(() => file?.name);
+		showToast(
+			`Can't play "${name}". This browser can't decode its video`,
+			"error",
+			8000,
+		);
 	});
 
 	const singleProxy = new SingleProxy({
@@ -4723,6 +4738,7 @@
 						videoEl.play().catch(() => {});
 					}
 				}}
+				onerror={() => (videoUnplayable.element = true)}
 				onplay={() => (videoPlaying = true)}
 				onpause={() => (videoPlaying = false)}
 				onseeking={() => {
