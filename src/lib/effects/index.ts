@@ -47,6 +47,35 @@ export const HIDDEN_EFFECTS_KEY = "openmosh-hidden-effects";
 /** Whether the effects panel lists live effects first. */
 export const LIVE_FIRST_KEY = "openmosh-live-first";
 
+export function hiddenEffectIds(): Set<string> {
+	return new Set(readJson<string[] | null>(HIDDEN_EFFECTS_KEY, null) ?? []);
+}
+
+/** The chain without effects the user hid, so an undo can't bring one back. */
+export function withoutHiddenEffects(
+	effects: EffectInstance[],
+	hidden = hiddenEffectIds(),
+): EffectInstance[] {
+	return effects.some((e) => hidden.has(e.defId))
+		? effects.filter((e) => !hidden.has(e.defId))
+		: effects;
+}
+
+/** `withoutHiddenEffects` over every clip's chain on these lanes. */
+export function lanesWithoutHiddenEffects<
+	L extends { clips: { effects: EffectInstance[] }[] },
+>(lanes: L[]): L[] {
+	const hidden = hiddenEffectIds();
+	if (hidden.size === 0) return lanes;
+	return lanes.map((l) => ({
+		...l,
+		clips: l.clips.map((c) => ({
+			...c,
+			effects: withoutHiddenEffects(c.effects, hidden),
+		})),
+	}));
+}
+
 export function loadInitialEffects(): EffectInstance[] {
 	const hidden = readJson<string[] | null>(HIDDEN_EFFECTS_KEY, null);
 	if (!Array.isArray(hidden))

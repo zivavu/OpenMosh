@@ -6,6 +6,7 @@
 	import {
 		generateId,
 		loadInitialEffects,
+		withoutHiddenEffects,
 		setVolumeLink,
 		type EffectInstance,
 	} from "../../effects";
@@ -773,7 +774,7 @@
 
 	const moshSession = createMoshSession({
 		getEffects: () => effects,
-		setEffects: (v) => (effects = v),
+		setEffects: (v) => (effects = withoutHiddenEffects(v)),
 		getMoshOptions,
 		cancelBurst: () => panelBurst.cancel(),
 		endBurst: () => panelBurst.end(),
