@@ -30,6 +30,8 @@ export type ProxyWorkerResponse =
 	| { type: "failed"; id: number; reason: string };
 
 const conversions = new Map<number, Conversion>();
+/** Cancelled before their conversion existed to cancel. */
+const cancelled = new Set<number>();
 
 function post(msg: ProxyWorkerResponse, transfer?: Transferable[]) {
 	(self as unknown as Worker).postMessage(msg, transfer ?? []);
@@ -335,6 +337,7 @@ self.onmessage = (e: MessageEvent<ProxyWorkerRequest>) => {
 		void convert(msg.id, msg.file);
 		return;
 	}
+	cancelled.add(msg.id);
 	conversions
 		.get(msg.id)
 		?.cancel()
@@ -382,6 +385,9 @@ async function reportProxy(blob: Blob, sourceRealtime: number | null) {
 }
 
 async function convert(id: number, file: File) {
+	const stopIfCancelled = () => {
+		if (cancelled.has(id)) throw new Error("cancelled");
+	};
 	try {
 		drawTier = 0;
 		loggedTier.clear();
@@ -392,12 +398,14 @@ async function convert(id: number, file: File) {
 		const track = await input.getPrimaryVideoTrack();
 		if (!track) throw new Error("no video track to proxy");
 		const sourceRealtime = await benchmarkDecode(track);
+		stopIfCancelled();
 		const size = shrinkToLongEdge(
 			track.displayWidth,
 			track.displayHeight,
 			pickLongEdge(sourceRealtime),
 		);
 		const codec = await pickCodec(size.width, size.height);
+		stopIfCancelled();
 		// Posted before the encode: the size is what the UI shows for the whole transcode.
 		post({ type: "sized", id, width: size.width, height: size.height });
 		const target = new BufferTarget();
@@ -418,6 +426,7 @@ async function convert(id: number, file: File) {
 			},
 		});
 		conversions.set(id, conversion);
+		stopIfCancelled();
 		// A discarded video track leaves an audio-only conversion whose execute() throws.
 		if (!conversion.isValid) {
 			const reasons = conversion.discardedTracks
@@ -438,5 +447,7 @@ async function convert(id: number, file: File) {
 		conversions.delete(id);
 		console.error(`[proxy] conversion ${id} failed`, error);
 		post({ type: "failed", id, reason: String(error) });
+	} finally {
+		cancelled.delete(id);
 	}
 }
