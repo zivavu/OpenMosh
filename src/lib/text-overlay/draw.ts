@@ -22,7 +22,23 @@ export interface CanvasTextStyle {
 
 /** Wrap width, as a fraction of frame width, before a line breaks. */
 const MAX_WIDTH_RATIO = 0.92;
+/** Narrowest wrap, so text pushed against an edge still reads as words. */
+const MIN_WIDTH_RATIO = 0.2;
 const LINE_HEIGHT = 1.2;
+
+/** The room the text has on its side of the anchor, inside the same margins. */
+function wrapWidthRatio(style: CanvasTextStyle): number {
+	const margin = (1 - MAX_WIDTH_RATIO) / 2;
+	const toLeft = style.x - margin;
+	const toRight = 1 - margin - style.x;
+	const room =
+		style.align === "left"
+			? toLeft
+			: style.align === "right"
+				? toRight
+				: 2 * Math.min(toLeft, toRight);
+	return Math.min(MAX_WIDTH_RATIO, Math.max(MIN_WIDTH_RATIO, room));
+}
 
 /** Where the wrapped lines land, with the context already set up to draw them.
  * Both the draw and the box measurement come through here. */
@@ -47,7 +63,7 @@ function layoutText(
 ): TextLayout | null {
 	const fontSize = Math.max(4, Math.round(height * style.size));
 	ctx.font = `${fontSize}px ${style.fontFamily}`;
-	const lines = wrapLines(ctx, text, width * MAX_WIDTH_RATIO);
+	const lines = wrapLines(ctx, text, width * wrapWidthRatio(style));
 	if (lines.length === 0) return null;
 	const lineHeight = fontSize * LINE_HEIGHT;
 	return {
