@@ -1,10 +1,10 @@
 import { loadInitialEffects, type EffectInstance } from "../effects";
 import { NO_EDIT, nextEditSeq } from "./edit-clock";
 
-export function createEffectHistory() {
-	let history = $state<EffectInstance[][]>([
-		$state.snapshot(loadInitialEffects()),
-	]);
+export function createEffectHistory(
+	initial: EffectInstance[] = loadInitialEffects(),
+) {
+	let history = $state<EffectInstance[][]>([$state.snapshot(initial)]);
 	// Edit-clock stamp per entry; see createSnapshotHistory for the same
 	// bookkeeping and why Ctrl+Z needs it.
 	let seqs = $state<number[]>([NO_EDIT]);
