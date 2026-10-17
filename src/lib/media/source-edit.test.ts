@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import {
+	clampCrop,
 	createSourceEdit,
 	cropExtent,
 	DEFAULT_CHROMA_KEY,
@@ -441,5 +442,15 @@ describe("key points", () => {
 			],
 		};
 		expect(sampleSourceEdit(e, 1).chromaKey.points[0].x).toBeCloseTo(0.5, 5);
+	});
+});
+
+describe("clampCrop", () => {
+	it("keeps a rectangle against the far edge at its minimum size", () => {
+		const c = clampCrop({ x: 0.995, y: 1, w: 0.01, h: 0.5 });
+		expect(c.w).toBeCloseTo(0.01);
+		expect(c.h).toBeCloseTo(0.01);
+		expect(c.x + c.w).toBeCloseTo(1);
+		expect(c.y + c.h).toBeCloseTo(1);
 	});
 });

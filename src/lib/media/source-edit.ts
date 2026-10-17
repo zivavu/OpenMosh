@@ -393,16 +393,18 @@ function normalizeCrop(raw: unknown): CropRect {
 	});
 }
 
-/** A rectangle forced back inside the frame. Shared with the keyframe blend. */
-function clampCrop(c: CropRect): CropRect {
-	const x = Math.min(Math.max(c.x, 0), 1);
-	const y = Math.min(Math.max(c.y, 0), 1);
+/** Narrowest a crop may get, as a fraction of the frame. */
+export const MIN_CROP_SIZE = 0.01;
+
+/** A rectangle forced back inside the frame, never thinner than `MIN_CROP_SIZE`. */
+export function clampCrop(c: CropRect): CropRect {
+	const x = Math.min(Math.max(c.x, 0), 1 - MIN_CROP_SIZE);
+	const y = Math.min(Math.max(c.y, 0), 1 - MIN_CROP_SIZE);
 	return {
 		x,
 		y,
-		// Clamped against the origin so the rectangle can't reach past the frame.
-		w: Math.min(Math.max(c.w, 0.01), 1 - x),
-		h: Math.min(Math.max(c.h, 0.01), 1 - y),
+		w: Math.min(Math.max(c.w, MIN_CROP_SIZE), 1 - x),
+		h: Math.min(Math.max(c.h, MIN_CROP_SIZE), 1 - y),
 	};
 }
 
