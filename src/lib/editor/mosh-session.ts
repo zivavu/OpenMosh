@@ -26,32 +26,38 @@ export function createMoshSession(opts: MoshSessionOptions) {
 
 	function roll() {
 		cancelBurst();
+		keepTweaks();
 		const effects = getEffects();
-		// Record the pre-first-roll chain so ← returns to the user's own work, not startup.
-		if (!moshHistory.canUndo && !moshHistory.canRedo)
-			moshHistory.reset(effects);
 		rollAlive(() => generateMosh(effects, getMoshOptions()));
 		moshHistory.push(effects);
 		history.reset(effects);
 	}
 
+	/** Hand-edits made on a mosh belong to it, so walking away and back keeps them.
+	 * Before the first roll this records the user's own chain for ← to return to. */
+	function keepTweaks() {
+		moshHistory.replace(getEffects());
+	}
+
 	/** → : forward through mosh history, rolling a new mosh at its top. */
 	function forward() {
-		const next = moshHistory.redo();
-		if (!next) {
+		if (!moshHistory.canRedo) {
 			roll();
 			return;
 		}
 		cancelBurst();
+		keepTweaks();
+		const next = moshHistory.redo()!;
 		setEffects(next);
 		history.reset(next);
 	}
 
-	/** ← : back through the mosh history. Never touches the edit history. */
+	/** ← : back through the mosh history. */
 	function back() {
-		const prev = moshHistory.undo();
-		if (!prev) return;
+		if (!moshHistory.canUndo) return;
 		cancelBurst();
+		keepTweaks();
+		const prev = moshHistory.undo()!;
 		setEffects(prev);
 		history.reset(prev);
 	}

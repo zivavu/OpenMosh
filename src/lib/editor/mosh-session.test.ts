@@ -8,6 +8,9 @@ function session(start: EffectInstance[]) {
 		getEffects: () => effects,
 		setEffects: (v) => (effects = v),
 		getMoshOptions: () => ({}) as never,
+		rollAlive: () => {
+			for (const e of effects) e.enabled = false;
+		},
 		cancelBurst: () => {},
 		endBurst: () => {},
 	});
@@ -37,5 +40,22 @@ describe("createMoshSession", () => {
 		t.s.undoEdit();
 		expect(enabled(t.effects)).toEqual([0, 1]);
 		expect(t.s.touched).toBe(false);
+	});
+
+	it("keeps tweaks made on a mosh when ← walks away and → comes back", () => {
+		const t = session(loadInitialEffects());
+		t.s.roll();
+		t.edit(0);
+		t.s.back();
+		t.s.forward();
+		expect(enabled(t.effects)).toEqual([0]);
+	});
+
+	it("keeps tweaks made before the first roll for ← to return to", () => {
+		const t = session(loadInitialEffects());
+		t.edit(3);
+		t.s.roll();
+		t.s.back();
+		expect(enabled(t.effects)).toEqual([3]);
 	});
 });
