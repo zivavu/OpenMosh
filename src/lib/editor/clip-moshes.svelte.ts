@@ -7,10 +7,12 @@ interface ClipMoshesOptions<Clip extends { id: string }> {
 	/** Roll these clips in the editor's state. */
 	roll: (ids: Set<string>) => void;
 	restore: (clipId: string, snap: MoshSnapshot) => void;
+	/** Record the lanes' undo step before a roll or an arrow changes a clip's chain. */
+	beforeChange?: () => void;
 }
 
-/** ←/→ through one lane kind's clip moshes, a stack per clip id. Mosh history only,
- * never the edit stack. */
+/** ←/→ through one lane kind's clip moshes, a stack per clip id. Each change is also
+ * an edit, so Ctrl+Z steps back through rolls before anything older. */
 export class ClipMoshes<Clip extends { id: string }> {
 	#history = new MoshHistory<MoshSnapshot>();
 	readonly #opts: ClipMoshesOptions<Clip>;
@@ -28,6 +30,7 @@ export class ClipMoshes<Clip extends { id: string }> {
 		for (const clip of this.#opts.clips(ids)) {
 			this.#history.seed(clip.id, this.#snapshot(clip));
 		}
+		this.#opts.beforeChange?.();
 		this.#opts.roll(ids);
 		for (const clip of this.#opts.clips(ids)) {
 			this.#history.push(clip.id, this.#snapshot(clip));
@@ -37,13 +40,16 @@ export class ClipMoshes<Clip extends { id: string }> {
 	/** → : the next mosh in the clip's history, or a new roll at its top. */
 	forward(clipId: string) {
 		const snap = this.#history.redo(clipId);
-		if (snap) this.#opts.restore(clipId, snap);
-		else this.roll([clipId]);
+		if (!snap) return this.roll([clipId]);
+		this.#opts.beforeChange?.();
+		this.#opts.restore(clipId, snap);
 	}
 
 	back(clipId: string) {
 		const snap = this.#history.undo(clipId);
-		if (snap) this.#opts.restore(clipId, snap);
+		if (!snap) return;
+		this.#opts.beforeChange?.();
+		this.#opts.restore(clipId, snap);
 	}
 
 	/** Splits, deletes and undo retire clip ids; drop their stacks. */

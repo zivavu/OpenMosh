@@ -1620,6 +1620,7 @@
 		roll: (ids) =>
 			rollAlive(() => (fxLanes = rollFxClips(fxLanes, ids, getMoshOptions()))),
 		restore: (id, snap) => (fxLanes = restoreFxClipMosh(fxLanes, id, snap)),
+		beforeChange: () => pushFxHistory(),
 	});
 
 	/** The fx clip the mosh gestures act on: the selected one only. */
@@ -4118,6 +4119,7 @@
 			),
 		restore: (id, snap) =>
 			(textTimeline = restoreTextClipMosh(textTimeline, id, snap)),
+		beforeChange: () => pushTextHistory(),
 	});
 
 	/** Deleting a clip retires its id, so drop the stack. */
@@ -4188,6 +4190,7 @@
 			),
 		restore: (id, snap) =>
 			(mediaTimeline = restoreMediaClipMosh(mediaTimeline, id, snap)),
+		beforeChange: () => pushMediaHistory(),
 	});
 
 	function mediaClipsById(ids: Set<string>): MediaClip[] {
