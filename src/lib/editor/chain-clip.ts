@@ -53,6 +53,13 @@ export function chainClipTick(clip: ChainClip, time: number): number {
 	return Math.max(0, Math.floor((time - clip.start) / interval));
 }
 
+/** Seed spacing between consecutive ticks of an interval clip. */
+const TICK_SEED_STRIDE = 7919;
+
+function tickSeed(clip: ChainClip, tick: number): number {
+	return (clip.seed ?? 0) + tick * TICK_SEED_STRIDE;
+}
+
 /** Switch a clip to a re-roll mode; "static" keeps the last concrete chain. */
 export function withChainMode<C extends ChainClip>(
 	clip: C,
@@ -192,6 +199,9 @@ export function splitChainClipAt<
 		start: at,
 		effects: cloneChainEffects(clip.effects),
 	};
+	// An auto clip's right half picks up on the roll that was playing at the cut.
+	if (clip.mode === "interval" && clip.seed !== undefined)
+		rest.seed = tickSeed(clip, chainClipTick(clip, at));
 	return {
 		...lane,
 		clips: sortClips([
@@ -245,7 +255,7 @@ export function chainClipEffectsAt(
 
 	const options = getMoshOptions();
 	const tick = chainClipTick(clip, time);
-	const seed = (clip.seed ?? 0) + tick * 7919;
+	const seed = tickSeed(clip, tick);
 	const rollKey = `${clip.id}:${seed}:${options.moshMin}:${options.moshMax}:${options.moshStyle ?? "random"}:${options.randomizeOrder}:${options.moshAudioLink}:${options.moshAudioLinkStrength}:${options.moshLinkBand}:${options.hasAudio}:${options.model}`;
 	let rolled = cache.get(rollKey);
 	if (!rolled) {
