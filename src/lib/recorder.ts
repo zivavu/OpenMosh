@@ -816,7 +816,9 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 
 		// Encoders flush their remaining pipeline here; packet callbacks drive progress to 100%.
 		await sink.finish();
+		checkAbort(signal);
 		await output.finalize();
+		checkAbort(signal);
 		finished = true;
 	} finally {
 		sink?.dispose();
@@ -833,7 +835,10 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 	onFinalizing?.();
 	await new Promise<void>((r) => setTimeout(r, 0));
 
-	return buffer.toBlob("video/webm");
+	const blob = await buffer.toBlob("video/webm");
+	// Cancel stays honoured while the file is written: nothing downloads.
+	checkAbort(signal);
+	return blob;
 }
 
 export async function recordVideo(opts: RecordOptions): Promise<Blob> {
