@@ -3233,6 +3233,8 @@
 			fanOutFxEdit();
 			return;
 		}
+		// A slider tweak still coalescing is its own step, recorded before the clear.
+		panelBurst.end();
 		clearEffectsFn(effects);
 		moshSession.pushEdit(effects);
 	}
