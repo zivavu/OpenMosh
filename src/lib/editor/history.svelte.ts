@@ -35,6 +35,11 @@ export function createEffectHistory(
 		return $state.snapshot(history[historyIndex]) as EffectInstance[];
 	}
 
+	/** Overwrite the current entry in place, keeping its spot on the edit clock. */
+	function replace(effects: EffectInstance[]) {
+		history[historyIndex] = $state.snapshot(effects);
+	}
+
 	function reset(effects: EffectInstance[]) {
 		history = [$state.snapshot(effects)];
 		seqs = [NO_EDIT];
@@ -63,6 +68,7 @@ export function createEffectHistory(
 		push,
 		undo,
 		redo,
+		replace,
 		reset,
 	};
 }
