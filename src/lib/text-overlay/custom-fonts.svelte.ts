@@ -1,5 +1,6 @@
 /** User-added fonts, pasted in as a Google Fonts link (or a direct font-file URL)
  * or uploaded off disk. The bytes live in IndexedDB, not the link. */
+import { showToast } from "../components/ui/toast.svelte";
 import { generateId } from "../effects/types";
 import { simpleStore } from "../idb";
 import {
@@ -272,7 +273,12 @@ async function saveFont(
 	try {
 		await putStored(stored);
 	} catch {
-		// Storage refused it; it stays usable until reload.
+		// Still usable this session, so say it won't outlast a reload.
+		showToast(
+			`Couldn't save ${name} in this browser, so it'll be gone after a reload`,
+			"error",
+			8000,
+		);
 	}
 	return meta;
 }
