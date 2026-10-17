@@ -117,7 +117,7 @@
 			<div class="tl-tool-sep"></div>
 			<span class="tl-tool-label">Fill</span>
 			<select
-				class="chain-select"
+				class="chain-select preset-select"
 				value={selectedPresetIndex}
 				onmousedown={() => (presetList = loadPresets())}
 				onchange={(e) => {
@@ -255,7 +255,6 @@
 
 	.chain-select,
 	.chain-bar :global(.chain-select) {
-		max-width: 9rem;
 		padding: 0.15rem 0.25rem;
 		border: 1px solid var(--line);
 		border-radius: 4px;
@@ -263,5 +262,10 @@
 		color: var(--text-2);
 		font-size: 0.65rem;
 		font-family: inherit;
+	}
+
+	/* Fixed: presets load on open, and sizing to the longest one shifted the bar. */
+	.preset-select {
+		width: 7rem;
 	}
 </style>
