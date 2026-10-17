@@ -1992,12 +1992,12 @@ export class GlRenderer {
 			}
 		}
 
-		// Every enabled effect was skipped (unknown ids): fall back to source
+		// The trailing effects were skipped (unknown ids): show the chain as far as it ran.
 		if (!producedOutput) {
 			if (toCanvas) {
-				this.drawPass(this.passthrough, null, srcTex, -1.0, time);
+				this.drawPass(this.passthrough, null, input, -1.0, time);
 			} else {
-				this.drawPass(this.passthrough, finalFbo, srcTex, 1.0, time);
+				this.drawPass(this.passthrough, finalFbo, input, 1.0, time);
 			}
 			resultTex = toCanvas ? null : finalTex;
 		}
