@@ -166,10 +166,10 @@
 		/* Font names are long; without this the select refuses to shrink below
 		   its widest option and pushes the row wider than the panel. */
 		min-width: 0;
-		padding: 0.2rem 0.3rem;
-		border: 1px solid var(--line);
+		padding-block: 0.2rem;
+		padding-left: 0.3rem;
 		border-radius: 4px;
-		background: var(--surface);
+		background-color: var(--surface);
 		color: var(--text);
 		font-size: 0.75rem;
 		font-family: inherit;

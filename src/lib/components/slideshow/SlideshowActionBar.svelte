@@ -300,10 +300,10 @@
 
 	.setting-row select {
 		flex: 1;
-		padding: 0.2rem 0.3rem;
-		border: 1px solid var(--line);
+		padding-block: 0.2rem;
+		padding-left: 0.3rem;
 		border-radius: var(--r-1);
-		background: var(--sunken);
+		background-color: var(--sunken);
 		color: var(--text-2);
 		font-family: var(--font-mono);
 		font-size: 0.66rem;

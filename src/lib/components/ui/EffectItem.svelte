@@ -1611,19 +1611,13 @@
 
 	select {
 		flex: 1;
-		background: var(--sunken);
+		background-color: var(--sunken);
 		color: var(--text-2);
-		border: 1px solid var(--line);
 		border-radius: var(--r-2);
-		padding: 0.25rem 0.45rem;
+		padding-block: 0.25rem;
+		padding-left: 0.45rem;
 		font-family: var(--font-mono);
 		font-size: 0.66rem;
-		cursor: pointer;
-		outline: none;
-	}
-
-	select:focus {
-		border-color: var(--line-strong);
 	}
 
 	.text-input {

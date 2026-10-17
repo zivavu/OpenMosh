@@ -604,10 +604,10 @@
 	}
 
 	.audio-select {
-		padding: 0.15rem 0.25rem;
-		border: 1px solid var(--line);
+		padding-block: 0.15rem;
+		padding-left: 0.25rem;
 		border-radius: 4px;
-		background: var(--surface);
+		background-color: var(--surface);
 		color: var(--text-2);
 		font-size: 0.65rem;
 		font-family: inherit;

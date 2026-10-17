@@ -444,9 +444,10 @@
 	/* The font picker is its own component, so the row's select styling has to
 	   reach across the boundary. */
 	.row :global(.font-select select) {
-		padding: 0.2rem 0.3rem;
+		padding-block: 0.2rem;
+		padding-left: 0.3rem;
 		border-radius: 4px;
-		background: var(--surface);
+		background-color: var(--surface);
 		color: var(--text);
 		font-family: inherit;
 		font-size: 0.75rem;

@@ -6052,19 +6052,13 @@
 
 	.mosh-setting-row select {
 		flex: 1;
-		background: var(--sunken);
+		background-color: var(--sunken);
 		color: var(--text-2);
-		border: 1px solid var(--line);
 		border-radius: var(--r-1);
-		padding: 0.2rem 0.4rem;
+		padding-block: 0.2rem;
+		padding-left: 0.4rem;
 		font-family: var(--font-mono);
 		font-size: 0.66rem;
-		cursor: pointer;
-		outline: none;
-	}
-
-	.mosh-setting-row select:focus {
-		border-color: var(--line-strong);
 	}
 
 	.mosh-setting-val {

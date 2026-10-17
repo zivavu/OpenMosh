@@ -439,20 +439,14 @@
 
 	select {
 		max-width: 260px;
-		background: var(--sunken);
+		background-color: var(--sunken);
 		color: var(--text-2);
-		border: 1px solid var(--line);
 		border-radius: var(--r-2);
-		padding: 0.3rem 0.5rem;
+		padding-block: 0.3rem;
+		padding-left: 0.5rem;
 		font-family: var(--font-mono);
 		font-size: 0.62rem;
 		letter-spacing: 0.08em;
-		cursor: pointer;
-		outline: none;
-	}
-	select:disabled {
-		cursor: default;
-		opacity: 0.7;
 	}
 
 	.hint {
