@@ -16,6 +16,12 @@ export const LYRICS_LANE_NAME = "Lyrics";
 /** The karaoke-style placement a fresh lyrics lane starts from. */
 const LYRICS_STYLE = { x: 0.5, y: 0.85, size: 0.075 } as const;
 
+/** A clip's text as one sync line: a break typed into the clip would otherwise split
+ * it into two lines sharing one timing. */
+function asLyricLine(text: string): string {
+	return text.replace(/\s*\n\s*/g, " ").trim();
+}
+
 /** One clip per line, back-to-back: each line stays up until the next starts,
  * and the last holds to `spanEnd`.
  *
@@ -52,7 +58,7 @@ export function createLyricsClips(
 			i + 1 < lines.length
 				? starts[i + 1]
 				: Math.max(spanEnd, start + MIN_CLIP_LENGTH);
-		const at = spare.findIndex((c) => c.text === text);
+		const at = spare.findIndex((c) => asLyricLine(c.text) === text);
 		if (at === -1) {
 			const fresh = createTextClip(start, end, text);
 			return template ? applyChainTo(fresh, captureChain(template)) : fresh;
@@ -74,7 +80,7 @@ export function lyricsDraftFromTimeline(
 	const clips = sortClips(lane.clips).filter((c) => c.text.trim());
 	if (clips.length === 0) return null;
 	return {
-		lines: clips.map((c) => c.text),
+		lines: clips.map((c) => asLyricLine(c.text)),
 		timings: clips.map((c) => c.start),
 		clips,
 	};
