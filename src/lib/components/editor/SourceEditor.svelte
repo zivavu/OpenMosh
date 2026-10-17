@@ -1303,11 +1303,14 @@
 		maskCtx = null;
 		maskLoaded = null;
 		selectedPoint = 0;
+		// Every track goes with it; speed and trim belong to the media, not a tool.
+		const { speed, span } = edit;
 		onChange({
 			chromaKey: createChromaKey(key.enabled),
 			crop: { ...FULL_CROP },
 			mask: null,
-			// Every track goes with it.
+			...(speed !== undefined && { speed }),
+			...(span && { span }),
 		});
 	}
 
