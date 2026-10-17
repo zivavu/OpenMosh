@@ -167,6 +167,20 @@ describe("lyricsDraftFromTimeline", () => {
 		expect(draft.lines).toHaveLength(draft.timings.length);
 	});
 
+	it("reads a clip with a line break in it as one line, kept on re-sync", () => {
+		const clips = createLyricsClips(["a", "b", "c"], [1, 3, 6], 10);
+		clips[1].text = "b\nb2";
+		const draft = lyricsDraftFromTimeline(timelineWithLyrics(clips))!;
+		expect(draft.lines).toEqual(["a", "b b2", "c"]);
+		const again = createLyricsClips(
+			draft.lines,
+			draft.timings,
+			10,
+			draft.clips,
+		);
+		expect(again[1]).toEqual(clips[1]);
+	});
+
 	it("is null before any sync lands", () => {
 		expect(lyricsDraftFromTimeline({ enabled: true, lanes: [] })).toBeNull();
 		expect(lyricsDraftFromTimeline(timelineWithLyrics([]))).toBeNull();
