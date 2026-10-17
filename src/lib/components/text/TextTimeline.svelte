@@ -90,6 +90,11 @@
 
 	/** What the sync modal opens onto: the lyrics lane as the timeline holds it. */
 	let lyricsDraft = $derived(lyricsDraftFromTimeline(timeline));
+	/** Stays mounted once opened, so closing it keeps a half-done sync. */
+	let lyricsMounted = $state(false);
+	$effect(() => {
+		if (lyricsOpen) lyricsMounted = true;
+	});
 
 	// One axis for the whole stack: zoom, pan and playhead-following live in
 	// TimelineStack.
@@ -292,7 +297,7 @@
 		/>
 	{/if}
 
-	{#if lyricsSync && lyricsOpen}
+	{#if lyricsSync && lyricsMounted}
 		{#await loadLyricsSyncModal() then LyricsSyncModal}
 			<LyricsSyncModal
 				open={lyricsOpen}
