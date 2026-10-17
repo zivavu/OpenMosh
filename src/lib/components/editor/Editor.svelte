@@ -1284,24 +1284,33 @@
 	/** Read this mode's entry for a song, falling back to the legacy un-prefixed entry. */
 	async function loadSeqEntry(baseKey: string): Promise<RestoredEntry | null> {
 		const key = seqKeyPrefix + baseKey;
-		const entry =
-			(await loadTimeline<SeqEntry>(key)) ??
-			(isSequenceMode ? await loadTimeline<SeqEntry>(baseKey) : null);
+		let entry: SeqEntry | null;
+		try {
+			entry =
+				(await loadTimeline<SeqEntry>(key)) ??
+				(isSequenceMode ? await loadTimeline<SeqEntry>(baseKey) : null);
+		} catch {
+			holdTimeline(key, "unreadable");
+			return null;
+		}
 		if (entry && isNewerEntry(entry)) {
-			holdNewerTimeline(key);
+			holdTimeline(key, "newer");
 			return null;
 		}
 		return entry && readSeqEntry(entry, file ? stableSourceId(file) : "");
 	}
 
-	/** Timelines a newer OpenMosh saved: left as they are, never written over. */
-	const newerTimelineKeys = new Set<string>();
+	/** Timelines saved by a newer OpenMosh, or that couldn't be read: left as they
+	 * are, never written over. */
+	const heldTimelineKeys = new Set<string>();
 
-	function holdNewerTimeline(key: string) {
-		if (newerTimelineKeys.has(key)) return;
-		newerTimelineKeys.add(key);
+	function holdTimeline(key: string, reason: "newer" | "unreadable") {
+		if (heldTimelineKeys.has(key)) return;
+		heldTimelineKeys.add(key);
 		showToast(
-			"A newer version of OpenMosh saved this. Reload the page to open it; changes here won't be saved.",
+			reason === "newer"
+				? "A newer version of OpenMosh saved this. Reload the page to open it; changes here won't be saved."
+				: "Couldn't read this project's saved timeline. Reload the page to try again; changes here won't be saved.",
 			"error",
 			0,
 		);
@@ -1369,7 +1378,7 @@
 		const entry = seqEntryNow();
 		const key = seqStoreKey;
 		if (!key || key !== loadedTimelineKey || !entry) return;
-		if (newerTimelineKeys.has(key)) return;
+		if (heldTimelineKeys.has(key)) return;
 		clearTimeout(seqSaveTimer);
 		untrack(() => saves.schedule("timeline"));
 		seqSaveTimer = setTimeout(() => {
@@ -1428,7 +1437,7 @@
 			!key ||
 			key !== loadedTimelineKey ||
 			!entry ||
-			newerTimelineKeys.has(key)
+			heldTimelineKeys.has(key)
 		) {
 			saves.drop("timeline");
 			return;
@@ -1872,8 +1881,8 @@
 	});
 
 	function savePool(key: string, ids: string[]) {
-		// Saved by a newer OpenMosh: nothing of it is written, as the toast promised.
-		if (newerTimelineKeys.has(seqKeyPrefix + key)) {
+		// Held (newer or unreadable): nothing of it is written, as the toast promised.
+		if (heldTimelineKeys.has(seqKeyPrefix + key)) {
 			saves.drop("pool");
 			return;
 		}
@@ -2118,7 +2127,7 @@
 		if (seqStoreKey !== storeKey) return;
 		loadedTimelineKey = storeKey;
 		// Not ready, so nothing of it is seeded or saved over.
-		if (newerTimelineKeys.has(storeKey)) return;
+		if (heldTimelineKeys.has(storeKey)) return;
 		if (saved === null) {
 			// Named after its song, else what it was opened with, until the user names it.
 			if (key.startsWith("proj-") && !readProjectNames()[key]) {
@@ -3469,8 +3478,8 @@
 
 	function saveSingleSession() {
 		const source = file;
-		const heldAsNewer = !!seqStoreKey && newerTimelineKeys.has(seqStoreKey);
-		if (!singleSessionKept || !source || heldAsNewer) {
+		const held = !!seqStoreKey && heldTimelineKeys.has(seqStoreKey);
+		if (!singleSessionKept || !source || held) {
 			saves.drop("session");
 			return;
 		}
