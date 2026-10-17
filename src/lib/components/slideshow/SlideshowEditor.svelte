@@ -1074,14 +1074,20 @@
 		});
 	});
 
+	let bpmDetectingFor: File | null = null;
+
 	async function runBpmDetection(auto = false) {
-		if (!audio.trackFile || bpmDetecting) return;
 		const file = audio.trackFile;
+		if (!file || (bpmDetecting && bpmDetectingFor === file)) return;
+		// A pass still measuring the previous track is moot.
+		bpmDetectAbort?.abort();
+		const abort = new AbortController();
+		bpmDetectAbort = abort;
+		bpmDetectingFor = file;
 		const epoch = bpmEpoch;
 		bpmDetecting = true;
-		bpmDetectAbort = new AbortController();
 		try {
-			const result = await detectBpm(file, bpmDetectAbort.signal);
+			const result = await detectBpm(file, abort.signal);
 			// The automatic pass never overrules what landed while it ran.
 			if (auto && (bpmEpoch !== epoch || audio.trackFile !== file)) return;
 			config = { ...config, bpm: result.bpm, beatOffset: result.offset };
@@ -1095,8 +1101,11 @@
 				);
 			}
 		} finally {
-			bpmDetecting = false;
-			bpmDetectAbort = null;
+			if (bpmDetectAbort === abort) {
+				bpmDetecting = false;
+				bpmDetectAbort = null;
+				bpmDetectingFor = null;
+			}
 		}
 	}
 
