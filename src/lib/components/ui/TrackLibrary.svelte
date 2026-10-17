@@ -48,6 +48,8 @@
 		activeTrackId?: string | null;
 		onLoadTrack: (file: File, trackId: string, autoplay?: boolean) => void;
 		onUnloadTrack?: () => void;
+		/** A track is gone from the library, so whatever plays it has to let go. */
+		onTrackDeleted?: (trackId: string) => void;
 		onPlay?: () => void;
 		onPause?: () => void;
 		mainPlaying?: boolean;
@@ -74,6 +76,7 @@
 		activeTrackId = null,
 		onLoadTrack,
 		onUnloadTrack,
+		onTrackDeleted,
 		onPlay,
 		onPause,
 		mainPlaying = false,
@@ -310,6 +313,7 @@
 		}
 		try {
 			await deleteTrack(track.id);
+			onTrackDeleted?.(track.id);
 			tracks = tracks.filter((t) => t.id !== track.id);
 			normalizedIds = new Set([...normalizedIds].filter((x) => x !== track.id));
 			gainCache.delete(track.id);
