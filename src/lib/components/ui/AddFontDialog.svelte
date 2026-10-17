@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { backdropClose } from "../../actions/backdrop-close";
 	import { modalDialog } from "../../actions/modal-dialog";
 	import { Trash2, Upload, X } from "lucide-svelte";
 	import {
@@ -82,7 +83,11 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <!-- svelte-ignore a11y_click_events_have_key_events -->
-<div class="font-overlay" onclick={onClose} onkeydown={onKeydown}>
+<div
+	class="font-overlay"
+	{@attach backdropClose(onClose)}
+	onkeydown={onKeydown}
+>
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
 		class="font-modal"

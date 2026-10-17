@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { backdropClose } from "../../actions/backdrop-close";
 	import { modalDialog } from "../../actions/modal-dialog";
 	import type { LoadLosses } from "../../effects/load-report";
 
@@ -27,7 +28,7 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <!-- svelte-ignore a11y_click_events_have_key_events -->
-<div class="overlay" onclick={onClose}>
+<div class="overlay" {@attach backdropClose(onClose)}>
 	<div
 		class="dialog"
 		{@attach modalDialog()}

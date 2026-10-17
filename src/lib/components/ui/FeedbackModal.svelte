@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { backdropClose } from "../../actions/backdrop-close";
 	import { modalDialog } from "../../actions/modal-dialog";
 	import { X, Check, Icon } from "lucide-svelte";
 	import { githubIcon } from "./brand-icons";
@@ -91,7 +92,11 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <!-- svelte-ignore a11y_click_events_have_key_events -->
-<div class="feedback-overlay" onclick={closeFeedback} onkeydown={onKeydown}>
+<div
+	class="feedback-overlay"
+	{@attach backdropClose(closeFeedback)}
+	onkeydown={onKeydown}
+>
 	<div
 		class="feedback-modal"
 		role="dialog"

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { backdropClose } from "../../actions/backdrop-close";
 	import { modalDialog } from "../../actions/modal-dialog";
 	interface Props {
 		title: string;
@@ -44,7 +45,7 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <!-- svelte-ignore a11y_click_events_have_key_events -->
-<div class="confirm-overlay" onclick={onCancel}>
+<div class="confirm-overlay" {@attach backdropClose(onCancel)}>
 	<div
 		class="confirm-dialog"
 		{@attach modalDialog()}
