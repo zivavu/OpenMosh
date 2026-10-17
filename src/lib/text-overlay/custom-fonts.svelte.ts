@@ -60,11 +60,17 @@ export function customFonts(): CustomFont[] {
 	return fonts;
 }
 
+/** The face's name as CSS asks for it: the family without its quotes. The display
+ * name can hold an apostrophe the family had to drop. */
+function faceName(font: Pick<CustomFont, "family">): string {
+	return font.family.replace(/^'|'$/g, "");
+}
+
 /** Register a stored face with the document so 2D-canvas drawing can use it. */
 function registerFont(font: StoredFont): void {
 	// A slice: FontFace takes ownership of the buffer, and the same record may come
 	// back from a later getAll().
-	const face = new FontFace(font.name, font.data.slice(0));
+	const face = new FontFace(faceName(font), font.data.slice(0));
 	const promise = face
 		.load()
 		.then((f) => {
@@ -279,7 +285,10 @@ export async function removeCustomFont(id: string): Promise<void> {
 	fonts = fonts.filter((f) => f.id !== id);
 	unregisterFamily(font.family);
 	// Collected first: deleting while iterating the set skips entries.
-	const faces = [...document.fonts].filter((f) => f.family === font.name);
+	const face = faceName(font);
+	const faces = [...document.fonts].filter(
+		(f) => f.family.replace(/^["']|["']$/g, "") === face,
+	);
 	for (const face of faces) document.fonts.delete(face);
 	bumpFontsVersion();
 	try {
