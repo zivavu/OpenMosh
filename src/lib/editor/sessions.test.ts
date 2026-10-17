@@ -134,4 +134,57 @@ describe("autosaving an edit", () => {
 			effects: ["b"],
 		});
 	});
+
+	test("writes a saved edit first, so a save started as the page closes lands", async () => {
+		const key = sessions.newSessionKey("single");
+		await sessions.saveSession(key, "single", [image()], { effects: ["a"] });
+
+		const opened: string[] = [];
+		const transaction = IDBDatabase.prototype.transaction;
+		IDBDatabase.prototype.transaction = function (
+			this: IDBDatabase,
+			...args: Parameters<IDBDatabase["transaction"]>
+		) {
+			opened.push(`${args[1] ?? "readonly"} ${String(args[0])}`);
+			return transaction.apply(this, args);
+		};
+		try {
+			await sessions.saveSession(key, "single", [image()], { effects: ["b"] });
+		} finally {
+			IDBDatabase.prototype.transaction = transaction;
+		}
+		expect(opened[0]).toBe("readwrite sessions");
+		expect((await sessions.openSession(key))?.state).toEqual({
+			effects: ["b"],
+		});
+	});
+
+	test("never lets an older save land over a newer one", async () => {
+		const key = sessions.newSessionKey("single");
+		await sessions.saveSession(key, "single", [image()], { effects: ["a"] });
+		// A different song sends this one through the slow path's lookups.
+		const older = sessions.saveSession(
+			key,
+			"single",
+			[image()],
+			{ effects: ["old"] },
+			"song",
+		);
+		await sessions.saveSession(key, "single", [image()], { effects: ["new"] });
+		await older;
+		expect((await sessions.openSession(key))?.state).toEqual({
+			effects: ["new"],
+		});
+	});
+
+	test("starts over once the edit is deleted", async () => {
+		const key = sessions.newSessionKey("single");
+		await sessions.saveSession(key, "single", [image()], { effects: ["a"] });
+		await deleteRecentEdit("single", key);
+		await sessions.saveSession(key, "single", [image()], { effects: ["b"] });
+		expect(await store.getAllSequenceMedia()).toHaveLength(1);
+		expect((await sessions.openSession(key))?.state).toEqual({
+			effects: ["b"],
+		});
+	});
 });

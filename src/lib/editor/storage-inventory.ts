@@ -37,7 +37,7 @@ import {
 	type StoredSession,
 	type StoredTimeline,
 } from "./sequence-media-store";
-import { listSavedSessions } from "./sessions";
+import { forgetSavedSession, listSavedSessions } from "./sessions";
 import type { SeqEntry } from "./seq-entry";
 import { records } from "../records";
 import { trackSourceId, type AudioClip, type AudioLane } from "../mix/types";
@@ -470,8 +470,13 @@ export async function deleteProject(project: StorageProject): Promise<void> {
 	await deleteMediaPool(id);
 	await deleteTimeline(`seq:${id}`);
 	await deleteTimeline(`single:${id}`);
-	await deleteSession(SESSION_TRACK_PREFIX.single + id);
-	await deleteSession(SESSION_TRACK_PREFIX.slideshow + id);
+	for (const key of [
+		SESSION_TRACK_PREFIX.single + id,
+		SESSION_TRACK_PREFIX.slideshow + id,
+	]) {
+		await deleteSession(key);
+		forgetSavedSession(key);
+	}
 	await deleteTrack(id);
 	forgetTrackEntries([id, `seq:${id}`, `single:${id}`]);
 	forgetProjectNames([id]);
@@ -512,6 +517,7 @@ export async function deleteRecentEdit(
 	} else {
 		const session = await getSession(key);
 		await deleteSession(key);
+		forgetSavedSession(key);
 		const timelines = session ? sessionTimelineKeys(session) : [];
 		for (const timeline of timelines) await deleteTimeline(timeline);
 		const keys = [key, ...timelines];
@@ -546,6 +552,7 @@ export async function deleteFont(id: string): Promise<void> {
 /** Every project, edit, song, blob and font; presets and settings are left. */
 export async function deleteEverything(): Promise<void> {
 	await clearAllSequenceStores();
+	forgetSavedSession();
 	await clearTracks();
 	for (const font of customFonts()) await removeCustomFont(font.id);
 	forgetAllTrackEntries();
