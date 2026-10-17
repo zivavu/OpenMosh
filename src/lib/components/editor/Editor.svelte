@@ -1251,6 +1251,7 @@
 			if (mediaLane) mediaTimeline = prependMediaLane(mediaTimeline, mediaLane);
 			fxHistory.reset();
 			mediaHistory.reset();
+			poolHistory.reset();
 			lengthHistory.reset();
 			bpmHistory.reset();
 		});
@@ -2065,7 +2066,46 @@
 		else sourceRegistry.setProxyEnabled(id, action === "enable");
 	}
 
+	/** The pool as undo holds it: files by reference, so a removed one can come back. */
+	interface PoolEntry {
+		id: string;
+		file: File;
+		edit?: SourceEdit;
+	}
+	const poolHistory = createSnapshotHistory<PoolEntry[]>();
+
+	function poolNow(): PoolEntry[] {
+		return sourceRegistry.sources.map((s) => ({
+			id: s.id,
+			file: s.file,
+			edit: sourceRegistry.edits[s.id],
+		}));
+	}
+
+	/** Undo and redo of a removal: the clips come back from the media stack. */
+	async function setPool(entries: PoolEntry[]) {
+		const want = new Set(entries.map((e) => e.id));
+		for (const s of [...sourceRegistry.sources]) {
+			if (want.has(s.id)) continue;
+			sourceRegistry.remove(s.id);
+			setMediaTimeline(detachMediaSource(mediaTimeline, s.id));
+		}
+		const missing = entries.filter((e) => !sourceRegistry.get(e.id));
+		if (missing.length === 0) return;
+		await sourceRegistry.add(missing.map((e) => e.file));
+		for (const e of missing) if (e.edit) sourceRegistry.setEdit(e.id, e.edit);
+		entries.forEach((e, to) => {
+			const from = sourceRegistry.sources.findIndex((s) => s.id === e.id);
+			if (from !== -1) sourceRegistry.reorder(from, to);
+		});
+	}
+
 	function removeSequenceSource(id: string) {
+		if (!sourceRegistry.get(id)) return;
+		asOneEdit(() => {
+			poolHistory.push(poolNow());
+			pushMediaHistory();
+		});
 		sourceRegistry.remove(id);
 		setMediaTimeline(detachMediaSource(mediaTimeline, id));
 	}
@@ -2314,6 +2354,7 @@
 		}
 		mediaTimeline = next;
 		mediaHistory.reset();
+		poolHistory.reset();
 		lengthHistory.reset();
 		bpmHistory.reset();
 		mixSpanHistory.reset();
@@ -3210,6 +3251,11 @@
 				setMediaTimeline({ ...t, lanes: lanesWithoutHiddenEffects(t.lanes) }),
 		),
 		snapshotUndoSource(
+			poolHistory,
+			poolNow,
+			(entries) => void setPool(entries),
+		),
+		snapshotUndoSource(
 			lengthHistory,
 			() => mixer.duration,
 			(length) => mixer.setDuration(length),
@@ -4031,6 +4077,7 @@
 		};
 		selectedMediaClipId = null;
 		mediaHistory.reset();
+		poolHistory.reset();
 		lengthHistory.reset();
 		bpmHistory.reset();
 	}
