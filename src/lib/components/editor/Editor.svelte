@@ -101,7 +101,9 @@
 	import { layerHighlight } from "../../editor/layer-highlight.svelte";
 	import {
 		cloneEffectInstance,
+		lanesWithoutHiddenEffects,
 		loadInitialEffects,
+		withoutHiddenEffects,
 		restoreEffects,
 		setVolumeLink,
 		type EffectInstance,
@@ -2903,7 +2905,7 @@
 
 	const moshSession = createMoshSession({
 		getEffects: () => effects,
-		setEffects: (v) => (effects = v),
+		setEffects: (v) => (effects = withoutHiddenEffects(v)),
 		getMoshOptions,
 		rollAlive,
 		cancelBurst: () => panelBurst.cancel(),
@@ -3189,7 +3191,7 @@
 	const fxUndo = snapshotUndoSource(
 		fxHistory,
 		() => $state.snapshot(fxLanes) as FxLane[],
-		setFxLanes,
+		(lanes) => setFxLanes(lanesWithoutHiddenEffects(lanes)),
 		() => burstOwner === "fx" && panelBurst.open,
 	);
 	// Built per press: the text and media stacks are declared further down.
@@ -3198,12 +3200,14 @@
 		snapshotUndoSource(
 			textHistory,
 			() => $state.snapshot(textTimeline) as TextTimeline,
-			setTextTimeline,
+			(t) =>
+				setTextTimeline({ ...t, lanes: lanesWithoutHiddenEffects(t.lanes) }),
 		),
 		snapshotUndoSource(
 			mediaHistory,
 			() => $state.snapshot(mediaTimeline) as MediaTimeline,
-			setMediaTimeline,
+			(t) =>
+				setMediaTimeline({ ...t, lanes: lanesWithoutHiddenEffects(t.lanes) }),
 		),
 		snapshotUndoSource(
 			lengthHistory,
