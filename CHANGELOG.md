@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.9.22](https://github.com/zivavu/OpenMosh/compare/v0.9.21...v0.9.22) (2026-10-17)
+
+
+### Added
+
+* Give dropdowns a cleaner look and a styled list ([6fb0e54](https://github.com/zivavu/OpenMosh/commit/6fb0e54868de70293543bc3b414646788117af48))
+* Highlight the hovered lane and the lane of a selected clip ([68b4f69](https://github.com/zivavu/OpenMosh/commit/68b4f69aae3e85ccd8725ce34d093a654f7fdcc1))
+
+
+### Fixed
+
+* Keep the generated images when changing the count ([3bdae99](https://github.com/zivavu/OpenMosh/commit/3bdae99d1115adaa465ae0408d6bda5801bb4953))
+* Keep the last edits when a tab closes in single and slideshow mode ([aaa5201](https://github.com/zivavu/OpenMosh/commit/aaa52015af253f4a2aaf1f50b96c375a525a53f8))
+* Never save a blank timeline over one that couldn't be read ([6131eee](https://github.com/zivavu/OpenMosh/commit/6131eee99609f3480bab5036c86ac097f8cb8742))
+* Stop an idle tab saving over another tab's newer work ([62cbf58](https://github.com/zivavu/OpenMosh/commit/62cbf58f159474ef25e54c65834d9a7c996fd685))
+* Stop the preset picker shifting the clip bar when it opens ([034c39c](https://github.com/zivavu/OpenMosh/commit/034c39c557320bae08962d16d2f5cf8030d9d1bb))
+
 ## [0.9.21](https://github.com/zivavu/OpenMosh/compare/v0.9.20...v0.9.21) (2026-10-16)
 
 Drag a thumb from the media pool onto the preview to lay it on a new lane, centred where you drop it. AVIF images open in every mode, and slideshow random mode rolls curated moshes. The editor no longer freezes when paused on a clip bouncing backward, or when the timeline holds a WebM from a browser recorder. Odd-sized GIFs and videos play in Chrome instead of showing a blank canvas, looped audio keeps playing while you drag the span, and the slideshow remembers its volume. Media without a file type opens, and HEIC photos the browser can't read are turned down up front. You're told when an image can't be read or a slide will export blank, exports stop with a reason when a video can't be read or the graphics card resets, and saving a project file counts missing songs as well as missing media.
