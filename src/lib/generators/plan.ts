@@ -103,7 +103,8 @@ const isDrawn = (k: OneKind) => DRAWN_KINDS.includes(k);
 
 export function planBatch(seed: number, opts: BatchOptions): GeneratedSpec[] {
 	const rng = mulberry32(seed);
-	const n = Math.max(1, opts.count);
+	const count = Math.max(1, opts.count);
+	const n = Math.max(count, opts.nest ?? 0);
 	const preset = opts.palette ? PALETTES[opts.palette] : undefined;
 
 	// Which generator fills each slot.
@@ -142,12 +143,15 @@ export function planBatch(seed: number, opts: BatchOptions): GeneratedSpec[] {
 
 	if (opts.variety === "cohesive") {
 		const colors = cohesiveColors(rng, n, preset);
-		return bySlot.map((t, i) => ({ ...t, colors: colors[i] }) as GeneratedSpec);
+		return bySlot
+			.slice(0, count)
+			.map((t, i) => ({ ...t, colors: colors[i] }) as GeneratedSpec);
 	}
-	const colors = wildColors(rng, n, preset);
-	const specs = bySlot.map(
-		(t, i) => ({ ...t, colors: colors[i].colors }) as GeneratedSpec,
-	);
+	// Golden-angle hues cover the wheel evenly at any prefix.
+	const colors = wildColors(rng, n, preset).slice(0, count);
+	const specs = bySlot
+		.slice(0, count)
+		.map((t, i) => ({ ...t, colors: colors[i].colors }) as GeneratedSpec);
 	return preset
 		? specs
 		: orderByHue(

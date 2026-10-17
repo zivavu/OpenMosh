@@ -25,6 +25,9 @@ export interface BatchOptions {
 	palette: string | null;
 	/** Leave the ground clear. Only the drawn kinds can; a mix then deals only those. */
 	transparent?: boolean;
+	/** Plan this many and keep the first `count`, so with one seed a smaller batch
+	 * is the start of a larger one. */
+	nest?: number;
 }
 
 /** PNG tEXt keyword the spec is stored under. */

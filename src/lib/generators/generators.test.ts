@@ -12,6 +12,7 @@ import {
 	planBatch,
 	specKind,
 } from "./plan";
+import { deal } from "./palette";
 import { embedSpec, isGeneratedSpec, readGenerated } from "./png-meta";
 import type { BatchOptions } from "./types";
 
@@ -187,6 +188,30 @@ describe("planBatch", () => {
 			count(of("attractor").map((s) => s.gen === "attractor" && s.system)),
 		).toBe(3);
 		expect(count(of("ink").map((s) => s.gen === "ink" && s.style))).toBe(2);
+	});
+
+	it("keeps a smaller nested batch as the start of a larger one", () => {
+		const ids = (specs: object[]) => specs.map((s) => JSON.stringify(s)).sort();
+		for (const kind of ["mix", ...ONE_KINDS] as const)
+			for (const variety of ["wild", "cohesive"] as const) {
+				const batch = (count: number) =>
+					planBatch(21, wild({ count, kind, variety, nest: 64 }));
+				const big = ids(batch(32));
+				for (const count of [6, 8, 16])
+					for (const id of ids(batch(count))) expect(big).toContain(id);
+			}
+	});
+
+	it("deals in proportion at every prefix", () => {
+		const kinds = deal(mulberry32(5), 64, [
+			["a", 0.5],
+			["b", 0.25],
+			["c", 0.25],
+		]);
+		for (let n = 1; n <= 64; n++) {
+			const a = kinds.slice(0, n).filter((k) => k === "a").length;
+			expect(Math.abs(a - n / 2)).toBeLessThan(2);
+		}
 	});
 });
 
