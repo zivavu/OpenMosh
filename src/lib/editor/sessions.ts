@@ -21,6 +21,7 @@ import {
 	storedMediaToFile,
 	withMediaWrites,
 	type SessionMode,
+	type StoredSession,
 } from "./sequence-media-store";
 
 import type { EffectInstance } from "../effects/types";
@@ -71,8 +72,26 @@ async function shownLabels(
 		);
 }
 
+/** Sessions this tab has saved, media and all, minus their state. */
+const savedHere = new Map<string, Omit<StoredSession, "state" | "updatedAt">>();
+/** The newest save per key; an older one still looking things up doesn't write. */
+const latestSave = new Map<string, number>();
+let saves = 0;
+
+/** Drop what this tab knows of a deleted session, or of every one. */
+export function forgetSavedSession(key?: string): void {
+	if (key === undefined) savedHere.clear();
+	else savedHere.delete(key);
+}
+
+function sameIds(a: string[], b: string[]): boolean {
+	return a.length === b.length && a.every((id, i) => id === b[i]);
+}
+
 /** Store the media and editor state under this session's key. False when the edit has
- * no key to be kept under (a slideshow without a song), so nothing was written. */
+ * no key to be kept under (a slideshow without a song), so nothing was written.
+ * A session this tab already saved with the same media writes before any lookup,
+ * so a save started as the page closes still lands. */
 export async function saveSession(
 	key: string,
 	mode: SessionMode,
@@ -81,8 +100,24 @@ export async function saveSession(
 	trackId?: string | null,
 ): Promise<boolean> {
 	if (mode === "slideshow" && !trackId) return false;
-	const isNew = !(await getSession(key).catch(() => undefined));
+	const save = ++saves;
+	latestSave.set(key, save);
 	const entries = files.map((file) => ({ id: stableSourceId(file), file }));
+	const sourceIds = entries.map((e) => e.id);
+
+	const known = savedHere.get(key);
+	if (
+		known?.mode === mode &&
+		known.trackId === (trackId ?? undefined) &&
+		sameIds(known.sourceIds, sourceIds)
+	) {
+		await putSession({ ...known, state });
+		rememberLastOpened({ mode, key });
+		await listSavedSessions(mode).catch(() => {});
+		return true;
+	}
+
+	const isNew = !(await getSession(key).catch(() => undefined));
 	// A song-keyed session is named after the song, matching the sequence list.
 	let label = defaultLabel(mode, files);
 	if (trackId) {
@@ -98,14 +133,16 @@ export async function saveSession(
 		// Only what isn't stored yet: a put copies the bytes again on every autosave.
 		const stored = await getAllSequenceMediaIds();
 		await putSequenceMedia(entries.filter((e) => !stored.has(e.id)));
-		await putSession({
+		if (latestSave.get(key) !== save) return;
+		const record = {
 			key,
 			mode,
 			label,
 			trackId: trackId ?? undefined,
-			sourceIds: entries.map((e) => e.id),
-			state,
-		});
+			sourceIds,
+		};
+		await putSession({ ...record, state });
+		savedHere.set(key, record);
 	});
 	// Saved edits are the open one, so this is what a reload comes back to.
 	rememberLastOpened({ mode, key });
