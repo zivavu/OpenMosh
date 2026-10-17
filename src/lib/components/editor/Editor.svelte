@@ -1372,16 +1372,25 @@
 	// Persist the sequence timeline per library track (deep snapshot read).
 	// Skipped while playing: the volume-link tick mutates the chains each frame.
 	let seqSaveTimer: ReturnType<typeof setTimeout> | undefined;
+	/** Something on screen isn't written yet. Playback counts: it skips the debounce.
+	 * Flushes write only then, or an idle tab closing would save its stale copy over
+	 * another tab's newer work. */
+	let seqSavePending = false;
 	$effect(() => {
 		const playing = audio.audioPlaying || videoIsPlaying || mixer.playing;
-		if (playing) return;
+		if (playing) {
+			seqSavePending = true;
+			return;
+		}
 		const entry = seqEntryNow();
 		const key = seqStoreKey;
 		if (!key || key !== loadedTimelineKey || !entry) return;
 		if (heldTimelineKeys.has(key)) return;
 		clearTimeout(seqSaveTimer);
 		untrack(() => saves.schedule("timeline"));
+		seqSavePending = true;
 		seqSaveTimer = setTimeout(() => {
+			seqSavePending = false;
 			void saves
 				.track("timeline", saveTimeline(key, entry))
 				.then(reportSeqSave);
@@ -1431,6 +1440,8 @@
 	/** Write the current timeline under the current key now; a track switch outruns the effect. */
 	function flushSequenceSave() {
 		clearTimeout(seqSaveTimer);
+		if (!seqSavePending) return;
+		seqSavePending = false;
 		const key = seqStoreKey;
 		const entry = seqEntryNow();
 		if (
@@ -1870,6 +1881,7 @@
 
 	// Persist the pool for the current song. Debounced: a multi-file add appends in batches.
 	let poolSaveTimer: ReturnType<typeof setTimeout> | undefined;
+	let poolSavePending = false;
 	$effect(() => {
 		if (!isSequenceMode || !poolReady) return;
 		const key = poolKey;
@@ -1877,10 +1889,12 @@
 		if (!key) return;
 		clearTimeout(poolSaveTimer);
 		untrack(() => saves.schedule("pool"));
+		poolSavePending = true;
 		poolSaveTimer = setTimeout(() => savePool(key, ids), 400);
 	});
 
 	function savePool(key: string, ids: string[]) {
+		poolSavePending = false;
 		// Held (newer or unreadable): nothing of it is written, as the toast promised.
 		if (heldTimelineKeys.has(seqKeyPrefix + key)) {
 			saves.drop("pool");
@@ -1899,6 +1913,7 @@
 	/** Pool counterpart to flushSequenceSave; same track-switch race. */
 	function flushMediaPoolSave() {
 		clearTimeout(poolSaveTimer);
+		if (!poolSavePending) return;
 		if (!isSequenceMode || !poolReady || !poolKey) {
 			saves.drop("pool");
 			return;
@@ -3457,6 +3472,8 @@
 
 	// Sequence mode resumes from its song's pool; single mode saves file and work together.
 	let sessionSaveTimer: ReturnType<typeof setTimeout> | undefined;
+	/** As `seqSavePending`, for the single edit's session. */
+	let sessionSavePending = false;
 
 	/** Single mode keeps an edit once there's something in it; a camera never. Lane
 	 * presence, not `enabled`: keying off the visibility toggle would discard hidden timelines. */
@@ -3477,6 +3494,7 @@
 	}
 
 	function saveSingleSession() {
+		sessionSavePending = false;
 		const source = file;
 		const held = !!seqStoreKey && heldTimelineKeys.has(seqStoreKey);
 		if (!singleSessionKept || !source || held) {
@@ -3506,7 +3524,10 @@
 	$effect(() => {
 		if (isSequenceMode) return;
 		// Skipped while playing, like the sequence save: the volume-link tick mutates `effects`.
-		if (audio.audioPlaying || videoIsPlaying) return;
+		if (audio.audioPlaying || videoIsPlaying) {
+			sessionSavePending = true;
+			return;
+		}
 		// Deep-read, discarded: naming `effects` alone subscribes to the reference, not its contents.
 		$state.snapshot(effects);
 		$state.snapshot(textTimeline);
@@ -3516,6 +3537,7 @@
 		if (!singleSessionKept) return;
 		clearTimeout(sessionSaveTimer);
 		untrack(() => saves.schedule("session"));
+		sessionSavePending = true;
 		sessionSaveTimer = setTimeout(saveSingleSession, 600);
 		return () => clearTimeout(sessionSaveTimer);
 	});
@@ -3543,7 +3565,7 @@
 	/** Backing out shouldn't race the debounce and lose the last edit. */
 	function flushSingleSessionSave() {
 		clearTimeout(sessionSaveTimer);
-		saveSingleSession();
+		if (sessionSavePending) saveSingleSession();
 	}
 
 	const shortcutGroups = $derived(

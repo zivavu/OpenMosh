@@ -104,6 +104,36 @@ test("a reload mid-edit doesn't lose the last change", async ({ page }) => {
 	await expect(mediaClips(page)).toHaveCount(3);
 });
 
+test("an idle tab leaving doesn't save over another tab's newer work", async ({
+	page,
+}) => {
+	await openEditor(page, {
+		sources: [
+			["red.png", RED],
+			["green.png", GREEN],
+		],
+	});
+	await waitForRender(page);
+	await splitClipAt(page, 0.5);
+	await waitForSaved(page);
+
+	const other = await page.context().newPage();
+	await other.goto(page.url());
+	await expect(other.locator(PREVIEW_CANVAS)).toBeVisible({ timeout: 30_000 });
+	await waitForRender(other);
+	await expect(mediaClips(other)).toHaveCount(2);
+	await splitClipAt(other, 0.75);
+	await expect(mediaClips(other)).toHaveCount(3);
+	await waitForSaved(other);
+
+	// The first tab, untouched since, leaves and opens the project again. The second
+	// stays put: its own leaving would write its copy back either way.
+	await page.goto("/");
+	await selectMode(page, "Editor");
+	await openSavedSong(page);
+	await expect(mediaClips(page)).toHaveCount(3);
+});
+
 test("a project saved to a file comes back after storage is cleared", async ({
 	page,
 }) => {
