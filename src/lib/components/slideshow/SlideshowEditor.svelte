@@ -1732,6 +1732,9 @@
 	}
 
 	function handleKeydown(e: KeyboardEvent) {
+		// A dialog, the lightbox or a recording has the keyboard.
+		if (isModalKeyboardOpen()) return;
+
 		const mod = e.ctrlKey || e.metaKey;
 		const key = e.key.toLowerCase();
 
@@ -1760,9 +1763,6 @@
 		}
 		// Leave every other modifier combo (copy, paste…) to the browser.
 		if (mod) return;
-
-		// The media lightbox owns the keyboard while it's up.
-		if (isModalKeyboardOpen()) return;
 
 		// Space is the transport whatever holds focus, or a focused dropdown would swallow it.
 		if (e.code === "Space") {

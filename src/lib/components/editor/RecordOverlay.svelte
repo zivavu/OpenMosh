@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { modalDialog } from "../../actions/modal-dialog";
+
 	interface Props {
 		recording: boolean;
 		recordProgress: number;
@@ -12,7 +14,14 @@
 
 {#if recording}
 	<div class="record-overlay">
-		<div class="record-modal">
+		<!-- Modal, so Space or an arrow can't change what's being recorded. -->
+		<div
+			class="record-modal"
+			role="dialog"
+			aria-modal="true"
+			aria-label="Recording"
+			{@attach modalDialog()}
+		>
 			<p class="record-title">
 				<span class="tally" class:steady={recordFinalizing}></span>
 				{recordFinalizing ? "Writing file" : "Recording"}
