@@ -2655,16 +2655,24 @@
 
 	/** Unloading the song takes its clips off the lanes too. */
 	function removeSong() {
-		const id = songSourceId;
-		const lanes = mediaTimeline.audioLanes ?? [];
-		if (id && lanes.some((l) => l.clips.some((c) => c.sourceId === id))) {
-			pushMediaHistory();
-			setMediaTimeline({
-				...mediaTimeline,
-				audioLanes: removeAudioSource(lanes, id),
-			});
-		}
+		if (songSourceId) removeAudioClipsOf(songSourceId);
 		dropSong();
+	}
+
+	/** A library track deleted while clips here still play it. */
+	function dropDeletedTrack(trackId: string) {
+		removeAudioClipsOf(trackSourceId(trackId));
+	}
+
+	function removeAudioClipsOf(sourceId: string) {
+		const lanes = mediaTimeline.audioLanes ?? [];
+		if (!lanes.some((l) => l.clips.some((c) => c.sourceId === sourceId)))
+			return;
+		pushMediaHistory();
+		setMediaTimeline({
+			...mediaTimeline,
+			audioLanes: removeAudioSource(lanes, sourceId),
+		});
 	}
 
 	/** The project's length, set by hand. Shorter cuts clips straddling the new end
@@ -4553,6 +4561,7 @@
 		activeTrackId={currentTrackId}
 		onLoadTrack={onLibraryLoadTrack}
 		onUnloadTrack={clearTrack}
+		onTrackDeleted={isSequenceMode ? dropDeletedTrack : undefined}
 		onPlay={isSequenceMode ? playSpan : () => audio.playAudio()}
 		onPause={isSequenceMode ? pauseTrack : () => audio.pauseAudio()}
 		mainPlaying={isSequenceMode ? mixer.playing : audio.audioPlaying}
