@@ -20,8 +20,9 @@ export function createMoshSession(opts: MoshSessionOptions) {
 	const { getEffects, setEffects, getMoshOptions, cancelBurst, endBurst } =
 		opts;
 	const rollAlive = opts.rollAlive ?? ((roll: () => void) => roll());
-	const history = createEffectHistory();
-	const moshHistory = createEffectHistory();
+	// Seeded from the live chain, so undo can't fall back past a restored session.
+	const history = createEffectHistory(getEffects());
+	const moshHistory = createEffectHistory(getEffects());
 
 	function roll() {
 		cancelBurst();
