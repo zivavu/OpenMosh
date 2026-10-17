@@ -91,6 +91,16 @@ export function createMoshSession(opts: MoshSessionOptions) {
 		get touched() {
 			return history.canUndo || moshHistory.canUndo;
 		},
+		/** Either stack holds a step either way: the chain has changed since it opened,
+		 * even if it's since been walked back. */
+		get worked() {
+			return (
+				history.canUndo ||
+				history.canRedo ||
+				moshHistory.canUndo ||
+				moshHistory.canRedo
+			);
+		},
 		pushEdit(effects: EffectInstance[]) {
 			history.push(effects);
 		},

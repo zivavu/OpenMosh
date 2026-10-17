@@ -3505,7 +3505,7 @@
 	let singleSessionKept = $derived(
 		!isSequenceMode &&
 			!isLive &&
-			(moshSession.touched || textTimeline.lanes.length > 0),
+			(moshSession.worked || textTimeline.lanes.length > 0),
 	);
 
 	function singleStateNow(): SingleSessionState {

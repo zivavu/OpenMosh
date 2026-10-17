@@ -58,4 +58,12 @@ describe("createMoshSession", () => {
 		t.s.back();
 		expect(enabled(t.effects)).toEqual([3]);
 	});
+
+	it("still counts as worked on once a roll is walked back", () => {
+		const t = session(loadInitialEffects());
+		t.s.roll();
+		t.s.back();
+		expect(t.s.touched).toBe(false);
+		expect(t.s.worked).toBe(true);
+	});
 });
