@@ -6,7 +6,7 @@ import {
 } from "./audio-controller";
 import { resetAutoRange } from "./auto-range";
 import { resetSpectrumBars } from "./spectrum-bars";
-import type { AudioLinkGroup } from "./audio-utils";
+import { wakeAudioContext, type AudioLinkGroup } from "./audio-utils";
 import type { SpectrumData } from "../types";
 
 /** Element-clock gap that reads as a jump rather than as step granularity. */
@@ -206,7 +206,7 @@ export class AudioManager {
 	playAudio() {
 		if (!this.trackFile || !this.trackObjectUrl || !this.#audioEl) return;
 		this.ensureAudioGraph();
-		if (this.audioContext?.state === "suspended") this.audioContext.resume();
+		if (this.audioContext) wakeAudioContext(this.audioContext);
 		const t = this.#audioEl.currentTime;
 		// Past the span end is where the marker sits, so it plays from there; before it, no.
 		this.pastSpan = this.spanEnd > 0 && t >= this.spanEnd;
