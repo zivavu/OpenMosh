@@ -88,6 +88,8 @@ export class SequenceMixer {
 	/** Buffers that were missing when the playing mix was scheduled. */
 	#missing = new Set<string>();
 	#passes: LoopPasses | null = null;
+	/** Where the sound laid out past a non-looping play stops. */
+	#scheduledEnd = 0;
 
 	constructor({
 		bank,
@@ -221,10 +223,11 @@ export class SequenceMixer {
 			this.#nodes = [...current, ...next];
 		} else {
 			this.#passes = null;
-			// Scheduled out to the project's end: playback past the span runs on.
+			// Stops on the context clock, so a hidden tab's throttled frames can't overrun it.
+			this.#scheduledEnd = this.#playEnd();
 			this.#nodes = this.#schedule(
 				t,
-				Math.max(t, this.duration),
+				Math.max(t, this.#scheduledEnd),
 				this.#anchorCtx,
 			);
 		}
@@ -300,8 +303,10 @@ export class SequenceMixer {
 			this.seek(repeat.start);
 			return;
 		}
-		const end =
-			!this.pastSpan && this.spanEnd > 0 ? this.spanEnd : this.duration;
+		const end = this.#playEnd();
+		// The span's end moved while playing: lay the sound out to the new one.
+		if (!this.#passes && end !== this.#scheduledEnd && t < end)
+			this.#reschedule();
 		if (!repeat && t >= end) {
 			if (this.loop && !this.pastSpan) {
 				this.seek(this.spanStart);
@@ -314,6 +319,11 @@ export class SequenceMixer {
 			this.currentTime = t;
 		}
 	};
+
+	/** Where playback stops: the span's end, or the project's once past it. */
+	#playEnd(): number {
+		return !this.pastSpan && this.spanEnd > 0 ? this.spanEnd : this.duration;
+	}
 
 	/** The timeline range that plays round: the repeat, else a looping span. */
 	#loopRange(): { start: number; end: number } | null {
