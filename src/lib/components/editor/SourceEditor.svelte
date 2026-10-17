@@ -37,8 +37,10 @@
 		isDefaultKeyPoints,
 		isFullCrop,
 		KEY_NEAR,
+		clampCrop,
 		MASK_MAX,
 		MAX_KEY_POINTS,
+		MIN_CROP_SIZE as MIN_CROP,
 		putKeyframe,
 		removeKeyframe,
 		sampleSourceEdit,
@@ -1001,9 +1003,6 @@
 		| { kind: "mask-move"; ax: number; ay: number; from: MaskTransform };
 	let drag: Drag | null = null;
 
-	/** Narrowest the rectangle may get, matching the clamp in `setCrop`. */
-	const MIN_CROP = 0.01;
-
 	/** How close to an edge counts as grabbing it, in normalized units. */
 	function grabTolerance(): { x: number; y: number } {
 		const rect = canvasEl?.getBoundingClientRect();
@@ -1163,8 +1162,8 @@
 			setCrop({
 				x: Math.min(drag.ax, n.x),
 				y: Math.min(drag.ay, n.y),
-				w: Math.max(Math.abs(n.x - drag.ax), 0.01),
-				h: Math.max(Math.abs(n.y - drag.ay), 0.01),
+				w: Math.abs(n.x - drag.ax),
+				h: Math.abs(n.y - drag.ay),
 			});
 			return;
 		}
@@ -1188,12 +1187,7 @@
 	}
 
 	function setCrop(next: CropRect) {
-		const crop = {
-			x: Math.min(Math.max(next.x, 0), 1),
-			y: Math.min(Math.max(next.y, 0), 1),
-			w: Math.min(Math.max(next.w, 0.01), 1 - Math.min(Math.max(next.x, 0), 1)),
-			h: Math.min(Math.max(next.h, 0.01), 1 - Math.min(Math.max(next.y, 0), 1)),
-		};
+		const crop = clampCrop(next);
 		// The static rectangle stays up to date even while a track owns the picture.
 		const withCrop = { ...edit, crop };
 		if (trackOn("crop")) addKey("crop", withCrop, crop);
