@@ -2,7 +2,7 @@
  * mixed through one Web Audio graph. The project, not a song, sets the length. */
 
 import { createAnalysisTap, startLinkTick } from "../audio/audio-controller";
-import type { AudioLinkGroup } from "../audio/audio-utils";
+import { wakeAudioContext, type AudioLinkGroup } from "../audio/audio-utils";
 import { resetAutoRange } from "../audio/auto-range";
 import { buildSongProfile } from "../audio/build-song-profile";
 import type { SongProfile } from "../audio/song-profile";
@@ -241,7 +241,7 @@ export class SequenceMixer {
 	play(): void {
 		if (this.playing || this.duration <= 0) return;
 		const ctx = this.#ensureGraph();
-		if (ctx.state === "suspended") void ctx.resume().catch(() => {});
+		wakeAudioContext(ctx);
 		let t = this.currentTime;
 		const repeat = this.repeat;
 		if (repeat) {

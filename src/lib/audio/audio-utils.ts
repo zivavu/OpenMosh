@@ -178,3 +178,10 @@ export function formatTimeMs(sec: number): string {
 	const ms = Math.floor((sec % 1) * 1000);
 	return `${formatTime(sec)}.${ms.toString().padStart(3, "0")}`;
 }
+
+/** Resume a context that isn't running: suspended, or Safari's "interrupted" after a
+ * call or Siri, which never turns back into "suspended". */
+export function wakeAudioContext(ctx: AudioContext) {
+	if (ctx.state !== "running" && ctx.state !== "closed")
+		void ctx.resume().catch(() => {});
+}

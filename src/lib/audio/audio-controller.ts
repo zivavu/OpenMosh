@@ -1,4 +1,8 @@
-import { applyVolumeLinksToEffects, type AudioLinkGroup } from "./audio-utils";
+import {
+	applyVolumeLinksToEffects,
+	wakeAudioContext,
+	type AudioLinkGroup,
+} from "./audio-utils";
 import { onFrame } from "../frame-loop";
 import { FFT_SIZE, SPECTRUM_MAX_DB, SPECTRUM_MIN_DB } from "./offline-audio";
 
@@ -38,7 +42,7 @@ export function createAudioGraph(
 		captureSources.set(ctx, cap.source);
 	}
 	cap.source.disconnect();
-	if (cap.ctx.state === "suspended") cap.ctx.resume().catch(() => {});
+	wakeAudioContext(cap.ctx);
 	return buildGraph(cap.ctx, cap.source);
 }
 
