@@ -874,6 +874,8 @@ export class ClipLaneController<
 			}
 			return;
 		}
+		// Esc or Delete mid-drag would pull the clips out from under the pointer.
+		if (this.drag || this.#boxStart) return;
 		// Escape marked as used, so fullscreen only exits on one nothing else took.
 		if (e.key === "Escape" && this.pastingJoins) {
 			e.preventDefault();
