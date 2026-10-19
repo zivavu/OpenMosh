@@ -51,7 +51,7 @@
 	import { readRaw, writeRaw } from "../../storage";
 	import { onOldHost, SITE_URL } from "../../site";
 	import { showToast } from "./toast.svelte";
-	import { fmtAgo } from "../../utils";
+	import { downloadFile, fmtAgo } from "../../utils";
 	import { downloadProjectFile } from "../../project-file/export";
 	import { isModalKeyboardOpen } from "../../modal-keyboard";
 	import { isInteractiveTarget } from "../../editor/shortcut-target";
@@ -115,6 +115,22 @@
 
 	const loadStorageModal = lazy(() => import("./StorageModal.svelte"));
 	let storageOpen = $state(false);
+
+	/** Only the old address offers this, so the backup code loads on first use. */
+	let packingBackup = $state(false);
+	async function downloadBackup() {
+		if (packingBackup) return;
+		packingBackup = true;
+		try {
+			const backup = await import("../../backup/backup");
+			downloadFile(await backup.buildBackup(), backup.backupFileName());
+		} catch (err) {
+			console.error(err);
+			showToast("Couldn't build the backup", "error");
+		} finally {
+			packingBackup = false;
+		}
+	}
 
 	// Owned here rather than inside the demo, so STOP quiets the wordmark's tear too.
 	let demoPlaying = $state(demoBackgroundEnabled());
@@ -715,10 +731,18 @@
 	{#if onOldHost()}
 		<div class="compat" role="status">
 			<p>
-				OpenMosh now lives at <a href={SITE_URL}>openmosh.com</a>. Projects
-				saved here don't move with it: save each one to a file with its download
-				button, then open the file there.
+				OpenMosh now lives at <a href={SITE_URL}>openmosh.com</a>. What you
+				saved here doesn't move with it: download a backup of everything, then
+				load it there from Storage <HardDrive size={12} />.
 			</p>
+			<button
+				class="compat-action"
+				onclick={downloadBackup}
+				disabled={packingBackup}
+			>
+				<Download size={12} />
+				{packingBackup ? "Packing…" : "Download backup"}
+			</button>
 		</div>
 	{/if}
 
@@ -1229,6 +1253,41 @@
 
 	.compat a {
 		color: var(--text);
+	}
+
+	.compat p :global(svg) {
+		vertical-align: -0.15em;
+	}
+
+	.compat-action {
+		display: inline-flex;
+		align-self: flex-start;
+		align-items: center;
+		gap: 0.4rem;
+		margin-top: 0.15rem;
+		padding: 0.3rem 0.8rem;
+		border: 1px solid var(--line-strong);
+		border-radius: var(--r-pill);
+		background: rgba(255, 255, 255, 0.03);
+		color: var(--text-2);
+		font-family: inherit;
+		font-size: 0.75rem;
+		font-weight: 600;
+		cursor: pointer;
+		transition:
+			border-color var(--t),
+			background-color var(--t),
+			color var(--t);
+	}
+
+	.compat-action:hover:not(:disabled) {
+		border-color: var(--text-3);
+		background-color: rgba(255, 255, 255, 0.08);
+		color: var(--text);
+	}
+
+	.compat-action:disabled {
+		cursor: progress;
 	}
 
 	.compat--dismissible {

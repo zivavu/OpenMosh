@@ -137,6 +137,7 @@ Outside CI a run reuses whatever already serves its port, so when my dev server 
 - The site is `openmosh.com`; `www` redirects to it. Never switch those around: each address
   keeps its own saves. `open-mosh.vercel.app` keeps serving the app with a moved notice
   (`lib/site.ts`) and is never redirected, since early users' projects are stored there.
+  The notice downloads a full backup to load on `openmosh.com`; in dev, `?old-host` shows it.
 - `/about` (`about/index.html`) is plain HTML, so crawlers read it without running JS; the app
   stays hash-routed on `/`. A new static page goes in `PAGES` in `vite.config.ts`, the build
   inputs and `public/sitemap.xml`. A test holds the effect count in it and the README.

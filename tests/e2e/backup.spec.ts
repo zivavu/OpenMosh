@@ -1,4 +1,10 @@
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import {
+	expect,
+	test,
+	type Browser,
+	type Locator,
+	type Page,
+} from "@playwright/test";
 import {
 	clipMoshButton,
 	liveEffectNames,
@@ -125,6 +131,34 @@ function failOnPageErrors(page: Page) {
 	});
 }
 
+/** Another browser with its own IndexedDB and localStorage, the demo off as in the config. */
+function otherBrowser(browser: Browser, baseURL: string) {
+	return browser.newContext({
+		baseURL,
+		storageState: {
+			cookies: [],
+			origins: [
+				{
+					origin: new URL(baseURL).origin,
+					localStorage: [
+						{
+							name: "openmosh-settings",
+							value: JSON.stringify({ demoBackground: false }),
+						},
+					],
+				},
+			],
+		},
+	});
+}
+
+/** Merged in from Storage, after which the page reloads. */
+async function loadBackup(modal: Locator, path: string): Promise<void> {
+	const reloaded = modal.page().waitForEvent("load");
+	await modal.locator('input[accept=".openmosh-backup"]').setInputFiles(path);
+	await reloaded;
+}
+
 test("a backup loaded into another browser brings every byte back", async ({
 	page,
 	browser,
@@ -167,35 +201,14 @@ test("a backup loaded into another browser brings every byte back", async ({
 	expect(before.dbs["openmosh-tracks"].tracks).toHaveLength(1);
 	expect(before.dbs["openmosh-fonts"].fonts).toHaveLength(1);
 
-	const origin = new URL(baseURL!).origin;
-	const other = await browser.newContext({
-		baseURL,
-		storageState: {
-			cookies: [],
-			origins: [
-				{
-					origin,
-					localStorage: [
-						{
-							name: "openmosh-settings",
-							value: JSON.stringify({ demoBackground: false }),
-						},
-					],
-				},
-			],
-		},
-	});
+	const other = await otherBrowser(browser, baseURL!);
 	try {
 		const target = await other.newPage();
 		failOnPageErrors(target);
 		const empty = await openStorage(target);
 		await expect(empty.getByText("Nothing stored yet")).toBeVisible();
 
-		const reloaded = target.waitForEvent("load");
-		await empty
-			.locator('input[accept=".openmosh-backup"]')
-			.setInputFiles(backupPath);
-		await reloaded;
+		await loadBackup(empty, backupPath);
 		await expect(
 			target.getByRole("button", { name: "Manage storage" }),
 		).toBeVisible();
@@ -222,6 +235,36 @@ test("a backup loaded into another browser brings every byte back", async ({
 		await target.goto("/");
 		await selectMode(target, "Single");
 		await expect(target.locator(".saved-item")).toContainText("lone.png");
+	} finally {
+		await other.close();
+	}
+});
+
+test("the old address's notice downloads a backup the new one loads", async ({
+	page,
+	browser,
+	baseURL,
+}) => {
+	failOnPageErrors(page);
+	await page.goto("/?old-host");
+	await addFont(page);
+	const downloadPromise = page.waitForEvent("download");
+	await page.getByRole("button", { name: "Download backup" }).click();
+	const download = await downloadPromise;
+	expect(download.suggestedFilename()).toMatch(/\.openmosh-backup$/);
+	const backupPath = await download.path();
+
+	const other = await otherBrowser(browser, baseURL!);
+	try {
+		const target = await other.newPage();
+		failOnPageErrors(target);
+		await target.goto("/");
+		await expect(
+			target.getByRole("button", { name: "Download backup" }),
+		).toHaveCount(0);
+		await loadBackup(await openStorage(target), backupPath);
+		const modal = await openStorage(target);
+		await expect(modal.getByText("Backup Test Face")).toBeVisible();
 	} finally {
 		await other.close();
 	}

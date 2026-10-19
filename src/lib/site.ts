@@ -5,6 +5,11 @@ export const SITE_URL = "https://openmosh.com";
  * with a notice rather than redirecting. */
 const OLD_HOST = "open-mosh.vercel.app";
 
+/** In dev, `?old-host` shows the notice too. */
 export function onOldHost(): boolean {
-	return location.hostname === OLD_HOST;
+	return (
+		location.hostname === OLD_HOST ||
+		(import.meta.env.DEV &&
+			new URLSearchParams(location.search).has("old-host"))
+	);
 }
