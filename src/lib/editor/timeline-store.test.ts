@@ -43,9 +43,17 @@ describe("loadTimeline", () => {
 		await expect(loadTimeline("seq:a")).rejects.toThrow("Connection lost");
 	});
 
-	test("falls back to the legacy copy when the read fails", async () => {
+	test("falls back to the legacy copy when nothing is stored", async () => {
 		storage.seedJson("openmosh-sequence", { "seq:old": { v: 1 } });
-		breakIndexedDb();
 		expect(await loadTimeline("seq:old")).toEqual({ v: 1 });
+	});
+
+	test("throws when the read fails, even with an older legacy copy", async () => {
+		storage.seedJson("openmosh-sequence", { "seq:a": { v: 1 } });
+		await putTimeline("seq:a", { v: 4 });
+		breakIndexedDb();
+		await expect(loadTimeline("seq:a")).rejects.toThrow("Connection lost");
+		IDBDatabase.prototype.transaction = realTransaction;
+		expect(await loadTimeline("seq:a")).toEqual({ v: 4 });
 	});
 });
