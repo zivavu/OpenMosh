@@ -1888,15 +1888,15 @@
 		// A different song may reference media this session hasn't tried yet.
 		restoreAttempted.clear();
 		void (async () => {
-			let ids: string[] | null = null;
 			try {
-				ids = await loadMediaPool(key);
+				const ids = await loadMediaPool(key);
+				if (poolKey !== key) return;
+				// A song with a saved pool swaps to it; one with none keeps what's loaded.
+				if (ids) await sourceRegistry.setPool(ids);
 			} catch {
-				// Storage blocked: carry on with whatever is loaded.
+				// Saving what did load would drop the rest from the project.
+				if (poolKey === key) holdTimeline(seqKeyPrefix + key, "unreadable");
 			}
-			if (poolKey !== key) return;
-			// A song with a saved pool swaps to it; one with none keeps what's loaded.
-			if (ids) await sourceRegistry.setPool(ids);
 			if (poolKey === key) poolReady = true;
 		})();
 	});
@@ -1954,7 +1954,7 @@
 		);
 		if (missing.length === 0) return;
 		for (const id of missing) restoreAttempted.add(id);
-		void sourceRegistry.restore(missing);
+		void sourceRegistry.restore(missing).catch(() => {});
 	});
 
 	/** Add to the pool, then seat a source-less lane on the first file added. */
