@@ -41,6 +41,14 @@ export function createSpanHistory(audio: SpanOwner) {
 		atRest = live();
 	}
 
+	/** Record a span something else just moved, as it was before; call after the move. */
+	function pushMoved(before: Span) {
+		if (before.start === audio.spanStart && before.end === audio.spanEnd)
+			return;
+		history.push(before);
+		atRest = live();
+	}
+
 	function reset() {
 		history.reset();
 		atRest = live();
@@ -79,5 +87,5 @@ export function createSpanHistory(audio: SpanOwner) {
 		redo: () => apply(history.redo(live())),
 	};
 
-	return { push, reset, trackChanged, undoSource };
+	return { push, pushMoved, reset, trackChanged, undoSource };
 }
