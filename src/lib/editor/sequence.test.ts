@@ -220,6 +220,17 @@ describe("keepLockedInPreset", () => {
 		expect(out[1]).toMatchObject({ locked: true, values: { v: 1 } });
 	});
 
+	test("keeps a Mask in use, painting and all, like a Clear does", () => {
+		const mask = {
+			...fx(MASK_EFFECT_ID),
+			values: { paint: "data:image/png;base64,AAAA" },
+		};
+		const preset = [fx("x"), { ...fx(MASK_EFFECT_ID), enabled: false }];
+		const out = keepLockedInPreset(preset, [fx("a"), mask]);
+		expect(out.map((e) => e.defId)).toEqual(["x", MASK_EFFECT_ID]);
+		expect(out[1]).toMatchObject({ enabled: true, values: mask.values });
+	});
+
 	test("hands the preset back untouched with nothing locked", () => {
 		const preset = [fx("x")];
 		expect(keepLockedInPreset(preset, [fx("a")])).toBe(preset);

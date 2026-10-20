@@ -94,7 +94,7 @@ Outside CI a run reuses whatever already serves its port, so when my dev server 
 - A backup (`.openmosh-backup`, `lib/backup/backup.ts`) is the same stored zip holding every
   IndexedDB record and the `openmosh*` localStorage keys, with its own `BACKUP_VERSION`.
   Loading one merges: records keep their ids and replace same-keyed ones; proxies stay out.
-- Locked effects survive a preset Fill or update, the same as a Clear or a mosh.
+- Locked effects and Masks in use survive a preset Fill or update, the same as a Clear or a mosh.
 - Chain-clip behavior (fill/mosh/clear/static/auto) lives once in `lib/editor/chain-clip.ts`;
   `media/chain.ts` and `fx-lanes.ts` are thin wrappers. New chain-editing paths go through
   `chain-fanout.ts`, or a multi-selection edits only the primary clip. An auto clip rolls a

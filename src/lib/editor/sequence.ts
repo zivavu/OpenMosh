@@ -109,16 +109,16 @@ export function keepLocked(
 	return [...out, ...byDef.values()];
 }
 
-/** A preset's chain, in its own order, with `from`'s locked effects back where they sat. */
+/** A preset's chain, in its own order, with `from`'s held effects back where they sat. */
 export function keepLockedInPreset(
 	fresh: EffectInstance[],
 	from: EffectInstance[],
 ): EffectInstance[] {
-	if (!from.some((e) => e.locked)) return fresh;
-	const lockedDefs = new Set(from.filter((e) => e.locked).map((e) => e.defId));
-	const out = fresh.filter((e) => !lockedDefs.has(e.defId));
+	if (!from.some(isHeld)) return fresh;
+	const heldDefs = new Set(from.filter(isHeld).map((e) => e.defId));
+	const out = fresh.filter((e) => !heldDefs.has(e.defId));
 	from.forEach((e, i) => {
-		if (e.locked)
+		if (isHeld(e))
 			out.splice(Math.min(i, out.length), 0, cloneEffectInstance(e));
 	});
 	return out;
