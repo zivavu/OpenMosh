@@ -2812,7 +2812,10 @@
 					setFxLanes(fx);
 				}
 			}
+			// Shortening clamps the span; its undo puts the span back as it was set.
+			const spanBefore = { start: mixer.spanStart, end: mixer.spanEnd };
 			mixer.setDuration(next);
+			mixSpanHistory.pushMoved(spanBefore);
 		});
 	}
 
@@ -3303,7 +3306,14 @@
 		() => burstOwner === "fx" && panelBurst.open,
 	);
 	// Built per press: the text and media stacks are declared further down.
+	// Length before the span: one edit can move both, and a length set last would
+	// stretch the span it just restored.
 	const undoSources = (): UndoSource[] => [
+		snapshotUndoSource(
+			lengthHistory,
+			() => mixer.duration,
+			(length) => mixer.setDuration(length),
+		),
 		isSequenceMode ? mixSpanHistory.undoSource : spanHistory.undoSource,
 		snapshotUndoSource(
 			textHistory,
@@ -3321,11 +3331,6 @@
 			poolHistory,
 			poolNow,
 			(entries) => void setPool(entries),
-		),
-		snapshotUndoSource(
-			lengthHistory,
-			() => mixer.duration,
-			(length) => mixer.setDuration(length),
 		),
 		// The retimed clips come back from their own stacks, so only the number is set.
 		snapshotUndoSource(
