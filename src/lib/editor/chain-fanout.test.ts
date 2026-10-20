@@ -106,6 +106,34 @@ describe("fanOutChainEdit", () => {
 		expect(out.map((e) => e.values.size)).toEqual([2, 7]);
 	});
 
+	test("a preset load keeps the target's locked and unused effects as they were", () => {
+		const before = [
+			fx("lock", true, { v: 0.7 }),
+			fx("spare", false, { v: 0.11 }),
+		];
+		before[0].locked = true;
+		const target = [
+			fx("lock", true, { v: 0.2 }),
+			fx("spare", false, { v: 0.9 }),
+		];
+		target[0].locked = true;
+		// Fresh copies, as loading a preset makes them.
+		const after = [
+			fx("glow", true),
+			{ ...before[0], instanceId: "new1" },
+			{
+				...before[1],
+				instanceId: "new2",
+			},
+		];
+		const out = fanOutChainEdit(before, after, target);
+		expect(out.map((e) => `${e.defId} ${e.values.v ?? "-"}`)).toEqual([
+			"glow -",
+			"lock 0.2",
+			"spare 0.9",
+		]);
+	});
+
 	test("keeps effects the edited chain never had", () => {
 		const before = [fx("pixelate", true)];
 		const after = edit(before, (c) => (c[0].values.size = 5));
