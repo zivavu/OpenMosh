@@ -16,6 +16,9 @@ export async function createMediaExportLayers(
 	/** Every source a lane's clips can call for, keyed by lane id. */
 	laneSources: Map<string, string[]>,
 	renderer: GlRenderer,
+	/** The output's longer side: a bounce holds a chunk of frames at once, and frames
+	 * bigger than the output only cost memory. */
+	reverseMaxSide = Infinity,
 ): Promise<MediaExportLayers> {
 	const byId = new Map(sources.map((s) => [s.id, s]));
 
@@ -33,7 +36,9 @@ export async function createMediaExportLayers(
 				const src = byId.get(sourceId);
 				if (!src) return;
 				if (src.kind === "video") {
-					const sampler = await SlideVideoSampler.create(src.file);
+					const sampler = await SlideVideoSampler.create(src.file, {
+						reverseMaxSide,
+					});
 					if (sampler) samplers.set(samplerKey(laneId, src.id), sampler);
 					return;
 				}
@@ -54,7 +59,7 @@ export async function createMediaExportLayers(
 	const samplerFor = async (key: string, file: File, sourceId: string) => {
 		const id = samplerKey(key, sourceId);
 		if (!samplers.has(id)) {
-			const sampler = await SlideVideoSampler.create(file);
+			const sampler = await SlideVideoSampler.create(file, { reverseMaxSide });
 			if (sampler) samplers.set(id, sampler);
 		}
 		return samplers.get(id);
