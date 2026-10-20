@@ -39,6 +39,12 @@ export class MoshHistory<T> {
 		stack.index = stack.entries.length - 1;
 	}
 
+	/** Overwrite the entry the stack is on, for edits made to that mosh by hand. */
+	replace(id: string, snapshot: T): void {
+		const stack = this.#stacks.get(id);
+		if (stack) stack.entries[stack.index] = snapshot;
+	}
+
 	undo(id: string): T | null {
 		const stack = this.#stacks.get(id);
 		if (!stack || stack.index <= 0) return null;

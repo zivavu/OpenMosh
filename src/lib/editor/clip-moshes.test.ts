@@ -23,4 +23,19 @@ describe("ClipMoshes", () => {
 		moshes.back("c");
 		expect(steps).toBe(4);
 	});
+
+	it("keeps a tweak made to a mosh when the arrows step away and back", () => {
+		let state = { seed: 0, tweak: "" };
+		const moshes = new ClipMoshes({
+			clips: () => [{ id: "c" }],
+			snapshot: () => ({ effects: [], seed: state.seed, label: state.tweak }),
+			roll: () => (state = { seed: state.seed + 1, tweak: "" }),
+			restore: (_, snap) => (state = { seed: snap.seed!, tweak: snap.label }),
+		});
+		moshes.roll(["c"]);
+		state.tweak = "mine";
+		moshes.back("c");
+		moshes.forward("c");
+		expect(state).toEqual({ seed: 1, tweak: "mine" });
+	});
 });
