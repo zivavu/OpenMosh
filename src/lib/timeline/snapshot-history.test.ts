@@ -80,6 +80,22 @@ describe("createSnapshotHistory", () => {
 	});
 });
 
+describe("amend", () => {
+	it("folds a change into every stored state, so undo and redo keep it", () => {
+		const history = createSnapshotHistory<string[]>();
+		let pool = ["a", "b"];
+		history.push(pool);
+		pool = ["a"];
+		// Added after the removal, outside the stack.
+		pool = [...pool, "d"];
+		history.amend((s) => (s.includes("d") ? s : [...s, "d"]));
+		expect((pool = history.undo(pool)!)).toEqual(["a", "b", "d"]);
+		pool = [...pool, "e"];
+		history.amend((s) => (s.includes("e") ? s : [...s, "e"]));
+		expect(history.redo(pool)).toEqual(["a", "d", "e"]);
+	});
+});
+
 describe("undoing across stacks", () => {
 	it("takes back the newest edit, whichever stack holds it", () => {
 		const a = createSnapshotHistory<string>();

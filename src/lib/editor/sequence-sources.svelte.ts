@@ -122,6 +122,7 @@ export class SequenceSourceRegistry {
 	#onReady: (() => void) | undefined;
 	#onPersist: ((write: Promise<void>) => void) | undefined;
 	#onUnreadable: ((sources: SequenceSource[]) => void) | undefined;
+	#onAdded: ((sources: SequenceSource[]) => void) | undefined;
 	/** Generated images follow the output size; a re-render swaps the URL and drops the decode. */
 	#sizeSync = new GeneratedSizeSync((id, url) => {
 		const live = this.get(id);
@@ -138,15 +139,18 @@ export class SequenceSourceRegistry {
 
 	/** Notified when a lazy decode lands, so a paused preview can redraw. `onPersist`
 	 * follows each write of added media to storage. `onUnreadable` hears of images
-	 * the browser couldn't decode, already out of the pool, once per add. */
+	 * the browser couldn't decode, already out of the pool, once per add. `onAdded`
+	 * hears of every source an add appended. */
 	constructor(
 		onReady?: () => void,
 		onPersist?: (write: Promise<void>) => void,
 		onUnreadable?: (sources: SequenceSource[]) => void,
+		onAdded?: (sources: SequenceSource[]) => void,
 	) {
 		this.#onReady = onReady;
 		this.#onPersist = onPersist;
 		this.#onUnreadable = onUnreadable;
+		this.#onAdded = onAdded;
 	}
 
 	get(id: string | null | undefined): SequenceSource | undefined {
@@ -284,6 +288,7 @@ export class SequenceSourceRegistry {
 			this.#endLoad();
 		}
 
+		if (ok.length > 0) this.#onAdded?.(ok);
 		if (persist && ok.length > 0) {
 			// No prune here: these blobs belong to no song's pool yet, and pruning now
 			// would evict the batch just written.
