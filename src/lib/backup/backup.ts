@@ -20,6 +20,7 @@ import {
 	type StoredSession,
 	type StoredTimeline,
 } from "../editor/sequence-media-store";
+import { isNewerEntry } from "../editor/seq-entry";
 import { records } from "../records";
 import { readRaw, writeRaw } from "../storage";
 import {
@@ -239,7 +240,15 @@ export async function restoreBackup(file: Blob): Promise<RestoreSummary> {
 	if (!isPlainObject(raw) || raw.format !== BACKUP_FORMAT) {
 		throw new Error("That isn't an OpenMosh backup");
 	}
-	if (typeof raw.version !== "number" || raw.version > BACKUP_VERSION) {
+	// A timeline saved by a newer OpenMosh counts too: this one can't open it, and
+	// the restore would put it in place of the copy it can.
+	if (
+		typeof raw.version !== "number" ||
+		raw.version > BACKUP_VERSION ||
+		keyed<StoredTimeline>(raw.timelines, "key").some((t) =>
+			isNewerEntry(t.state),
+		)
+	) {
 		throw new Error(
 			"That backup is from a newer OpenMosh. Reload the page and try again",
 		);
