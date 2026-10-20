@@ -84,6 +84,11 @@
 		error = null;
 		try {
 			const next = await openCamera(id);
+			// Closed while the camera was starting: nothing else would turn it off.
+			if (destroyed) {
+				stopStream(next);
+				return;
+			}
 			stopStream(stream);
 			stream = next;
 			deviceId = next.getVideoTracks()[0]?.getSettings().deviceId ?? id;
@@ -104,7 +109,9 @@
 		void open(null);
 	});
 
+	let destroyed = false;
 	onDestroy(() => {
+		destroyed = true;
 		stopCapture();
 		if (!handedOff) stopStream(stream);
 	});
