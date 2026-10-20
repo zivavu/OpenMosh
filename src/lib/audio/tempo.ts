@@ -176,6 +176,9 @@ export function estimateTempo(
 		}
 	}
 
+	// Silence, or sound with nothing that repeats: any number here would be made up.
+	if (!(bestScore > 0)) throw new Error("No beat to measure");
+
 	// Refine on the whole song: a tempo even 1% off drifts out of phase with the beats.
 	let fit = gridFit(env, (fps * 60) / best);
 	let refined = best;
