@@ -1043,7 +1043,11 @@
 		if (seqStoreKey !== key) return;
 		loadedTimelineKey = key;
 		if (savedSeq === null) {
-			if (clearOnMissing) restoreFxLanes([]);
+			// The last song's text stays saved under its own key.
+			if (clearOnMissing) {
+				restoreFxLanes([]);
+				restoreTextTimeline(null);
+			}
 			return;
 		}
 		// BPM comes back in both modes; beat-synced effects read it in single mode too.
