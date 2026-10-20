@@ -836,7 +836,8 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 	await new Promise<void>((r) => setTimeout(r, 0));
 
 	const blob = await buffer.toBlob("video/webm");
-	// Cancel stays honoured while the file is written: nothing downloads.
+	// Cancel stays honoured while the file is written: nothing downloads, nothing stays.
+	if (signal?.aborted) buffer.discard();
 	checkAbort(signal);
 	return blob;
 }
