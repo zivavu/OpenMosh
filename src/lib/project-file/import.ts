@@ -1,6 +1,11 @@
 /** Read a `.openmosh` file back into storage as a new project or edit. */
 
-import { addTrack, getAllTracks, trackFileName } from "../audio/track-library";
+import {
+	addTrack,
+	getAllTracks,
+	renameTrack,
+	trackFileName,
+} from "../audio/track-library";
 import { generateId } from "../effects/types";
 import {
 	projectKeyForSession,
@@ -54,12 +59,18 @@ async function listedProjects(
 	}));
 }
 
-/** A name that isn't already in the mode's list; a taken one gets "(copy)". */
+/** A name no other project in the mode's list has; a taken one gets "(copy)".
+ * `own` is the project being named, which is listed already. */
 async function availableName(
 	name: string,
 	mode: ProjectFileMode,
+	own: string,
 ): Promise<string> {
-	const taken = new Set((await listedProjects(mode)).map((p) => p.name));
+	const taken = new Set(
+		(await listedProjects(mode))
+			.filter((p) => p.key !== own)
+			.map((p) => p.name),
+	);
 	if (!taken.has(name)) return name;
 	let candidate = `${name} (copy)`;
 	for (let n = 2; taken.has(candidate); n++) candidate = `${name} (copy ${n})`;
@@ -259,6 +270,10 @@ export async function storeProjectFile(
 				type: item.type || "audio/mpeg",
 			});
 			const track = await addTrack(songFile);
+			// A song renamed in the library comes back under that name, unless this
+			// browser has already named it.
+			if (track.name === item.fileName && item.name !== item.fileName)
+				await renameTrack(track.id, item.name);
 			storedTracks.add(track.id);
 			if (track.id !== item.trackId) trackIds.set(item.trackId, track.id);
 		}
@@ -316,6 +331,9 @@ export async function storeProjectFile(
 	}
 	const name =
 		manifest.name || readProjectNames()[projectKey] || "Untitled project";
-	setProjectName(projectKey, await availableName(name, manifest.mode));
+	setProjectName(
+		projectKey,
+		await availableName(name, manifest.mode, projectKey),
+	);
 	return { mode: manifest.mode, key: projectKey };
 }

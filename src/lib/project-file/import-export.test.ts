@@ -398,6 +398,31 @@ describe("single and slideshow edits", () => {
 		expect(readProjectNames()[landed.key]).toBe("My single");
 	});
 
+	test("an unnamed edit comes back under its own name, not as a copy", async () => {
+		const { key } = await seedSingle();
+		localData.clear();
+		const built = await buildProjectFile(key, { mode: "single" });
+		await store.clearAllSequenceStores();
+		await tracks.clearTracks();
+		localData.clear();
+
+		const landed = await storeProjectFile(await readProjectFile(built.blob));
+		expect(readProjectNames()[landed.key]).not.toContain("(copy)");
+	});
+
+	test("a song renamed in the library comes back under that name", async () => {
+		const { key, trackId } = await seedSingle();
+		await tracks.renameTrack(trackId, "Mix v2");
+		const built = await buildProjectFile(key, { mode: "single" });
+		await store.clearAllSequenceStores();
+		await tracks.clearTracks();
+		localData.clear();
+
+		await storeProjectFile(await readProjectFile(built.blob));
+		const [song] = await tracks.getAllTracks();
+		expect(song.name).toBe("Mix v2");
+	});
+
 	test("a slideshow comes back with its slides in order and its song", async () => {
 		const key = "slideshow:p:test";
 		const a = await seedMedia("one.png", 100, 1000);
