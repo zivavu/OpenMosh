@@ -268,6 +268,8 @@
 			});
 			proxyJobs.set(id, job);
 			proxy = await job.promise;
+			// Stopped, or replaced by a newer job: that one reports instead.
+			if (proxyJobs.get(id) !== job) return;
 			proxyJobs.delete(id);
 		}
 		// A proxy that won't open would freeze the preview, so it gets the same
@@ -295,6 +297,7 @@
 			live.proxyWidth = opened?.width;
 			live.proxyHeight = opened?.height;
 			live.proxyPending = false;
+			live.proxyFailed = false;
 			live.proxyProgress = undefined;
 			// A sampler on the original costs 4x the per-frame work; drop it for the proxy.
 			videoSamplers.get(id)?.dispose();
