@@ -2082,6 +2082,12 @@
 	/** Empty the pool; clips that drew from it lose their media, deleted from storage too. */
 	function clearSequenceSources() {
 		showClearSourcesConfirm = false;
+		if (sequenceSources.length === 0) return;
+		// Undoable like a single removal: the stack keeps the files.
+		asOneEdit(() => {
+			poolHistory.push(poolNow());
+			pushMediaHistory();
+		});
 		for (const src of sequenceSources) {
 			setMediaTimeline(detachMediaSource(mediaTimeline, src.id));
 		}
