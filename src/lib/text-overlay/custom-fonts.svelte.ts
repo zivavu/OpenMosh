@@ -168,12 +168,21 @@ function pickFace(faces: ParsedFace[]): ParsedFace | null {
 
 /** Title-case a file stem so `press-start-2p.woff2` reads as a face name. */
 function nameFromFileUrl(url: string): string {
-	const stem = decodeURIComponent(url.split(/[?#]/)[0].split("/").pop() ?? "")
+	const stem = decodedName(url.split(/[?#]/)[0].split("/").pop() ?? "")
 		.replace(FONT_FILE_RE, "")
 		.replace(/[_-]+/g, " ")
 		.trim();
 	if (!stem) return "Custom Font";
 	return stem.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/** A file name like `Brand 100%.otf` isn't URL-encoded, and decoding it would throw. */
+function decodedName(name: string): string {
+	try {
+		return decodeURIComponent(name);
+	} catch {
+		return name;
+	}
 }
 
 async function fetchBytes(url: string): Promise<ArrayBuffer> {
