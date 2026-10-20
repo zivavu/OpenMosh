@@ -365,7 +365,8 @@ export class SequenceSourceRegistry {
 		await this.restore(ids);
 	}
 
-	/** Pulls stored media back into the pool; only ids saved clips reference are restored. */
+	/** Pulls stored media back into the pool; only ids saved clips reference are restored.
+	 * Throws when storage can't be read, so the caller doesn't save the pool short. */
 	async restore(wantedIds: Iterable<string>): Promise<void> {
 		const wanted = new Set(wantedIds);
 		for (const s of this.sources) wanted.delete(s.id);
@@ -376,8 +377,6 @@ export class SequenceSourceRegistry {
 		this.#beginLoad(wanted.size);
 		try {
 			stored = await getAllSequenceMedia();
-		} catch {
-			return;
 		} finally {
 			this.#handOffLoad(wanted.size);
 		}
