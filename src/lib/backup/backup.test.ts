@@ -146,6 +146,21 @@ describe("a backup round trip", () => {
 			},
 		]);
 		await expect(restoreBackup(newer)).rejects.toThrow("newer OpenMosh");
+		const newerTimeline = await writeZip([
+			{
+				name: "backup.json",
+				blob: new Blob([
+					JSON.stringify({
+						format: "openmosh-backup",
+						version: 1,
+						timelines: [{ key: "seq:a", state: { v: 99 }, updatedAt: 1 }],
+					}),
+				]),
+			},
+		]);
+		await expect(restoreBackup(newerTimeline)).rejects.toThrow(
+			"newer OpenMosh",
+		);
 	});
 });
 
