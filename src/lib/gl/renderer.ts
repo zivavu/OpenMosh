@@ -2097,7 +2097,10 @@ export class GlRenderer {
 			return out;
 		}
 		const speed = (eff.values[rate] as number) ** (def?.rateExponent ?? 1);
-		const prev = this.phaseMap.get(eff.instanceId) ?? 0;
+		const prev =
+			speed === 0 && def?.restsAtZeroRate
+				? 0
+				: (this.phaseMap.get(eff.instanceId) ?? 0);
 		const phase = prev + dt * speed;
 		this.phaseMap.set(eff.instanceId, phase);
 		out.time = phase;
