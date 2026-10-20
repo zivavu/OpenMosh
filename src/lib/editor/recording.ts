@@ -334,6 +334,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 				layerSources,
 				laneSources,
 				renderer,
+				Math.max(canvas.width, canvas.height),
 			);
 		}
 		const modelIds = new Set(
