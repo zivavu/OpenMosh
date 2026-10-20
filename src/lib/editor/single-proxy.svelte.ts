@@ -66,7 +66,11 @@ export class SingleProxy {
 		return this.#proxyFor === file ? proxy : null;
 	}
 
+	/** Bumped by every reset, so a build the user stopped can't report back. */
+	#builds = 0;
+
 	#reset() {
+		this.#builds++;
 		this.#job?.cancel();
 		this.#job = null;
 		this.#jobFor = null;
@@ -127,7 +131,8 @@ export class SingleProxy {
 	}
 
 	async #build(f: File) {
-		const current = () => f === this.#opts.file();
+		const build = this.#builds;
+		const current = () => f === this.#opts.file() && build === this.#builds;
 		const stored = await getSequenceMediaProxy(f);
 		let proxy = stored;
 		if (!stored) {
@@ -155,6 +160,7 @@ export class SingleProxy {
 				openedSize = { width: opened.width, height: opened.height };
 			}
 			opened?.queue.dispose();
+			if (!current()) return;
 			if (!opened) {
 				proxy = null;
 				// A stored one that no longer opens has to go, or the retry finds it.
