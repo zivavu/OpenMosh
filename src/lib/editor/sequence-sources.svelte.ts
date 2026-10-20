@@ -501,33 +501,45 @@ export class SequenceSourceRegistry {
 
 	/** Fills in image thumbnails once chips are on screen; also the validation pass. */
 	async #fillThumbnails(list: SequenceSource[]) {
-		const unreadable: SequenceSource[] = [];
+		const failed: SequenceSource[] = [];
+		/** False when the decode failed and the source is still in the pool. */
+		const fill = async (src: SequenceSource): Promise<boolean> => {
+			const thumb = await makeThumbUrl(src.file);
+			// Removed while we were decoding, or the registry is gone.
+			const live = this.#disposed ? undefined : this.get(src.id);
+			if (!live) {
+				if (thumb) URL.revokeObjectURL(thumb.url);
+				return true;
+			}
+			if (!thumb) return false;
+			// `sources` is $state, so assigning through the proxy updates the chip.
+			live.thumbUrl = thumb.url;
+			live.thumbPending = false;
+			live.width = thumb.width;
+			live.height = thumb.height;
+			return true;
+		};
 		let next = 0;
 		const worker = async () => {
 			while (next < list.length && !this.#disposed) {
 				const src = list[next++];
-				const thumb = await makeThumbUrl(src.file);
-				// Removed while we were decoding, or the registry is gone.
-				const live = this.#disposed ? undefined : this.get(src.id);
-				if (!live) {
-					if (thumb) URL.revokeObjectURL(thumb.url);
-					continue;
-				}
-				if (!thumb) {
-					unreadable.push(live);
-					this.remove(src.id);
-					continue;
-				}
-				// `sources` is $state, so assigning through the proxy updates the chip.
-				live.thumbUrl = thumb.url;
-				live.thumbPending = false;
-				live.width = thumb.width;
-				live.height = thumb.height;
+				if (!(await fill(src))) failed.push(src);
 			}
 		};
 		await Promise.all(
 			Array.from({ length: Math.min(THUMB_CONCURRENCY, list.length) }, worker),
 		);
+		// Big photos decoded side by side can fail on memory alone, so each failure gets
+		// one more try on its own before the image counts as unreadable.
+		const unreadable: SequenceSource[] = [];
+		for (const src of failed) {
+			if (this.#disposed) return;
+			if (await fill(src)) continue;
+			const live = this.get(src.id);
+			if (!live) continue;
+			unreadable.push(live);
+			this.remove(src.id);
+		}
 		if (unreadable.length > 0 && !this.#disposed) {
 			this.#onUnreadable?.(unreadable);
 		}
