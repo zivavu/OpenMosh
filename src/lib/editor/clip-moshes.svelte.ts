@@ -1,3 +1,4 @@
+import { withoutHiddenEffects } from "../effects";
 import { MoshHistory, type MoshSnapshot } from "./mosh-history";
 
 interface ClipMoshesOptions<Clip extends { id: string }> {
@@ -37,19 +38,34 @@ export class ClipMoshes<Clip extends { id: string }> {
 		}
 	};
 
+	/** Hand edits made on a mosh belong to it, so walking away and back keeps them. */
+	#keepTweaks(clipId: string) {
+		const [clip] = this.#opts.clips(new Set([clipId]));
+		if (clip) this.#history.replace(clipId, this.#snapshot(clip));
+	}
+
+	/** An effect hidden since the mosh was taken stays hidden. */
+	#restore(clipId: string, snap: MoshSnapshot) {
+		this.#opts.beforeChange?.();
+		this.#opts.restore(clipId, {
+			...snap,
+			effects: withoutHiddenEffects(snap.effects),
+		});
+	}
+
 	/** → : the next mosh in the clip's history, or a new roll at its top. */
 	forward(clipId: string) {
+		this.#keepTweaks(clipId);
 		const snap = this.#history.redo(clipId);
 		if (!snap) return this.roll([clipId]);
-		this.#opts.beforeChange?.();
-		this.#opts.restore(clipId, snap);
+		this.#restore(clipId, snap);
 	}
 
 	back(clipId: string) {
+		this.#keepTweaks(clipId);
 		const snap = this.#history.undo(clipId);
 		if (!snap) return;
-		this.#opts.beforeChange?.();
-		this.#opts.restore(clipId, snap);
+		this.#restore(clipId, snap);
 	}
 
 	/** Splits, deletes and undo retire clip ids; drop their stacks. */
