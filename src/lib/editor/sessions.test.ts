@@ -188,3 +188,51 @@ describe("autosaving an edit", () => {
 		});
 	});
 });
+
+/** What another tab announces after it saves or deletes a record. */
+async function otherTabNotice(store: string, key: string, at: number | null) {
+	const channel = new BroadcastChannel("openmosh-saves");
+	channel.postMessage({ id: `${store}\n${key}`, updatedAt: at });
+	channel.close();
+	await new Promise((r) => setTimeout(r, 10));
+}
+
+describe("another tab's save", () => {
+	test("isn't overwritten by an older tab's autosave", async () => {
+		const key = sessions.newSessionKey("single");
+		await sessions.saveSession(key, "single", [image()], { effects: ["a"] });
+		const saved = await store.getSession(key);
+		// The other tab writes straight to storage, past this tab's view of the record.
+		const theirs = Date.now() + 1000;
+		await store.putBackupRecords("sessions", [
+			{ ...saved, state: { effects: ["theirs"] }, updatedAt: theirs },
+		]);
+		await otherTabNotice("sessions", key, theirs);
+		await expect(
+			sessions.saveSession(key, "single", [image()], { effects: ["mine"] }),
+		).rejects.toBeInstanceOf(store.StaleWriteError);
+		expect((await store.getSession(key))?.state).toEqual({
+			effects: ["theirs"],
+		});
+	});
+
+	test("deleting an edit there keeps it deleted here", async () => {
+		const key = sessions.newSessionKey("single");
+		await sessions.saveSession(key, "single", [image()], { effects: ["a"] });
+		const db = await new Promise<IDBDatabase>((resolve) => {
+			const req = indexedDB.open("openmosh-sequence-media");
+			req.onsuccess = () => resolve(req.result);
+		});
+		await new Promise<void>((resolve) => {
+			const tx = db.transaction("sessions", "readwrite");
+			tx.objectStore("sessions").delete(key);
+			tx.oncomplete = () => resolve();
+		});
+		db.close();
+		await otherTabNotice("sessions", key, null);
+		await expect(
+			sessions.saveSession(key, "single", [image()], { effects: ["b"] }),
+		).rejects.toBeInstanceOf(store.StaleWriteError);
+		expect(await store.getSession(key)).toBeNull();
+	});
+});

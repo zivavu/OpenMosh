@@ -15,6 +15,7 @@ import {
 	getAllSessions,
 	getSequenceMediaByIds,
 	getSession,
+	hasSession,
 	putSequenceMedia,
 	putSession,
 	stableSourceId,
@@ -117,7 +118,7 @@ export async function saveSession(
 		return true;
 	}
 
-	const isNew = !(await getSession(key).catch(() => undefined));
+	const isNew = !(await hasSession(key).catch(() => false));
 	// A song-keyed session is named after the song, matching the sequence list.
 	let label = defaultLabel(mode, files);
 	if (trackId) {

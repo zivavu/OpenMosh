@@ -2,7 +2,11 @@
  * of KB a song), which overflowed localStorage's 5 MB cap and failed silently. */
 
 import { readJson } from "../storage";
-import { getTimeline, putTimeline } from "./sequence-media-store";
+import {
+	getTimeline,
+	putTimeline,
+	StaleWriteError,
+} from "./sequence-media-store";
 
 /** Where every song's timeline used to live, all in one value. */
 const LEGACY_KEY = "openmosh-sequence";
@@ -39,7 +43,8 @@ export async function loadTimeline<T>(key: string): Promise<T | null> {
 	return legacy as T;
 }
 
-/** Returns false when the write couldn't be made, so callers can say so. */
+/** Returns false when the write couldn't be made, so callers can say so. Throws
+ * StaleWriteError when another tab saved this timeline since. */
 export async function saveTimeline(
 	key: string,
 	state: unknown,
@@ -47,7 +52,8 @@ export async function saveTimeline(
 	try {
 		await putTimeline(key, state);
 		return true;
-	} catch {
+	} catch (err) {
+		if (err instanceof StaleWriteError) throw err;
 		return false;
 	}
 }

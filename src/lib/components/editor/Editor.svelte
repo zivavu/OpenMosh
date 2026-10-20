@@ -258,6 +258,7 @@
 		pruneSequenceMediaThrottled,
 		isOwnSessionKey,
 		saveMediaPool,
+		StaleWriteError,
 		stableSourceId,
 	} from "../../editor/sequence-media-store";
 	import {
@@ -1323,16 +1324,30 @@
 	 * are, never written over. */
 	const heldTimelineKeys = new Set<string>();
 
-	function holdTimeline(key: string, reason: "newer" | "unreadable") {
+	function holdTimeline(
+		key: string,
+		reason: "newer" | "unreadable" | "elsewhere",
+	) {
 		if (heldTimelineKeys.has(key)) return;
 		heldTimelineKeys.add(key);
 		showToast(
 			reason === "newer"
 				? "A newer version of OpenMosh saved this. Reload the page to open it; changes here won't be saved."
-				: "Couldn't read this project's saved timeline. Reload the page to try again; changes here won't be saved.",
+				: reason === "elsewhere"
+					? "This project changed in another tab. Reload the page to see it; changes here won't be saved."
+					: "Couldn't read this project's saved timeline. Reload the page to try again; changes here won't be saved.",
 			"error",
 			0,
 		);
+	}
+
+	/** A save another tab got to first holds the project rather than writing over it. */
+	function holdIfStale(key: string, write: Promise<boolean>): Promise<boolean> {
+		return write.catch((err) => {
+			if (!(err instanceof StaleWriteError)) throw err;
+			holdTimeline(key, "elsewhere");
+			return false;
+		});
 	}
 
 	// The video's own timeline, whenever it is the master: when it opens, and again once
@@ -1411,7 +1426,7 @@
 		seqSaveTimer = setTimeout(() => {
 			seqSavePending = false;
 			void saves
-				.track("timeline", saveTimeline(key, entry))
+				.track("timeline", holdIfStale(key, saveTimeline(key, entry)))
 				.then(reportSeqSave);
 		}, 300);
 	});
@@ -1446,6 +1461,8 @@
 	/** Only the transition into failure is announced, or it would toast every tick. */
 	let seqSaveFailed = false;
 	function reportSeqSave(ok: boolean) {
+		// A held project has said so already.
+		if (!ok && seqStoreKey && heldTimelineKeys.has(seqStoreKey)) return;
 		if (ok === !seqSaveFailed) return;
 		seqSaveFailed = !ok;
 		if (ok) return;
@@ -1472,7 +1489,9 @@
 			saves.drop("timeline");
 			return;
 		}
-		void saves.track("timeline", saveTimeline(key, entry)).then(reportSeqSave);
+		void saves
+			.track("timeline", holdIfStale(key, saveTimeline(key, entry)))
+			.then(reportSeqSave);
 	}
 
 	/** What's on screen, for a project file that doesn't wait on autosaves. */
@@ -1932,7 +1951,10 @@
 		void saves
 			.track(
 				"pool",
-				saveMediaPool(key, ids).then(() => true),
+				holdIfStale(
+					seqKeyPrefix + key,
+					saveMediaPool(key, ids).then(() => true),
+				),
 			)
 			.then((ok) => {
 				if (ok) void pruneSequenceMediaThrottled().catch(() => {});
@@ -3637,6 +3659,10 @@
 			state,
 			currentTrackId,
 		).catch((e) => {
+			if (e instanceof StaleWriteError && seqStoreKey) {
+				holdTimeline(seqStoreKey, "elsewhere");
+				return false;
+			}
 			// Logged, not swallowed: a silent failure here is invisible.
 			if (import.meta.env.DEV) console.error("Session save failed:", e);
 			return false;
