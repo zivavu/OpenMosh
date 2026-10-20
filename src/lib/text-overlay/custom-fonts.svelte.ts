@@ -257,7 +257,9 @@ async function saveFont(
 	sourceUrl: string,
 	data: ArrayBuffer,
 ): Promise<CustomFont> {
-	const family = `'${name.replace(/'/g, "")}'`;
+	// Set in style attributes as written: anything that could end the value or the
+	// declaration goes, so a name from a project file can't add CSS of its own.
+	const family = `'${name.replace(/['"\\;{}<>\p{Cc}]/gu, "").trim() || "Custom Font"}'`;
 	if (FONT_OPTIONS.some((f) => f.family === family)) {
 		throw new Error(`${name} is already one of the built-in fonts.`);
 	}
