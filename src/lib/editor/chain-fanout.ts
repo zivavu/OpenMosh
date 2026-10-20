@@ -8,7 +8,7 @@ import {
 } from "../effects";
 import { hasVolumeLinks, setAllLinkBands } from "../effects/link-bands";
 import type { ChainClip } from "./chain-clip";
-import { handBuiltLabel, isHandBuiltLabel } from "./sequence";
+import { handBuiltLabel, isHandBuiltLabel, isHeld } from "./sequence";
 
 export type ChainFields = Pick<
 	ChainClip,
@@ -90,7 +90,14 @@ export function fanOutChainEdit(
 	const edited = after.map((a) => {
 		const was = beforeById.get(a.instanceId);
 		const own = was && targetBySlot.get(was.key);
-		return own ? applyChanges(was.effect, a, own) : cloneEffectInstance(a);
+		if (own) return applyChanges(was.effect, a, own);
+		// A fresh copy, as a preset load makes: the target's own held effect stays as
+		// it is, and an unused one keeps its values.
+		const mine = target.find((e) => e.defId === a.defId);
+		if (mine && isHeld(mine)) return cloneEffectInstance(mine);
+		if (mine && !a.enabled)
+			return { ...cloneEffectInstance(mine), enabled: false };
+		return cloneEffectInstance(a);
 	});
 	const known = new Set(beforeKeys);
 	const extra = target.filter((_, i) => !known.has(targetKeys[i]));
