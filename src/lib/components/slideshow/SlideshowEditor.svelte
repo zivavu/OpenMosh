@@ -567,10 +567,16 @@
 	}
 
 	// A reload, or Back out of the editor, lands inside the debounce as often as not.
+	// Hidden counts too: a phone can discard a background tab without a pagehide.
 	onMount(() => {
+		const onVisibility = () => {
+			if (document.visibilityState === "hidden") flushSlideshowSave();
+		};
 		window.addEventListener("pagehide", flushSlideshowSave);
+		document.addEventListener("visibilitychange", onVisibility);
 		return () => {
 			window.removeEventListener("pagehide", flushSlideshowSave);
+			document.removeEventListener("visibilitychange", onVisibility);
 			flushSlideshowSave();
 		};
 	});
