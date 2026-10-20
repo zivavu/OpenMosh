@@ -3072,8 +3072,15 @@
 			return audioBank.buffer(id);
 		},
 		bpm: () => sequenceBpm,
-		onDetected: setSequenceBpm,
+		onDetected: setSequenceBpmDetected,
 	});
+
+	/** A detection over a BPM that was already set is undoable, like typing one in; the
+	 * first one a fresh song gets isn't an edit. */
+	function setSequenceBpmDetected(bpm: number) {
+		if (sequenceBpm > 0 && bpm !== sequenceBpm) setSequenceBpmByHand(bpm);
+		else setSequenceBpm(bpm);
+	}
 
 	/** Correcting the BPM retimes every clip whose spacing was set in beats. */
 	function setSequenceBpm(bpm: number) {
