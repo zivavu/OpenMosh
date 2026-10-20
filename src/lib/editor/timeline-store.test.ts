@@ -4,8 +4,14 @@ import {
 	installFakeLocalStorage,
 	type FakeLocalStorage,
 } from "../testing/fake-storage";
-import { clearAllSequenceStores, putTimeline } from "./sequence-media-store";
-import { loadTimeline } from "./timeline-store";
+import {
+	clearAllSequenceStores,
+	getTimeline,
+	putBackupRecords,
+	putTimeline,
+	StaleWriteError,
+} from "./sequence-media-store";
+import { loadTimeline, saveTimeline } from "./timeline-store";
 
 let storage: FakeLocalStorage;
 const realTransaction = IDBDatabase.prototype.transaction;
@@ -55,5 +61,32 @@ describe("loadTimeline", () => {
 		await expect(loadTimeline("seq:a")).rejects.toThrow("Connection lost");
 		IDBDatabase.prototype.transaction = realTransaction;
 		expect(await loadTimeline("seq:a")).toEqual({ v: 4 });
+	});
+});
+
+describe("saveTimeline", () => {
+	test("refuses to write over a timeline another tab saved since", async () => {
+		await putTimeline("seq:a", { v: 4 });
+		expect(await loadTimeline("seq:a")).toEqual({ v: 4 });
+		const theirs = Date.now() + 1000;
+		await putBackupRecords("timelines", [
+			{ key: "seq:a", state: { v: 5 }, updatedAt: theirs },
+		]);
+		// What the other tab announces after its save.
+		const channel = new BroadcastChannel("openmosh-saves");
+		channel.postMessage({ id: "timelines\nseq:a", updatedAt: theirs });
+		channel.close();
+		await new Promise((r) => setTimeout(r, 10));
+		await expect(saveTimeline("seq:a", { v: 6 })).rejects.toBeInstanceOf(
+			StaleWriteError,
+		);
+		expect(await getTimeline("seq:a")).toEqual({ v: 5 });
+	});
+
+	test("keeps saving its own writes", async () => {
+		await loadTimeline("seq:b");
+		expect(await saveTimeline("seq:b", { v: 1 })).toBe(true);
+		expect(await saveTimeline("seq:b", { v: 2 })).toBe(true);
+		expect(await getTimeline("seq:b")).toEqual({ v: 2 });
 	});
 });

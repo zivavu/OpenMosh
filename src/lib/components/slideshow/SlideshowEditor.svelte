@@ -120,6 +120,7 @@
 		getSequenceMediaProxy,
 		pruneSequenceMediaThrottled,
 		putSequenceMediaProxy,
+		StaleWriteError,
 		stableSourceId,
 	} from "../../editor/sequence-media-store";
 	import { needsProxy, startProxyJob, type ProxyJob } from "../../video/proxy";
@@ -511,9 +512,12 @@
 	/** Every autosave reports here, for the top bar's saved/saving/failed word. */
 	const saves = new SaveTracker();
 
+	/** Another tab saved or deleted this slideshow since: writing would undo that. */
+	let sessionStale = false;
+
 	function saveSlideshowSession() {
 		sessionSavePending = false;
-		if (!sessionKept) {
+		if (!sessionKept || sessionStale) {
 			saves.drop("session");
 			return;
 		}
@@ -524,6 +528,15 @@
 			{ config: sessionConfig() },
 			currentTrackId,
 		).catch((e) => {
+			if (e instanceof StaleWriteError) {
+				sessionStale = true;
+				showToast(
+					"This slideshow changed in another tab. Reload the page to see it; changes here won't be saved.",
+					"error",
+					0,
+				);
+				return false;
+			}
 			// Logged, not swallowed: a silent failure here is invisible.
 			if (import.meta.env.DEV)
 				console.error("Slideshow session save failed:", e);

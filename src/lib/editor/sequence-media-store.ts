@@ -300,19 +300,86 @@ export function deleteSequenceMedia(id: string): Promise<void> {
 	});
 }
 
+/** A write refused because another tab changed or deleted the record since this tab
+ * last read or wrote it: writing would replace that tab's newer work. */
+export class StaleWriteError extends Error {
+	constructor() {
+		super("Changed in another tab");
+		this.name = "StaleWriteError";
+	}
+}
+
+/** Each record's `updatedAt` as this tab last saw it, null once seen absent. */
+const seenStamps = new Map<string, number | null>();
+/** Records another tab saved or deleted after this one last read them. */
+const staleRecords = new Set<string>();
+
+const stampKey = (store: string, key: string) => `${store}\n${key}`;
+
+interface SaveNotice {
+	id: string;
+	updatedAt: number | null;
+}
+
+/** Tabs tell each other about every save and delete. Checked in memory, so a write
+ * started as the page unloads is still queued at once rather than after a read. */
+const saveNotices =
+	typeof BroadcastChannel === "function"
+		? new BroadcastChannel("openmosh-saves")
+		: null;
+saveNotices?.addEventListener("message", (e: MessageEvent<SaveNotice>) => {
+	const { id, updatedAt } = e.data;
+	if (seenStamps.has(id) && seenStamps.get(id) !== updatedAt)
+		staleRecords.add(id);
+});
+
+function noteSaved(store: string, key: string, updatedAt: number | null) {
+	const id = stampKey(store, key);
+	seenStamps.set(id, updatedAt);
+	staleRecords.delete(id);
+	saveNotices?.postMessage({ id, updatedAt } satisfies SaveNotice);
+}
+
+async function readSeen<T extends { updatedAt: number }>(
+	store: string,
+	key: string,
+): Promise<T | undefined> {
+	const record = await readOne<T>(store, key);
+	const id = stampKey(store, key);
+	seenStamps.set(id, record?.updatedAt ?? null);
+	staleRecords.delete(id);
+	return record;
+}
+
+/** Put `body` unless another tab saved or deleted the record since this tab read it;
+ * throws StaleWriteError then. */
+async function putUnlessStale<T extends { key: string; updatedAt: number }>(
+	store: string,
+	body: Omit<T, "updatedAt">,
+): Promise<void> {
+	const id = stampKey(store, body.key);
+	if (staleRecords.has(id)) throw new StaleWriteError();
+	// First save of real work: ask to be exempt from quota eviction.
+	void requestPersistentStorage();
+	// Strictly newer than what this tab saw, so two writes never share a stamp.
+	const record = {
+		...body,
+		updatedAt: Math.max(Date.now(), (seenStamps.get(id) ?? 0) + 1),
+	} as T;
+	await write(store, (os) => {
+		os.put(record);
+	});
+	noteSaved(store, body.key, record.updatedAt);
+}
+
 /** The media ids saved for a song, or null when it has no pool yet. */
 export async function loadMediaPool(key: string): Promise<string[] | null> {
-	const pool = await readOne<StoredMediaPool>(POOL_STORE, key);
+	const pool = await readSeen<StoredMediaPool>(POOL_STORE, key);
 	return pool ? pool.sourceIds : null;
 }
 
 export function saveMediaPool(key: string, sourceIds: string[]): Promise<void> {
-	// First save of real work: ask to be exempt from quota eviction.
-	void requestPersistentStorage();
-	const entry: StoredMediaPool = { key, sourceIds, updatedAt: Date.now() };
-	return write(POOL_STORE, (store) => {
-		store.put(entry);
-	});
+	return putUnlessStale<StoredMediaPool>(POOL_STORE, { key, sourceIds });
 }
 
 export function getAllMediaPools(): Promise<StoredMediaPool[]> {
@@ -320,6 +387,7 @@ export function getAllMediaPools(): Promise<StoredMediaPool[]> {
 }
 
 export function deleteMediaPool(key: string): Promise<void> {
+	noteSaved(POOL_STORE, key, null);
 	return write(POOL_STORE, (store) => {
 		store.delete(key);
 	});
@@ -330,21 +398,22 @@ export function getAllSessions(): Promise<StoredSession[]> {
 }
 
 export async function getSession(key: string): Promise<StoredSession | null> {
-	return (await readOne<StoredSession>(SESSION_STORE, key)) ?? null;
+	return (await readSeen<StoredSession>(SESSION_STORE, key)) ?? null;
+}
+
+/** Whether a session is stored, without counting as this tab having seen it. */
+export async function hasSession(key: string): Promise<boolean> {
+	return !!(await readOne<StoredSession>(SESSION_STORE, key));
 }
 
 export function putSession(
 	entry: Omit<StoredSession, "updatedAt">,
 ): Promise<void> {
-	// First save of real work: ask to be exempt from quota eviction.
-	void requestPersistentStorage();
-	const record: StoredSession = { ...entry, updatedAt: Date.now() };
-	return write(SESSION_STORE, (store) => {
-		store.put(record);
-	});
+	return putUnlessStale<StoredSession>(SESSION_STORE, entry);
 }
 
 export function deleteSession(key: string): Promise<void> {
+	noteSaved(SESSION_STORE, key, null);
 	return write(SESSION_STORE, (store) => {
 		store.delete(key);
 	});
@@ -352,17 +421,12 @@ export function deleteSession(key: string): Promise<void> {
 
 /** One song's stored timeline, or null when it has none. */
 export async function getTimeline(key: string): Promise<unknown | null> {
-	const entry = await readOne<StoredTimeline>(TIMELINE_STORE, key);
+	const entry = await readSeen<StoredTimeline>(TIMELINE_STORE, key);
 	return entry ? entry.state : null;
 }
 
 export function putTimeline(key: string, state: unknown): Promise<void> {
-	// First save of real work: ask to be exempt from quota eviction.
-	void requestPersistentStorage();
-	const entry: StoredTimeline = { key, state, updatedAt: Date.now() };
-	return write(TIMELINE_STORE, (store) => {
-		store.put(entry);
-	});
+	return putUnlessStale<StoredTimeline>(TIMELINE_STORE, { key, state });
 }
 
 export async function getAllTimelines(): Promise<StoredTimeline[]> {
@@ -370,6 +434,7 @@ export async function getAllTimelines(): Promise<StoredTimeline[]> {
 }
 
 export function deleteTimeline(key: string): Promise<void> {
+	noteSaved(TIMELINE_STORE, key, null);
 	return write(TIMELINE_STORE, (store) => {
 		store.delete(key);
 	});
@@ -562,6 +627,8 @@ export async function putBackupRecords(
 
 /** Empties every store; clears rather than deleting the DB, which the open connection blocks. */
 export async function clearAllSequenceStores(): Promise<void> {
+	seenStamps.clear();
+	staleRecords.clear();
 	const db = await openDb();
 	await transact(db, REQUIRED_STORES, "readwrite", (tx) => {
 		for (const name of REQUIRED_STORES) tx.objectStore(name).clear();
