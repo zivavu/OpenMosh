@@ -254,4 +254,28 @@ describe("Mask effects", () => {
 			}
 		}
 	});
+
+	it("never move an effect across one, which would change what it clips", () => {
+		for (const moshStyle of ["random", "curated"] as const) {
+			for (let seed = 1; seed <= 30; seed++) {
+				const effects = loadInitialEffects();
+				// Mid-chain, with rollable effects on both sides of it.
+				const [mask] = effects.splice(
+					effects.findIndex((e) => e.defId === MASK_EFFECT_ID),
+					1,
+				);
+				const at = Math.floor(effects.length / 2);
+				effects.splice(at, 0, mask);
+				mask.enabled = true;
+				const above = new Set(effects.slice(0, at).map((e) => e.instanceId));
+				withSeededRandom(seed, () =>
+					generateMosh(effects, { ...options, moshStyle }),
+				);
+				const nowAt = effects.findIndex((e) => e.defId === MASK_EFFECT_ID);
+				expect(
+					new Set(effects.slice(0, nowAt).map((e) => e.instanceId)),
+				).toEqual(above);
+			}
+		}
+	});
 });
