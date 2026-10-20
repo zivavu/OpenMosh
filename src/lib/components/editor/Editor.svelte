@@ -1512,15 +1512,21 @@
 	}
 
 	// Reloading or closing mid-playback would lose the session: no pause settles the debounce.
+	// Hidden counts too: a phone can discard a background tab without a pagehide.
 	onMount(() => {
 		const onHide = () => {
 			flushSequenceSave();
 			flushMediaPoolSave();
 			flushSingleSessionSave();
 		};
+		const onVisibility = () => {
+			if (document.visibilityState === "hidden") onHide();
+		};
 		window.addEventListener("pagehide", onHide);
+		document.addEventListener("visibilitychange", onVisibility);
 		return () => {
 			window.removeEventListener("pagehide", onHide);
+			document.removeEventListener("visibilitychange", onVisibility);
 			onHide();
 			// After the save: disposing empties the pool, which would then save as empty.
 			sourceRegistry.dispose();
