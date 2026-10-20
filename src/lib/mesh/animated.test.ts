@@ -289,6 +289,14 @@ describe("parseGlb", () => {
 		expect(() => parseGltf(glb.json, glb.bin)).toThrow("past its view");
 	});
 
+	it("throws on a bufferless accessor bigger than the file could stand for", () => {
+		const glb = readGlb(vertexColouredTriangle())!;
+		const position = glb.json.accessors![0];
+		delete position.bufferView;
+		position.count = 5_000_000;
+		expect(() => parseGltf(glb.json, glb.bin)).toThrow("accessor too big");
+	});
+
 	it("reads a scene whose nodes loop back on themselves", () => {
 		const glb = readGlb(vertexColouredTriangle())!;
 		glb.json.nodes = [{ mesh: 0, children: [1] }, { children: [0] }];

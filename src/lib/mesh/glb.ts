@@ -98,8 +98,10 @@ const COMPONENTS: Record<string, number> = {
 	MAT4: 16,
 };
 
-/** Floats an accessor with no buffer view may ask for; it can only be zeros. */
+/** Zero floats accessors with no buffer view may ask for between them, at most, and
+ * per byte of the file: the count is only a claim, so it can't size the allocation. */
 const MAX_ZERO_ACCESSOR = 1 << 24;
+const ZERO_FLOATS_PER_BYTE = 4;
 
 /** Binary glTF: meshes or point clouds with materials, skins and the first
  * animation. Images must be embedded; external buffers aren't reachable from a
@@ -141,6 +143,10 @@ export function parseGltf(
 	unpacked?: UnpackedViews,
 ): Mesh | null {
 	const nodes = json.nodes ?? [];
+	let zeroBudget = Math.min(
+		MAX_ZERO_ACCESSOR,
+		(bin.length + 1024) * ZERO_FLOATS_PER_BYTE,
+	);
 
 	const accessor = (index: number): { data: Float32Array; size: number } => {
 		const acc = json.accessors?.[index];
@@ -157,8 +163,8 @@ export function parseGltf(
 				: viewBytes(json, bin, acc.bufferView, unpacked);
 		if (!view || !bytes) {
 			// No data behind it: zeros, as the spec says, but not a file's worth of them.
-			if (acc.count * size > MAX_ZERO_ACCESSOR)
-				throw new Error("accessor too big");
+			zeroBudget -= acc.count * size;
+			if (zeroBudget < 0) throw new Error("accessor too big");
 			return { data: new Float32Array(acc.count * size), size };
 		}
 		const width = { 5120: 1, 5121: 1, 5122: 2, 5123: 2, 5125: 4, 5126: 4 }[
