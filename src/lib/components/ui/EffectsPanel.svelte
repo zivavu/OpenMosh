@@ -23,6 +23,7 @@
 		cloneEffectInstance,
 		createEffectInstance,
 		deletePreset,
+		isPresetsChange,
 		importPresets,
 		loadPresets,
 		normalizePresetName,
@@ -170,16 +171,34 @@
 	}
 
 	function handleUpdatePreset(index: number) {
-		presets = updatePreset(index, $state.snapshot(effects));
-		appliedIndex = index;
-		onPresetUpdated?.($state.snapshot(presets[index]) as Preset);
+		const seen = $state.snapshot(presets[index]) as Preset;
+		presets = updatePreset(index, $state.snapshot(effects), seen);
+		const at = presets.findIndex((p) => p.name === seen.name);
+		appliedIndex = at === -1 ? null : at;
+		if (at !== -1) onPresetUpdated?.($state.snapshot(presets[at]) as Preset);
 	}
 
 	function handleDeletePreset(index: number) {
-		presets = deletePreset(index);
-		if (appliedIndex === index) appliedIndex = null;
-		else if (appliedIndex !== null && appliedIndex > index) appliedIndex--;
+		const applied =
+			appliedIndex === null || appliedIndex === index
+				? null
+				: presets[appliedIndex].name;
+		presets = deletePreset(index, $state.snapshot(presets[index]) as Preset);
+		const at =
+			applied === null ? -1 : presets.findIndex((p) => p.name === applied);
+		appliedIndex = at === -1 ? null : at;
 	}
+
+	// Another tab saved, changed or deleted a preset: list what's stored now.
+	$effect(() => {
+		const onStorage = (e: StorageEvent) => {
+			if (!isPresetsChange(e.key)) return;
+			presets = loadPresets();
+			appliedIndex = null;
+		};
+		window.addEventListener("storage", onStorage);
+		return () => window.removeEventListener("storage", onStorage);
+	});
 
 	function exportPresets(list: Preset[]) {
 		const snapshot = $state.snapshot(list) as Preset[];

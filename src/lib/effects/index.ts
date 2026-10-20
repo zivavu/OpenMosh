@@ -7,6 +7,7 @@ export {
 	savePreset,
 	updatePreset,
 	deletePreset,
+	isPresetsChange,
 	applyPreset,
 	normalizePresetName,
 	PRESET_NAME_MAX_LENGTH,

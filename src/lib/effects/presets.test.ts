@@ -257,6 +257,19 @@ describe("updatePreset", () => {
 	});
 });
 
+describe("updatePreset after another tab's change", () => {
+	it("updates the preset the caller listed, not whatever sits at its index", () => {
+		ls.seedJson(PRESETS_KEY, [
+			{ name: "b", effects: [] },
+			{ name: "c", effects: [] },
+		]);
+		ls.seed(SEEDED_KEY, "1");
+		const list = updatePreset(1, [instance()], { name: "b", effects: [] });
+		expect(list[0].effects).toHaveLength(1);
+		expect(list[1].effects).toHaveLength(0);
+	});
+});
+
 describe("deletePreset", () => {
 	beforeEach(() => {
 		ls.seedJson(PRESETS_KEY, [
@@ -274,6 +287,21 @@ describe("deletePreset", () => {
 
 	it("leaves the list alone for an index past the end", () => {
 		expect(deletePreset(9).map((p) => p.name)).toEqual(["one", "two", "three"]);
+	});
+
+	it("deletes the preset the caller listed after another tab removed one", () => {
+		const listed = { name: "two", effects: [] };
+		ls.seedJson(PRESETS_KEY, [
+			{ name: "two", effects: [] },
+			{ name: "three", effects: [] },
+		]);
+		expect(deletePreset(1, listed).map((p) => p.name)).toEqual(["three"]);
+	});
+
+	it("leaves the list alone when the listed preset is already gone", () => {
+		expect(
+			deletePreset(1, { name: "gone", effects: [] }).map((p) => p.name),
+		).toEqual(["one", "two", "three"]);
 	});
 
 	it("can empty the list", () => {

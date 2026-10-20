@@ -98,23 +98,43 @@ export function savePreset(name: string, effects: EffectInstance[]): Preset[] {
 	return presets;
 }
 
+/** Where `seen` sits in the stored list now: another tab may have added, moved or
+ * deleted presets since this one listed them, so the index alone can name another. */
+function storedIndex(presets: Preset[], index: number, seen?: Preset): number {
+	if (!seen) return presets[index] ? index : -1;
+	const same = (p: Preset | undefined) =>
+		!!p &&
+		p.name === seen.name &&
+		JSON.stringify(p.effects) === JSON.stringify(seen.effects);
+	return same(presets[index]) ? index : presets.findIndex(same);
+}
+
+/** `seen` is the preset as the caller listed it; without it the index is trusted. */
 export function updatePreset(
 	index: number,
 	effects: EffectInstance[],
+	seen?: Preset,
 ): Preset[] {
 	const presets = loadPresets();
-	// Another tab may have deleted it since this one listed it.
-	if (!presets[index]) return presets;
-	presets[index].effects = serializeEffects(effects);
+	const at = storedIndex(presets, index, seen);
+	if (at === -1) return presets;
+	presets[at].effects = serializeEffects(effects);
 	writeJson(PRESETS_KEY, presets);
 	return presets;
 }
 
-export function deletePreset(index: number): Preset[] {
+export function deletePreset(index: number, seen?: Preset): Preset[] {
 	const presets = loadPresets();
-	presets.splice(index, 1);
+	const at = storedIndex(presets, index, seen);
+	if (at === -1) return presets;
+	presets.splice(at, 1);
 	writeJson(PRESETS_KEY, presets);
 	return presets;
+}
+
+/** True for a storage event that changed the preset list. */
+export function isPresetsChange(key: string | null): boolean {
+	return key === null || key === PRESETS_KEY;
 }
 
 export function applyPreset(preset: Preset): EffectInstance[] {
