@@ -3405,7 +3405,8 @@
 			(resizeWidth !== prevW || resizeHeight !== prevH);
 		// Through the canvas, not r.render: the editor's picture is its layers, not the base chain.
 		const draw = () => {
-			if (!glCanvasRef?.drawNow(time)) r.render(renderedEffects, time);
+			if (!glCanvasRef?.drawNow(time, !recordingState.recording))
+				r.render(renderedEffects, time);
 		};
 		if (needsResize) r.resize(resizeWidth, resizeHeight);
 		draw();
