@@ -329,6 +329,21 @@ describe("hydrateEffects", () => {
 	});
 });
 
+describe("a damaged save", () => {
+	it("reads values that aren't an object as no values", () => {
+		const { def } = findParam("range");
+		expect(() =>
+			hydrateValues(def.id, 5 as unknown as Record<string, number>),
+		).not.toThrow();
+	});
+
+	it("skips entries that aren't effects, or have no usable id", () => {
+		expect(hydrateEffects([7, "x", { defId: null, enabled: true }])).toEqual(
+			[],
+		);
+	});
+});
+
 describe("hydrateLinks", () => {
 	const { def, param } = findParam("range");
 
@@ -339,6 +354,18 @@ describe("hydrateLinks", () => {
 		expect(links).toEqual({
 			[param.key]: { min: param.min, max: param.max, inverted: true },
 		});
+	});
+
+	it("drops a frequency band it can't measure", () => {
+		const links = hydrateLinks(def.id, {
+			[param.key]: {
+				min: param.min,
+				max: param.max,
+				freqMin: "abc" as unknown as number,
+				freqMax: 500,
+			},
+		});
+		expect(links?.[param.key]).toEqual({ min: param.min, max: param.max });
 	});
 
 	it("drops a link on a param that's gone or can't take one", () => {
