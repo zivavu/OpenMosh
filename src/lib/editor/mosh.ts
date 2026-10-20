@@ -241,29 +241,47 @@ function rollRandom(
 	});
 
 	if (randomizeOrder) {
-		const moshableIndices = effects
-			.map((e, i) => (isMoshable(e) ? i : -1))
-			.filter((i) => i !== -1);
-		const shuffled = shuffleInPlace([...moshableIndices]);
-		const snapshot = effects.map((e) => ({ ...e }));
-		for (let k = 0; k < moshableIndices.length; k++) {
-			effects[moshableIndices[k]] = snapshot[shuffled[k]];
+		for (const slots of maskScopeSlots(effects, isMoshable)) {
+			const moved = shuffleInPlace(slots.map((i) => effects[i]));
+			slots.forEach((slot, k) => (effects[slot] = moved[k]));
 		}
 	}
 }
 
+/** The chain's indices that `pick` takes, grouped by the stretches a Mask closes: a
+ * Mask limits what sits above it, so moving an effect past one changes the picture. */
+function maskScopeSlots(
+	effects: EffectInstance[],
+	pick: (e: EffectInstance) => boolean,
+): number[][] {
+	const scopes: number[][] = [[]];
+	effects.forEach((e, i) => {
+		if (isMaskEffect(e)) scopes.push([]);
+		else if (pick(e)) scopes[scopes.length - 1].push(i);
+	});
+	return scopes.filter((s) => s.length > 1);
+}
+
+/** Reorders the effects in each Mask's scope by `rank`, keeping ties as they were. */
+function sortWithinMaskScopes(
+	effects: EffectInstance[],
+	pick: (e: EffectInstance) => boolean,
+	rank: (e: EffectInstance) => number,
+): void {
+	for (const slots of maskScopeSlots(effects, pick)) {
+		const moved = slots
+			.map((i) => effects[i])
+			.map((e, k) => ({ e, k }))
+			.sort((a, b) => rank(a.e) - rank(b.e) || a.k - b.k)
+			.map(({ e }) => e);
+		slots.forEach((slot, k) => (effects[slot] = moved[k]));
+	}
+}
+
 /** Moves the unlocked effects that are on ahead of the ones that are off, keeping
- * their order. Off effects don't draw, so the picture is unchanged. */
+ * their order and their Mask's scope. Off effects don't draw, so the picture is unchanged. */
 function enabledFirst(effects: EffectInstance[]): void {
-	const slots = effects
-		.map((e, i) => (isMoshable(e) ? i : -1))
-		.filter((i) => i !== -1);
-	const moved = slots.map((i) => effects[i]);
-	const order = [
-		...moved.filter((e) => e.enabled),
-		...moved.filter((e) => !e.enabled),
-	];
-	slots.forEach((slot, k) => (effects[slot] = order[k]));
+	sortWithinMaskScopes(effects, isMoshable, (e) => (e.enabled ? 0 : 1));
 }
 
 /** Picks into the slots `pool` holds, in chain order, the rest after them. */
@@ -288,14 +306,15 @@ function rollCurated(
 		if (def) randomizeParams(e.values, def);
 	}
 	applyHierarchy(picked);
-	const slots = effects
-		.map((e, i) => (pool.includes(e) ? i : -1))
-		.filter((i) => i !== -1);
 	const order = [
 		...curatedOrder(picked),
 		...pool.filter((e) => !picked.includes(e)),
 	];
-	slots.forEach((slot, k) => (effects[slot] = order[k]));
+	sortWithinMaskScopes(
+		effects,
+		(e) => pool.includes(e),
+		(e) => order.indexOf(e),
+	);
 }
 
 export function clearEffects(effects: EffectInstance[]): void {
