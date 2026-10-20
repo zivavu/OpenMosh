@@ -9,6 +9,7 @@ export const definition: EffectDefinition = {
 	moshable: false,
 	// u_time arrives as degrees turned so far.
 	rateParam: "spin",
+	restsAtZeroRate: true,
 	params: [
 		{
 			key: "rotX",

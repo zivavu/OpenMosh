@@ -116,6 +116,9 @@ export interface EffectDefinition {
 	/** Phase runs at the rate param to this power. 2 keeps the feel of effects whose
 	 * shader once multiplied the speed in a second time. Defaults to 1. */
 	rateExponent?: number;
+	/** A rate of 0 means no motion at all, not a pause: the phase goes back to 0, so a
+	 * spin set to 0 rests at the param's own angle. */
+	restsAtZeroRate?: boolean;
 }
 
 /** When set, this range param is driven by music volume in [min, max]. */
