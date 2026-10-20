@@ -17,8 +17,8 @@ function legacyAll(): Record<string, unknown> {
 
 /** Read one song's timeline, falling back to the legacy localStorage blob and
  * copying it into IndexedDB; the legacy value stays so an older tab still finds it.
- * Null only when nothing is saved: a failed read throws, or the caller would take the
- * project for a new one and save its blank state over the real one. */
+ * Null only when nothing is saved. A failed read throws even with a legacy copy: that
+ * copy can be older than the stored record, and saving it would write over newer work. */
 export async function loadTimeline<T>(key: string): Promise<T | null> {
 	let stored: unknown = null;
 	let readError: unknown = null;
@@ -27,13 +27,11 @@ export async function loadTimeline<T>(key: string): Promise<T | null> {
 	} catch (err) {
 		readError = err;
 	}
+	if (readError) throw readError;
 	if (stored != null) return stored as T;
 
 	const legacy = legacyAll()[key];
-	if (legacy === undefined) {
-		if (readError) throw readError;
-		return null;
-	}
+	if (legacy === undefined) return null;
 	if (!migrated.has(key)) {
 		migrated.add(key);
 		void putTimeline(key, legacy).catch(() => {});
