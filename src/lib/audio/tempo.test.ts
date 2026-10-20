@@ -52,10 +52,12 @@ describe("estimateTempo", () => {
 		).toBe(140);
 	});
 
-	test("survives silence and very short input", () => {
-		expect(
-			estimateTempo(new Float32Array(44100 * 5), 44100).bpm,
-		).toBeGreaterThan(0);
-		expect(estimateTempo(new Float32Array(1000), 44100).bpm).toBeGreaterThan(0);
+	test("finds no beat in silence or very short input, rather than making one up", () => {
+		expect(() => estimateTempo(new Float32Array(44100 * 5), 44100)).toThrow(
+			"No beat",
+		);
+		expect(() => estimateTempo(new Float32Array(1000), 44100)).toThrow(
+			"No beat",
+		);
 	});
 });
