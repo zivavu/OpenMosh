@@ -18,6 +18,9 @@ export interface DecodedGif {
 /** Delays this short are shown at 100ms by every browser; match them. */
 const MIN_DELAY_MS = 20;
 const DEFAULT_DELAY_MS = 100;
+/** 16 megapixels, far past any real GIF. The header's sizes are only claims: a few
+ * bytes can ask for gigabytes, so nothing is allocated from one above this. */
+const MAX_GIF_PIXELS = 4096 * 4096;
 
 /** Re-encodes an animated GIF as an MP4 `File` with the same name and timestamp,
  * so it lands in the pool as a video. Anything else comes back as it was, typed
@@ -109,10 +112,10 @@ export function decodeGif(bytes: Uint8Array): DecodedGif {
 function gifScreen(bytes: Uint8Array): { width: number; height: number } {
 	const sig = String.fromCharCode(...bytes.subarray(0, 6));
 	if (sig !== "GIF87a" && sig !== "GIF89a") throw new Error("not a GIF");
-	return {
-		width: bytes[6] | (bytes[7] << 8),
-		height: bytes[8] | (bytes[9] << 8),
-	};
+	const width = bytes[6] | (bytes[7] << 8);
+	const height = bytes[8] | (bytes[9] << 8);
+	if (width * height > MAX_GIF_PIXELS) throw new Error("GIF too large");
+	return { width, height };
 }
 
 /** Each frame in turn, as decodeGif reads them. */
@@ -174,6 +177,7 @@ function* decodeGifFrames(bytes: Uint8Array): Generator<GifFrame> {
 		const minCodeSize = bytes[pos++];
 		const dataStart = pos;
 		skipSubBlocks();
+		if (w * h > MAX_GIF_PIXELS) throw new Error("GIF frame too large");
 		const indices = lzwDecode(bytes, dataStart, minCodeSize, w * h);
 
 		const previous = disposal === 3 ? canvas.slice() : null;

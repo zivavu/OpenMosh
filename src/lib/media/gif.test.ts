@@ -139,6 +139,19 @@ describe("decodeGif", () => {
 		expect(out.frames).toHaveLength(1);
 	});
 
+	it("refuses a screen size no real GIF has, before allocating it", () => {
+		const huge = [...HEADER];
+		huge.splice(6, 4, 0xff, 0xff, 0xff, 0xff);
+		expect(() => decodeGif(gif(huge, FRAME, TRAILER))).toThrow("too large");
+	});
+
+	it("refuses a frame size no real GIF has, before decoding it", () => {
+		const frame = [...FRAME];
+		// Image descriptor width and height, after the 8-byte graphic control block.
+		frame.splice(13, 4, 0xff, 0xff, 0xff, 0xff);
+		expect(() => decodeGif(gif(HEADER, frame, TRAILER))).toThrow("too large");
+	});
+
 	it("stops at a comment that claims more bytes than the file has", () => {
 		const cut = gif(HEADER, FRAME, [0x21, 0xfe, 0x05, 0x41, 0x42]);
 		expect(decodeGif(cut).frames).toHaveLength(1);
