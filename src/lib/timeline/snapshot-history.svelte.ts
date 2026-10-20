@@ -74,6 +74,12 @@ export function createSnapshotHistory<T>() {
 	}
 
 	/** Forget everything. The live state is the caller's and stays untouched. */
+	/** Rewrite every stored state, for a change that undo must not take back. */
+	function amend(fn: (state: T) => T) {
+		past = past.map(fn);
+		future = future.map(fn);
+	}
+
 	function reset() {
 		past = [];
 		future = [];
@@ -103,6 +109,7 @@ export function createSnapshotHistory<T>() {
 		push,
 		undo,
 		redo,
+		amend,
 		reset,
 	};
 }

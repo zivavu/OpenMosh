@@ -1792,6 +1792,7 @@
 				});
 		},
 		reportUnreadableImages,
+		keepAddsThroughPoolUndo,
 	);
 
 	/** The pool has dropped these already; the lanes that drew them let go too. */
@@ -2088,6 +2089,22 @@
 		}));
 	}
 
+	/** Ids an undo or redo is bringing back, which the stack already holds. */
+	const poolUndoIds = new Set<string>();
+
+	/** Adds aren't undoable, so every stored pool gains them: otherwise undoing an older
+	 * removal would take out media added since. */
+	function keepAddsThroughPoolUndo(added: SequenceSource[]) {
+		const fresh = added.filter((s) => !poolUndoIds.has(s.id));
+		if (fresh.length === 0) return;
+		poolHistory.amend((entries) => [
+			...entries,
+			...fresh
+				.filter((s) => !entries.some((e) => e.id === s.id))
+				.map((s) => ({ id: s.id, file: s.file })),
+		]);
+	}
+
 	/** Undo and redo of a removal: the clips come back from the media stack. */
 	async function setPool(entries: PoolEntry[]) {
 		const want = new Set(entries.map((e) => e.id));
@@ -2098,7 +2115,12 @@
 		}
 		const missing = entries.filter((e) => !sourceRegistry.get(e.id));
 		if (missing.length === 0) return;
-		await sourceRegistry.add(missing.map((e) => e.file));
+		for (const e of missing) poolUndoIds.add(e.id);
+		try {
+			await sourceRegistry.add(missing.map((e) => e.file));
+		} finally {
+			for (const e of missing) poolUndoIds.delete(e.id);
+		}
 		for (const e of missing) if (e.edit) sourceRegistry.setEdit(e.id, e.edit);
 		entries.forEach((e, to) => {
 			const from = sourceRegistry.sources.findIndex((s) => s.id === e.id);
