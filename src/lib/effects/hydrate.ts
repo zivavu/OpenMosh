@@ -121,7 +121,11 @@ export function hydrateValues(
 ): Record<string, number | string> {
 	const def = getDefinition(defId);
 	if (!def) return { ...values };
-	const stored = migrateValues(defId, values ?? {});
+	// A damaged save can hold anything here; only an object carries values.
+	const stored = migrateValues(
+		defId,
+		values && typeof values === "object" ? values : {},
+	);
 	// Unknown keys ride along: a param that comes back under its old name should
 	// find its value still there.
 	const hydrated = { ...stored };
@@ -152,7 +156,21 @@ export function hydrateLinks(
 			typeof n === "number" && Number.isFinite(n)
 				? Math.min(param.max, Math.max(param.min, n))
 				: param.defaultValue;
-		kept[param.key] = { ...link, min: clamp(link.min), max: clamp(link.max) };
+		const hz = (n: unknown) =>
+			typeof n === "number" && Number.isFinite(n) && n > 0 ? n : undefined;
+		const freqMin = hz(link.freqMin);
+		const freqMax = hz(link.freqMax);
+		// A band only with both ends sane: a broken one would make the level NaN.
+		const band =
+			freqMin !== undefined && freqMax !== undefined && freqMin < freqMax
+				? { freqMin, freqMax }
+				: {};
+		kept[param.key] = {
+			min: clamp(link.min),
+			max: clamp(link.max),
+			...band,
+			...(link.inverted === true && { inverted: true }),
+		};
 	}
 	return Object.keys(kept).length > 0 ? kept : undefined;
 }
@@ -163,9 +181,10 @@ export function hydrateEffects(saved: unknown): EffectInstance[] {
 	if (!Array.isArray(saved)) return [];
 	const hydrated: EffectInstance[] = [];
 	for (const e of saved as (EffectInstance | null | undefined)[]) {
-		if (!e) continue;
+		if (!e || typeof e !== "object") continue;
 		if (!getDefinition(e.defId)) {
-			if (e.enabled) reportRemovedEffect(e.defId);
+			if (e.enabled && typeof e.defId === "string")
+				reportRemovedEffect(e.defId);
 			continue;
 		}
 		hydrated.push({

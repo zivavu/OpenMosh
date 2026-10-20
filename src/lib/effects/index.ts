@@ -48,8 +48,14 @@ export const HIDDEN_EFFECTS_KEY = "openmosh-hidden-effects";
 /** Whether the effects panel lists live effects first. */
 export const LIVE_FIRST_KEY = "openmosh-live-first";
 
+/** Read defensively: a backup writes this key as it found it. */
 export function hiddenEffectIds(): Set<string> {
-	return new Set(readJson<string[] | null>(HIDDEN_EFFECTS_KEY, null) ?? []);
+	const stored = readJson<unknown>(HIDDEN_EFFECTS_KEY, null);
+	return new Set(
+		Array.isArray(stored)
+			? stored.filter((id): id is string => typeof id === "string")
+			: [],
+	);
 }
 
 /** The chain without effects the user hid, so an undo can't bring one back. */
@@ -90,7 +96,7 @@ export function loadInitialEffects(): EffectInstance[] {
 /** Append a disabled instance for every effect the chain lacks, unless the user
  * hid it. Without this, effects added after a chain was saved surface as hidden. */
 function addNewEffects(effects: EffectInstance[]): EffectInstance[] {
-	const hidden = new Set(readJson<string[] | null>(HIDDEN_EFFECTS_KEY, null));
+	const hidden = hiddenEffectIds();
 	const present = new Set(effects.map((e) => e.defId));
 	const added = EFFECT_DEFINITIONS.filter(
 		(def) => !present.has(def.id) && !hidden.has(def.id),
