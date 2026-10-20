@@ -1178,8 +1178,11 @@
 	});
 
 	/** Draw the whole frame (layers, lanes, text) now, for a capture to read back. */
-	export function drawNow(time: number): boolean {
-		if (!renderer || suspended || externallyDriven) return false;
+	/** `whileSuspended` draws one frame for a still while Grid or the source editor
+	 * covers the preview; a recording drives the canvas itself and still says no. */
+	export function drawNow(time: number, whileSuspended = false): boolean {
+		if (!renderer || externallyDriven) return false;
+		if (suspended && !whileSuspended) return false;
 		drawFrame(time);
 		return true;
 	}
