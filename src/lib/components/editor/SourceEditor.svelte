@@ -41,7 +41,6 @@
 		clampCrop,
 		MASK_MAX,
 		MAX_KEY_POINTS,
-		MIN_CROP_SIZE as MIN_CROP,
 		putKeyframe,
 		removeKeyframe,
 		sampleSourceEdit,
@@ -68,6 +67,15 @@
 		sdfCoverage,
 		type MaskField,
 	} from "../../media/mask-sdf";
+	import {
+		cropCursor as cropCursorFor,
+		dragCrop,
+		edgesAt,
+		grabTolerance,
+		insideCrop,
+		startCropDrag,
+		type CropDrag,
+	} from "../../media/crop-drag";
 	import type { SequenceSource } from "../../editor/sequence-sources.svelte";
 	import { SourceEditPreview } from "../../gl/source-edit-preview";
 	import { SlideVideoSampler } from "../../slideshow/video-sampler";
@@ -993,65 +1001,15 @@
 		return gestureTime ?? currentTime;
 	}
 
-	/** Which sides of the rectangle a resize drag is holding. */
-	type Edges = { l: boolean; r: boolean; t: boolean; b: boolean };
-
 	type Drag =
 		| { kind: "erase" }
-		| { kind: "crop-new"; ax: number; ay: number }
-		| { kind: "crop-move"; dx: number; dy: number }
-		| { kind: "crop-resize"; edges: Edges; from: CropRect }
+		| { kind: "crop"; crop: CropDrag }
 		| { kind: "mask-move"; ax: number; ay: number; from: MaskTransform };
 	let drag: Drag | null = null;
 
-	/** How close to an edge counts as grabbing it, in normalized units. */
-	function grabTolerance(): { x: number; y: number } {
+	function cropTolerance() {
 		const rect = canvasEl?.getBoundingClientRect();
-		const px = 10;
-		return {
-			x: Math.min(rect?.width ? px / rect.width : 0.02, crop.w / 3),
-			y: Math.min(rect?.height ? px / rect.height : 0.02, crop.h / 3),
-		};
-	}
-
-	/** The edges under the pointer, or null if it isn't near any of them. */
-	function edgesAt(n: { x: number; y: number }): Edges | null {
-		if (isFullCrop(crop)) return null;
-		const t = grabTolerance();
-		// Outside the rectangle by more than the grab distance is a new rectangle.
-		if (
-			n.x < crop.x - t.x ||
-			n.x > crop.x + crop.w + t.x ||
-			n.y < crop.y - t.y ||
-			n.y > crop.y + crop.h + t.y
-		) {
-			return null;
-		}
-		const edges: Edges = {
-			l: Math.abs(n.x - crop.x) <= t.x,
-			r: Math.abs(n.x - (crop.x + crop.w)) <= t.x,
-			t: Math.abs(n.y - crop.y) <= t.y,
-			b: Math.abs(n.y - (crop.y + crop.h)) <= t.y,
-		};
-		return edges.l || edges.r || edges.t || edges.b ? edges : null;
-	}
-
-	function insideCrop(n: { x: number; y: number }): boolean {
-		return (
-			!isFullCrop(crop) &&
-			n.x > crop.x &&
-			n.x < crop.x + crop.w &&
-			n.y > crop.y &&
-			n.y < crop.y + crop.h
-		);
-	}
-
-	function cursorFor(edges: Edges | null): string {
-		if (!edges) return "";
-		if ((edges.l && edges.t) || (edges.r && edges.b)) return "nwse-resize";
-		if ((edges.r && edges.t) || (edges.l && edges.b)) return "nesw-resize";
-		if (edges.l || edges.r) return "ew-resize";
-		return "ns-resize";
+		return grabTolerance(crop, rect?.width ?? 0, rect?.height ?? 0);
 	}
 
 	/** What the crop tool's pointer is over, so the cursor can say so. */
@@ -1092,19 +1050,11 @@
 		}
 		const n = normAt(e);
 		if (!n) return;
-		// On an edge the drag resizes, inside it moves, anywhere else starts a new one.
-		const edges = edgesAt(n);
-		const inside = insideCrop(n);
 		// Once for the gesture, before it starts: setCrop runs on every move.
 		beforeEdit();
-		if (edges) {
-			drag = { kind: "crop-resize", edges, from: { ...crop } };
-			return;
-		}
-		drag = inside
-			? { kind: "crop-move", dx: n.x - crop.x, dy: n.y - crop.y }
-			: { kind: "crop-new", ax: n.x, ay: n.y };
-		if (!inside) setCrop({ x: n.x, y: n.y, w: MIN_CROP, h: MIN_CROP });
+		const started = startCropDrag(crop, n, cropTolerance());
+		drag = { kind: "crop", crop: started.drag };
+		if (started.crop) setCrop(started.crop);
 	}
 
 	function onPreviewMove(e: PointerEvent) {
@@ -1112,10 +1062,10 @@
 			// Nothing is being dragged, so the only job is to say what a press here would do.
 			if (tool === "crop") {
 				const n = normAt(e);
-				const edges = n && edgesAt(n);
+				const edges = n && edgesAt(crop, n, cropTolerance());
 				cropCursor = edges
-					? cursorFor(edges)
-					: n && insideCrop(n)
+					? cropCursorFor(edges)
+					: n && insideCrop(crop, n)
 						? "move"
 						: "";
 			}
@@ -1143,37 +1093,7 @@
 			return;
 		}
 		const n = normAt(e);
-		if (!n) return;
-		if (drag.kind === "crop-resize") {
-			const { edges, from } = drag;
-			// The held edges follow the pointer, the opposite ones stay put.
-			let x0 = from.x;
-			let y0 = from.y;
-			let x1 = from.x + from.w;
-			let y1 = from.y + from.h;
-			// An edge stops at the opposite one rather than crossing it.
-			if (edges.l) x0 = Math.min(n.x, x1 - MIN_CROP);
-			if (edges.r) x1 = Math.max(n.x, x0 + MIN_CROP);
-			if (edges.t) y0 = Math.min(n.y, y1 - MIN_CROP);
-			if (edges.b) y1 = Math.max(n.y, y0 + MIN_CROP);
-			setCrop({ x: x0, y: y0, w: x1 - x0, h: y1 - y0 });
-			return;
-		}
-		if (drag.kind === "crop-new") {
-			setCrop({
-				x: Math.min(drag.ax, n.x),
-				y: Math.min(drag.ay, n.y),
-				w: Math.abs(n.x - drag.ax),
-				h: Math.abs(n.y - drag.ay),
-			});
-			return;
-		}
-		setCrop({
-			x: Math.min(Math.max(n.x - drag.dx, 0), 1 - crop.w),
-			y: Math.min(Math.max(n.y - drag.dy, 0), 1 - crop.h),
-			w: crop.w,
-			h: crop.h,
-		});
+		if (n) setCrop(dragCrop(drag.crop, crop, n));
 	}
 
 	function onPreviewUp(e: PointerEvent) {
