@@ -258,7 +258,11 @@ export class TimelineStackState {
 			this.maxLength,
 			Math.max(view.duration + view.front, end),
 		);
-		if (Math.abs(length - this.#getDuration()) > 1e-6) this.growTo(length);
+		if (Math.abs(length - this.#getDuration()) > 1e-6) {
+			const grow = this.growTo;
+			if (view.seq === null) grow(length);
+			else joinEdit(view.seq, () => grow(length));
+		}
 		this.#widen();
 	}
 
