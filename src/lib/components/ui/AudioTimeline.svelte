@@ -187,17 +187,19 @@
 			const t = timeFromClientX(clientX);
 			if (handle === "start") {
 				if (t >= spanEnd) {
-					// Swapped: start becomes the new end
+					// Swapped: start becomes the new end, and the end it passed the new start.
 					handle = "end";
-					onSpanEndChange(t);
+					onSpanStartChange(spanEnd);
+					onSpanEndChange(Math.min(trackDuration, t));
 				} else {
 					onSpanStartChange(Math.max(0, t));
 				}
 			} else {
 				if (t <= spanStart) {
-					// Swapped: end becomes the new start
+					// Swapped: end becomes the new start, and the start it passed the new end.
 					handle = "start";
-					onSpanStartChange(t);
+					onSpanEndChange(spanStart);
+					onSpanStartChange(Math.max(0, t));
 				} else {
 					onSpanEndChange(Math.min(trackDuration, t));
 				}
