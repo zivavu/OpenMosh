@@ -4,6 +4,8 @@ import { createProgram, getUniformLocations } from "./utils";
 
 /** Texels per row of the morph delta texture. */
 const MORPH_ROW = 4096;
+/** Bones per row of the bone texture, four texels each; a row as wide as a morph row. */
+const BONE_ROW = MORPH_ROW / 4;
 
 // Same world as the transform-3d shader: x right, y down, z away from the camera.
 const MESH_VERT = `#version 300 es
@@ -32,12 +34,13 @@ out vec3 v_color;
 out vec3 v_world;
 out vec3 v_uv;
 mat4 bone(uint j) {
-  int x = int(j) * 4;
+  int x = int(j % ${BONE_ROW}u) * 4;
+  int y = int(j / ${BONE_ROW}u);
   return mat4(
-    texelFetch(u_bones, ivec2(x, 0), 0),
-    texelFetch(u_bones, ivec2(x + 1, 0), 0),
-    texelFetch(u_bones, ivec2(x + 2, 0), 0),
-    texelFetch(u_bones, ivec2(x + 3, 0), 0));
+    texelFetch(u_bones, ivec2(x, y), 0),
+    texelFetch(u_bones, ivec2(x + 1, y), 0),
+    texelFetch(u_bones, ivec2(x + 2, y), 0),
+    texelFetch(u_bones, ivec2(x + 3, y), 0));
 }
 void main() {
   vec3 pos = a_position;
@@ -211,7 +214,12 @@ export class MeshPass {
 				? {
 						skin,
 						bones: this.#boneTexture(),
-						matrices: new Float32Array(skin.bones * 16),
+						// Whole rows: the upload reads the texture's full width on every row.
+						matrices: new Float32Array(
+							(skin.bones > BONE_ROW
+								? Math.ceil(skin.bones / BONE_ROW) * BONE_ROW
+								: skin.bones) * 16,
+						),
 					}
 				: null,
 			morph: morph
@@ -395,8 +403,8 @@ export class MeshPass {
 				gl.TEXTURE_2D,
 				0,
 				gl.RGBA32F,
-				skin.bones * 4,
-				1,
+				Math.min(skin.bones, BONE_ROW) * 4,
+				Math.ceil(skin.bones / BONE_ROW),
 				0,
 				gl.RGBA,
 				gl.FLOAT,
