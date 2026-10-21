@@ -54,7 +54,8 @@ void main() {
   c = vec2(ca * c.x - sa * c.y, sa * c.x + ca * c.y) * s;
   // Decay knob is inverted (higher = fades faster) and cropped to the
   // usable 0.90 to 1.00 per-frame multiplier range.
-  float fade = 1.0 - u_decay * 0.1;
+  // Never quite 1, as with Feedback: the brightest trail would never fade.
+  float fade = 1.0 - max(u_decay, 0.02) * 0.1;
   vec4 prev = texture(u_feedback, c + 0.5) * pow(fade, u_delta * 60.0);
   vec4 fresh = texture(u_texture, v_uv);
   outColor = vec4(clamp(max(fresh.rgb, prev.rgb), 0.0, 1.0),
