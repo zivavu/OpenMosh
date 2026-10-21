@@ -163,4 +163,36 @@ describe("unpackGltf", () => {
 		const r = Math.hypot(mesh.positions[0], mesh.positions[1]);
 		expect(r).toBeCloseTo(1);
 	});
+
+	it("turns down a meshopt view asking for more than its bytes could hold", async () => {
+		let decoded = false;
+		const json = {
+			asset: { version: "2.0" },
+			extensionsUsed: ["EXT_meshopt_compression"],
+			bufferViews: [
+				{
+					buffer: 0,
+					byteLength: 16,
+					extensions: {
+						EXT_meshopt_compression: {
+							buffer: 0,
+							byteLength: 16,
+							byteStride: 4,
+							count: 500_000_000,
+							mode: "ATTRIBUTES",
+						},
+					},
+				},
+			],
+		};
+		const unpack = unpackGltf(json as never, new Uint8Array(16), {
+			...decoders,
+			meshopt: async () =>
+				({
+					decodeGltfBuffer: () => void (decoded = true),
+				}) as unknown as typeof MeshoptDecoder,
+		});
+		await expect(unpack).rejects.toThrow();
+		expect(decoded).toBe(false);
+	});
 });
