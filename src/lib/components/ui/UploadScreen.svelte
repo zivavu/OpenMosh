@@ -36,6 +36,7 @@
 	import { isMeshFile, MESH_ACCEPT } from "../../mesh";
 	import { isSvgFile } from "../../media/svg";
 	import { withMediaType } from "../../media/file-type";
+	import { pastedFiles } from "../../media/paste";
 	import {
 		diagnoseModel,
 		isOtherModelFile,
@@ -177,11 +178,11 @@
 	};
 	const DROP_HINTS: Record<UploadMode, string> = {
 		single:
-			"or drop an image, a video or a project file anywhere on this panel",
+			"or drop an image, a video or a project file anywhere on this panel, or paste a copied image",
 		sequence:
-			"or drop images, videos, 3D models or a project file anywhere on this panel",
+			"or drop images, videos, 3D models or a project file anywhere on this panel, or paste a copied image",
 		slideshow:
-			"or drop images, videos or a project file anywhere on this panel",
+			"or drop images, videos or a project file anywhere on this panel, or paste a copied image",
 	};
 
 	/** Every mode's hints sit in the panel at once, the unpicked ones hidden, so the
@@ -586,8 +587,16 @@
 	function onDrop(e: DragEvent) {
 		dragging = false;
 		const files = e.dataTransfer?.files;
-		if (!files || files.length === 0) return;
+		if (files) takeFiles(files);
+	}
 
+	function onPaste(e: ClipboardEvent) {
+		if (generateOpen || storageOpen) return;
+		takeFiles(pastedFiles(e));
+	}
+
+	function takeFiles(files: FileList | File[]) {
+		if (files.length === 0) return;
 		// A project file opens the Editor whatever mode is showing.
 		const all = Array.from(files, withMediaType);
 		const project = all.find(isProjectFile);
@@ -706,7 +715,7 @@
 	});
 </script>
 
-<svelte:window onkeydown={onModeKey} />
+<svelte:window onkeydown={onModeKey} onpaste={onPaste} />
 
 <DemoBackground
 	{warmCanvas}
