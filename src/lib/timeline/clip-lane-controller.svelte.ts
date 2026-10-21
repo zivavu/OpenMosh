@@ -105,8 +105,9 @@ export class ClipLaneController<
 	scrubbing = $state(false);
 	/** Lane the delete button is asking about; null when nothing is pending. */
 	lanePendingDelete = $state<L | null>(null);
-	/** The lane geometry, for hit-testing against the track. Every lane shares one. */
-	trackEl: HTMLElement | undefined;
+	/** Every lane's track, for hit-testing: they share one span, so any mounted one
+	 * will do, and removing a lane mustn't leave the rest without one. */
+	readonly #trackEls = new Set<HTMLElement>();
 
 	/** Joins picked by a box or shift-click, by the id of the clip to their right. */
 	selectedJoins = $state<string[]>([]);
@@ -222,8 +223,9 @@ export class ClipLaneController<
 	/** Over the track rather than the row's gutter. A pixel of slack either side, since
 	 * a box edge between two whole pixels would refuse a drop. */
 	overTrack(clientX: number): boolean {
-		if (!this.trackEl) return false;
-		const rect = this.trackEl.getBoundingClientRect();
+		const [trackEl] = this.#trackEls;
+		if (!trackEl) return false;
+		const rect = trackEl.getBoundingClientRect();
 		return clientX >= rect.left - 1 && clientX <= rect.right + 1;
 	}
 
@@ -353,7 +355,7 @@ export class ClipLaneController<
 	/** Action for a lane's track element: registers it with the shared axis, as a split
 	 * target for S, and its clip edges as snap targets. */
 	laneTrack = (node: HTMLElement, laneId: string) => {
-		this.trackEl = node;
+		this.#trackEls.add(node);
 		const shared = this.stack.lane(node, laneId);
 		const unregister = this.stack.registerSplitter(laneId, (t) =>
 			this.splitAt(laneId, t),
@@ -366,7 +368,7 @@ export class ClipLaneController<
 				shared.destroy();
 				unregister();
 				unsnap();
-				if (this.trackEl === node) this.trackEl = undefined;
+				this.#trackEls.delete(node);
 			},
 		};
 	};

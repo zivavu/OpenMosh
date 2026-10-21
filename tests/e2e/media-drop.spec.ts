@@ -131,6 +131,19 @@ test.describe("dropping onto empty space", () => {
 			first.start <= second.start ? [first, second] : [second, first];
 		expect(left.end).toBeLessThanOrEqual(right.start + 0.01);
 	});
+
+	test("still lands after the newest lane is deleted", async ({ page }) => {
+		await openLayers(page);
+		await page.getByRole("button", { name: "Media lane" }).click();
+		const lanes = page.locator('.tl-row[data-lane-kind="media"]');
+		await expect(lanes).toHaveCount(3);
+		await lanes.nth(2).locator(".tl-gutter").hover();
+		await lanes.nth(2).getByTitle("Delete this lane").click();
+		await expect(lanes).toHaveCount(2);
+
+		await dragSourceToLane(page, { thumb: 1, lane: LAYER, fraction: 0.3 });
+		await expect(mediaClips(page, LAYER)).toHaveCount(1);
+	});
 });
 
 test("dropping onto a clip retargets it instead of cutting a new one", async ({
