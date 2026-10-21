@@ -170,6 +170,14 @@ describe("rotateFromHandle", () => {
 		expect(rotateFromHandle(from, g, 300, 150, false)).toBeCloseTo(-100, 6);
 	});
 
+	test("settles on a quarter turn it comes close to", () => {
+		expect(rotateFromHandle(FROM, g, 300, 145, false)).toBe(90);
+		expect(rotateFromHandle(FROM, g, 200, 250, false)).toBe(180);
+		expect(rotateFromHandle(FROM, g, 100, 155, false)).toBe(-90);
+		expect(rotateFromHandle(FROM, g, 205, 50, false)).toBe(0);
+		expect(rotateFromHandle(FROM, g, 300, 130, false)).toBeCloseTo(78.69, 2);
+	});
+
 	test("snaps with Shift", () => {
 		expect(rotateFromHandle(FROM, g, 300, 140, true)).toBe(90);
 		expect(rotateFromHandle(FROM, g, 300, 130, true)).toBe(75);

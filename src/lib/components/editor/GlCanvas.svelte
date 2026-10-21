@@ -1429,7 +1429,7 @@
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div
 					class="layer-rotate"
-					title="Drag to rotate (Shift snaps to 15°). Double-click to reset."
+					title="Drag to rotate. It sticks at right angles, and Shift snaps to 15°. Double-click to reset."
 					onpointerdown={startRotate}
 					ondblclick={resetRotation}
 				></div>
