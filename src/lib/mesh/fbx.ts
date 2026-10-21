@@ -56,6 +56,9 @@ export async function readTree(bytes: Uint8Array): Promise<FbxNode | null> {
 			throw new Error("FBX array larger than its data");
 		}
 		const decode = (data: Uint8Array) => {
+			// Inflated bytes, not the count, are what's there to size from.
+			if (data.byteLength < size)
+				throw new Error("FBX array larger than its data");
 			const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
 			switch (type) {
 				case "d":

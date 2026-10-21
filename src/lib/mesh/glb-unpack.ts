@@ -27,6 +27,10 @@ const browserDecoders: Decoders = {
 	}),
 };
 
+/** The most meshopt expands its input: a v1 vertex block of up to 256 elements can
+ * keep a quarter of a control byte per byte of stride and nothing else. */
+const MESHOPT_MAX_RATIO = 1024;
+
 function once<T>(load: () => Promise<T>): () => Promise<T> {
 	let pending: Promise<T> | null = null;
 	return () =>
@@ -51,12 +55,22 @@ export async function unpackGltf(
 			const ext = view.extensions?.[MESHOPT];
 			if (!ext) return;
 			const start = ext.byteOffset ?? 0;
-			const target = new Uint8Array(ext.count * ext.byteStride);
+			const source = bin.subarray(start, start + ext.byteLength);
+			// The count is only a claim; what meshopt can expand the bytes present to is the limit.
+			const size = ext.count * ext.byteStride;
+			if (
+				!Number.isSafeInteger(size) ||
+				size < 0 ||
+				size > source.length * MESHOPT_MAX_RATIO
+			) {
+				throw new Error("Meshopt view larger than its data can hold");
+			}
+			const target = new Uint8Array(size);
 			meshopt.decodeGltfBuffer(
 				target,
 				ext.count,
 				ext.byteStride,
-				bin.subarray(start, start + ext.byteLength),
+				source,
 				ext.mode,
 				ext.filter,
 			);

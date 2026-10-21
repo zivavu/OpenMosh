@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, spyOn } from "bun:test";
 import { deflateSync } from "node:zlib";
 import { readTree } from "./fbx";
 
@@ -82,5 +82,18 @@ describe("readTree arrays", () => {
 			fbx([arrayNode(27, 0xffffffff, new Uint8Array(8))]),
 		);
 		expect(tree).toBeNull();
+	});
+
+	it("sizes a compressed array by what it inflates to, not by its count", async () => {
+		const from = spyOn(Float64Array, "from");
+		try {
+			const tree = await readTree(
+				fbx([arrayNode(27, 60_000_000, new Uint8Array(8))]),
+			);
+			expect(tree).toBeNull();
+			expect(from).not.toHaveBeenCalled();
+		} finally {
+			from.mockRestore();
+		}
 	});
 });
