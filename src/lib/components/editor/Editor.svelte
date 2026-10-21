@@ -440,25 +440,33 @@
 
 	// The file the current player was built for; plain, so the proxy swap can compare identity.
 	let playerFile: File | null = null;
+	/** The last player as its effect tore down; the teardown runs before the next body. */
+	let lastPlayer: {
+		time: number;
+		playing: boolean;
+		width: number;
+		height: number;
+	} | null = null;
 
 	$effect(() => {
 		const current = file;
 		if (!isVideo || !current) return;
 		const proxy = singleProxy.forFile(current);
 		const previewFile = proxy ?? current;
+		// Same file means only the decoder changed: the proxy landed, or was turned off.
+		const swap = playerFile === current;
+		const last = swap ? lastPlayer : null;
 		// Read untracked: tracking would rebuild the player.
 		const media = proxy
 			? untrack(() => ({
-					width: previewPlayer?.width ?? naturalWidth ?? 0,
-					height: previewPlayer?.height ?? naturalHeight ?? 0,
+					width: last?.width ?? naturalWidth ?? 0,
+					height: last?.height ?? naturalHeight ?? 0,
 					duration: videoDuration,
 				}))
 			: undefined;
-		// Same file means only the decoder changed: the proxy landed, or was turned off.
-		const swap = playerFile === current;
 		const resume = untrack(() => ({
-			time: previewPlayer?.currentTime ?? 0,
-			playing: previewPlayer?.playing ?? false,
+			time: last?.time ?? 0,
+			playing: last?.playing ?? false,
 			spanStart: videoSpanStart,
 			spanEnd: videoSpanEnd,
 			recordDuration: recordDuration,
@@ -498,6 +506,14 @@
 		});
 		return () => {
 			cancelled = true;
+			// Still building: the one before it is the latest state there is.
+			if (player)
+				lastPlayer = {
+					time: player.currentTime,
+					playing: player.playing,
+					width: player.width,
+					height: player.height,
+				};
 			player?.dispose();
 			previewPlayer = null;
 		};
