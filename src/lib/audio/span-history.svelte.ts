@@ -5,6 +5,7 @@
  */
 
 import { untrack } from "svelte";
+import { sharedEditSeq } from "../editor/edit-clock";
 import type { UndoSource } from "../editor/undo-router";
 import { createSnapshotHistory } from "../timeline/snapshot-history.svelte";
 
@@ -45,7 +46,9 @@ export function createSpanHistory(audio: SpanOwner) {
 	function pushMoved(before: Span) {
 		if (before.start === audio.spanStart && before.end === audio.spanEnd)
 			return;
-		history.push(before);
+		// Moved again by the same edit, a drag growing the project: its first entry holds.
+		const seq = sharedEditSeq();
+		if (seq === null || history.undoSeq !== seq) history.push(before);
 		atRest = live();
 	}
 

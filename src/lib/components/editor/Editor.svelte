@@ -2644,6 +2644,7 @@
 		const before = mixer.duration;
 		if (drives && lanes.length === 0 && length > before) {
 			lengthHistory.push(before);
+			const spanBefore = { start: mixer.spanStart, end: mixer.spanEnd };
 			next = {
 				...next,
 				lanes: next.lanes.map((l) =>
@@ -2655,6 +2656,7 @@
 				),
 			};
 			mixer.setDuration(length);
+			mixSpanHistory.pushMoved(spanBefore);
 		}
 		const duration = mixer.duration;
 		const start = Math.min(at, Math.max(0, duration - MIN_CLIP_LENGTH));
@@ -2865,7 +2867,9 @@
 		if (lengthHistory.undoSeq !== seq) {
 			lengthHistory.push(mixer.duration, seq === null ? "grow" : undefined);
 		}
+		const spanBefore = { start: mixer.spanStart, end: mixer.spanEnd };
 		mixer.setDuration(length);
+		mixSpanHistory.pushMoved(spanBefore);
 	}
 
 	/** `by` seconds go in before everything (negative takes them back out), and the
@@ -2904,6 +2908,7 @@
 		const at = (t: number) => Math.min(mixer.duration, Math.max(0, t + by));
 		mixer.spanStart = whole ? 0 : at(span.start);
 		mixer.spanEnd = whole ? mixer.duration : at(span.end);
+		mixSpanHistory.pushMoved(span);
 		if (repeatSpan) {
 			repeatSpan = { start: at(repeatSpan.start), end: at(repeatSpan.end) };
 		}
