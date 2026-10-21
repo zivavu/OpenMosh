@@ -168,6 +168,25 @@ describe("a looping mix", () => {
 		dispose();
 	});
 
+	it("picks the loop up where it has got to after frames stop for a while", () => {
+		const { mixer, dispose } = looping({ start: 2, end: 3 });
+		mixer.play();
+		const anchor = ctx.sources[0].startedAt!;
+		const before = ctx.sources.length;
+		// A hidden tab: no frames for several passes.
+		ctx.currentTime = anchor + 5.25;
+		frame();
+		expect(mixer.currentTime).toBeCloseTo(2.25, 5);
+		const fresh = ctx.sources.slice(before);
+		expect(fresh.length).toBeGreaterThan(0);
+		// Nothing laid out in the past, where it would all start at once.
+		for (const s of fresh) {
+			expect(s.startedAt!).toBeGreaterThanOrEqual(ctx.currentTime);
+		}
+		mixer.pause();
+		dispose();
+	});
+
 	it("plays straight to the project's end when it doesn't loop", () => {
 		const { mixer, dispose } = looping({ start: 2, end: 3 });
 		mixer.loop = false;

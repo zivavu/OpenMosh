@@ -85,6 +85,8 @@ export class SequenceMixer {
 	/** performance.now() at the anchor; the clock falls back on it if the context stalls. */
 	#anchorWall = 0;
 	#stopFrame: (() => void) | null = null;
+	/** Turns the loop while the tab is hidden, where frames stop. */
+	#hiddenTick: ReturnType<typeof setInterval> | null = null;
 	/** Buffers that were missing when the playing mix was scheduled. */
 	#missing = new Set<string>();
 	#passes: LoopPasses | null = null;
@@ -262,6 +264,10 @@ export class SequenceMixer {
 		this.#stopFrame?.();
 		// Read phase: the clock moves before the frame that shows it draws.
 		this.#stopFrame = onFrame("read", this.#frame);
+		// An audible tab's timers keep running; its frames don't.
+		this.#hiddenTick = setInterval(() => {
+			if (typeof document !== "undefined" && document.hidden) this.#frame();
+		}, 250);
 	}
 
 	pause(): void {
@@ -274,6 +280,8 @@ export class SequenceMixer {
 		this.playing = false;
 		this.#stopFrame?.();
 		this.#stopFrame = null;
+		if (this.#hiddenTick) clearInterval(this.#hiddenTick);
+		this.#hiddenTick = null;
 		stopNodes(this.#nodes);
 		this.#nodes = [];
 		this.#passes = null;
@@ -363,6 +371,12 @@ export class SequenceMixer {
 			this.currentTime = Math.min(this.duration, this.#now());
 			return true;
 		}
+		const length = passes.end - passes.start;
+		if (ctx.currentTime >= passes.endsAt + length) {
+			// No turn for longer than the queued pass: lay the loop again from where it's got to.
+			this.seek(passes.start + ((ctx.currentTime - passes.endsAt) % length));
+			return true;
+		}
 		if (ctx.currentTime >= passes.endsAt) {
 			// The next pass is already sounding; move the clock onto it, and queue another.
 			stopNodes(passes.current);
@@ -370,7 +384,7 @@ export class SequenceMixer {
 			this.#anchorCtx = passes.endsAt;
 			this.#anchorWall =
 				performance.now() - (ctx.currentTime - passes.endsAt) * 1000;
-			const endsAt = passes.endsAt + (passes.end - passes.start);
+			const endsAt = passes.endsAt + length;
 			const next = this.#schedule(passes.start, passes.end, endsAt);
 			this.#passes = { ...passes, endsAt, current: passes.next, next };
 			this.#nodes = [...passes.next, ...next];
