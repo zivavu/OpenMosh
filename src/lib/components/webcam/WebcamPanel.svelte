@@ -239,18 +239,20 @@
 			const fixed = $state.snapshot(shape);
 			const want = Number(beatCount);
 			const step = Number(every);
-			const files: File[] = [];
+			// In the order taken; a still that failed leaves its slot empty and is retaken.
+			const files: (File | undefined)[] = [];
 			const startedAt = performance.now();
 			let lastSlot: number | null = null;
 			snapped = 0;
 			let pending = 0;
+			let taken = 0;
 			let finished = false;
 			const finish = () => {
 				if (finished || pending > 0) return;
 				finished = true;
 				onTransport?.(false);
 				phase = "saving";
-				onSnaps?.(files);
+				onSnaps?.(files.filter((f): f is File => !!f));
 				onClose();
 			};
 			const tick = () => {
@@ -259,18 +261,21 @@
 					(performance.now() - startedAt) / 1000 / FALLBACK_BEAT_SEC;
 				const slot = Math.floor(beat / step);
 				if (lastSlot === null) lastSlot = slot - 1;
-				if (slot > lastSlot && files.length + pending < want) {
+				if (slot > lastSlot && snapped + pending < want) {
 					lastSlot = slot;
-					const index = files.length + pending;
+					const index = taken++;
 					pending++;
 					void snapStill(videoEl!, fixed, `snap-${index + 1}.png`).then((f) => {
 						pending--;
-						if (f) files[index] = f;
-						snapped = files.filter(Boolean).length;
-						if (files.length + pending >= want) finish();
+						if (f) {
+							files[index] = f;
+							snapped++;
+						}
+						if (snapped + pending >= want) finish();
 					});
 				}
-				if (files.length + pending < want) rafId = requestAnimationFrame(tick);
+				// Until it's done, not until enough are under way: one may fail and need retaking.
+				if (!finished) rafId = requestAnimationFrame(tick);
 			};
 			rafId = requestAnimationFrame(tick);
 		});
