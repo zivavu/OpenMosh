@@ -71,6 +71,13 @@
 	/** Cleared by any edit, so the confirmation only describes the lane as it
 	 * stands. */
 	let applied = $state(false);
+	/** Changed since it was last seeded or applied, so reopening mustn't reseed it. */
+	let edited = false;
+
+	function markEdited() {
+		applied = false;
+		edited = true;
+	}
 
 	let panelEl = $state<HTMLElement | undefined>(undefined);
 	let linesEl = $state<HTMLElement | undefined>(undefined);
@@ -121,7 +128,8 @@
 	/** Open onto whatever the lyrics lane already holds, so the modal and timeline
 	 * show the same lines, including timings nudged by dragging clips. */
 	function seedFromTimeline() {
-		if (phase === "sync" && !allTimed) return;
+		// Work not applied yet stays as it was left, finished or not.
+		if (edited) return;
 		if (!existing || existing.lines.length === 0) return;
 		lyricsText = existing.lines.join("\n");
 		timings = [...existing.timings];
@@ -140,7 +148,7 @@
 		if (n === 0) return;
 		timings = new Array(n).fill(null);
 		phase = "sync";
-		applied = false;
+		markEdited();
 		onSeek(spanStart);
 		onPlay();
 	}
@@ -160,7 +168,7 @@
 		const t = getCurrentTime ? getCurrentTime() : currentTime;
 		const floor = earliestFor(activeIndex);
 		timings[activeIndex] = Math.min(spanEnd, Math.max(floor, t));
-		applied = false;
+		markEdited();
 		if (activeIndex + 1 >= lines.length) onPause();
 	}
 
@@ -168,7 +176,7 @@
 		if (activeIndex === 0) return;
 		const i = activeIndex - 1;
 		timings[i] = null;
-		applied = false;
+		markEdited();
 		const prev = i > 0 ? (timings[i - 1] ?? spanStart) : spanStart;
 		onSeek(Math.max(spanStart, prev));
 	}
@@ -179,7 +187,7 @@
 		if (i < 0 || i >= lines.length) return;
 		const anchor = timings[i] ?? timings[i - 1] ?? spanStart;
 		for (let k = i; k < timings.length; k++) timings[k] = null;
-		applied = false;
+		markEdited();
 		onSeek(Math.max(spanStart, earliestFor(i), anchor - LEAD_IN));
 	}
 
@@ -189,7 +197,7 @@
 			if (t != null)
 				timings[i] = Math.min(spanEnd, Math.max(spanStart, t + delta));
 		}
-		applied = false;
+		markEdited();
 	}
 
 	function togglePlay() {
@@ -210,6 +218,7 @@
 			),
 		);
 		applied = true;
+		edited = false;
 	}
 
 	function onKeydown(e: KeyboardEvent) {
@@ -293,7 +302,7 @@
 				oninput={(e) => {
 					lyricsText = (e.currentTarget as HTMLTextAreaElement).value;
 					timings = [];
-					applied = false;
+					markEdited();
 				}}></textarea>
 			<p class="hint">
 				{lines.length > 0
