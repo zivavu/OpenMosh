@@ -51,8 +51,8 @@ void main() {
   if (u_skinned) {
     mat4 m = a_weights.x * bone(a_joints.x) + a_weights.y * bone(a_joints.y)
            + a_weights.z * bone(a_joints.z) + a_weights.w * bone(a_joints.w);
-    pos = (m * vec4(a_position, 1.0)).xyz;
-    nrm = mat3(m) * a_normal;
+    pos = (m * vec4(pos, 1.0)).xyz;
+    nrm = mat3(m) * nrm;
   }
   // Model files are y up with their front facing +z; the frame is y down, looking +z.
   vec3 flip = vec3(1.0, -1.0, -1.0);
