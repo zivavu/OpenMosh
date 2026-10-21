@@ -1,5 +1,12 @@
 /** Camera access shared by every mode's webcam entry. */
 
+import {
+	PLAIN_SHAPE,
+	shapeStream,
+	type CameraShape,
+	type ShapedStream,
+} from "./shape";
+
 export interface CameraInfo {
 	deviceId: string;
 	label: string;
@@ -67,8 +74,10 @@ function cameraErrorMessage(e: unknown): string {
 const LIVE_FILE_TYPE = "application/x-openmosh-live";
 
 interface LiveEntry {
-	stream: MediaStream;
+	raw: MediaStream;
 	deviceId: string | null;
+	shape: CameraShape;
+	shaped: ShapedStream | null;
 }
 
 const liveEntries = new WeakMap<File, LiveEntry>();
@@ -76,9 +85,10 @@ const liveEntries = new WeakMap<File, LiveEntry>();
 export function createLiveFile(
 	stream: MediaStream,
 	deviceId: string | null,
+	shape: CameraShape = PLAIN_SHAPE,
 ): File {
 	const file = new File([], "Webcam", { type: LIVE_FILE_TYPE });
-	liveEntries.set(file, { stream, deviceId });
+	liveEntries.set(file, { raw: stream, deviceId, shape, shaped: null });
 	return file;
 }
 
@@ -86,17 +96,24 @@ export function isLiveFile(file: File | null | undefined): boolean {
 	return !!file && file.type === LIVE_FILE_TYPE;
 }
 
-/** The camera behind a live file, re-opened if it was stopped meanwhile. */
+/** The camera behind a live file, shaped, re-opened if it was stopped meanwhile. */
 export async function liveStreamOf(file: File): Promise<MediaStream | null> {
 	const entry = liveEntries.get(file);
 	if (!entry) return null;
-	if (entry.stream.active) return entry.stream;
-	entry.stream = await openCamera(entry.deviceId);
-	return entry.stream;
+	if (entry.shaped?.stream.active && entry.raw.active) {
+		return entry.shaped.stream;
+	}
+	entry.shaped?.release();
+	if (!entry.raw.active) entry.raw = await openCamera(entry.deviceId);
+	entry.shaped = await shapeStream(entry.raw, entry.shape);
+	return entry.shaped.stream;
 }
 
 /** Release the camera behind a live file. The file can still re-open it. */
 export function stopLiveFile(file: File) {
 	const entry = liveEntries.get(file);
-	if (entry) stopStream(entry.stream);
+	if (!entry) return;
+	entry.shaped?.release();
+	entry.shaped = null;
+	stopStream(entry.raw);
 }

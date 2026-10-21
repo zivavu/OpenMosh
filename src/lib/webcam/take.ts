@@ -1,3 +1,5 @@
+import { drawShaped, type CameraShape } from "./shape";
+
 /** A webcam take: the camera's frames straight into a WebM, in real time. mediabunny
  * writes a proper header and cues, unlike MediaRecorder, whose output reports no duration. */
 export interface Take {
@@ -10,11 +12,17 @@ export interface Take {
 
 const TAKE_BITRATE = 8_000_000;
 
-export async function startTake(stream: MediaStream): Promise<Take> {
+/** `size` for a track that may not report its own, like a canvas's. */
+export async function startTake(
+	stream: MediaStream,
+	size?: { width: number; height: number },
+): Promise<Take> {
 	const mb = await import("mediabunny");
 	const track = stream.getVideoTracks()[0];
 	if (!track) throw new Error("The camera gave no video.");
-	const { width = 1280, height = 720 } = track.getSettings();
+	const settings = track.getSettings();
+	const width = size?.width ?? settings.width ?? 1280;
+	const height = size?.height ?? settings.height ?? 720;
 	const format = new mb.WebMOutputFormat();
 	const containerCodecs = format.getSupportedVideoCodecs();
 	const codec = await mb.getFirstEncodableVideoCodec(
@@ -65,18 +73,14 @@ export async function startTake(stream: MediaStream): Promise<Take> {
 	};
 }
 
-/** One still off the camera, as a PNG file. */
+/** One still off the camera, shaped, as a PNG file. */
 export async function snapStill(
 	video: HTMLVideoElement,
+	shape: CameraShape,
 	name = `snap-${Date.now()}.png`,
 ): Promise<File | null> {
-	const w = video.videoWidth;
-	const h = video.videoHeight;
-	if (!w || !h) return null;
 	const canvas = document.createElement("canvas");
-	canvas.width = w;
-	canvas.height = h;
-	canvas.getContext("2d")!.drawImage(video, 0, 0, w, h);
+	if (!drawShaped(canvas, canvas.getContext("2d")!, video, shape)) return null;
 	const blob = await new Promise<Blob | null>((r) =>
 		canvas.toBlob(r, "image/png"),
 	);
