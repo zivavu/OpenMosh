@@ -131,7 +131,11 @@ export class SlideshowFrameDriver {
 		// comes back shows where the track has got to.
 		return sampler.at(time, this.#waitForFrames).then((frame) => {
 			if (!frame) return;
-			if (!this.#disposed) this.#getRenderer().updateSourceFrame(frame);
+			// Landed after the cut: the slide on screen now is another one's.
+			const current = this.#currentSlideId === slide.id;
+			if (!this.#disposed && current) {
+				this.#getRenderer().updateSourceFrame(frame);
+			}
 			frame.close();
 		});
 	}
