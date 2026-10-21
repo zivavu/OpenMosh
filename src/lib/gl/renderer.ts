@@ -333,6 +333,7 @@ export class GlRenderer {
 			textures: [WebGLTexture, WebGLTexture];
 			fbos: [WebGLFramebuffer, WebGLFramebuffer];
 			idx: number;
+			hdr: boolean;
 		}
 	>();
 	private passthrough: CompiledProgram;
@@ -1295,7 +1296,33 @@ export class GlRenderer {
 		this.imgH = height;
 		if (this.canvas.width !== width) this.canvas.width = width;
 		if (this.canvas.height !== height) this.canvas.height = height;
+		// A still save renders one frame at output size, so effects that build up over
+		// frames (Motion Mask's background) must keep their history through the resize.
+		const history = new Map(this.fxFeedback);
+		this.fxFeedback.clear();
 		this.setupPingPong();
+		this.rescaleFxFeedback(history);
+	}
+
+	private rescaleFxFeedback(history: typeof this.fxFeedback) {
+		const gl = this.gl;
+		for (const [id, old] of history) {
+			const make = () =>
+				old.hdr
+					? this.createHdrTexture(this.imgW, this.imgH, false)
+					: this.createTexture(this.imgW, this.imgH);
+			const textures: [WebGLTexture, WebGLTexture] = [make(), make()];
+			const fbos = this.createFBOPair(textures);
+			const prev = old.textures[old.idx];
+			gl.bindTexture(gl.TEXTURE_2D, prev);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+			this.drawPass(this.passthrough, fbos[0], prev, 1.0, 0);
+			this.drawPass(this.passthrough, fbos[1], prev, 1.0, 0);
+			this.deleteTexturePair(old.textures);
+			this.deleteFBOPair(old.fbos);
+			this.fxFeedback.set(id, { textures, fbos, idx: 0, hdr: old.hdr });
+		}
 	}
 
 	render(
@@ -2065,7 +2092,7 @@ export class GlRenderer {
 					: this.createTexture(this.imgW, this.imgH);
 			const textures: [WebGLTexture, WebGLTexture] = [make(), make()];
 			const fbos = this.createFBOPair(textures);
-			pair = { textures, fbos, idx: 0 };
+			pair = { textures, fbos, idx: 0, hdr };
 			this.fxFeedback.set(instanceId, pair);
 			this.drawPass(this.passthrough, fbos[0], seedTex, 1.0, time);
 			this.drawPass(this.passthrough, fbos[1], seedTex, 1.0, time);
