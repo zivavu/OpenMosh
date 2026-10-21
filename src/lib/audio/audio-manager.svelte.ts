@@ -29,6 +29,8 @@ export class AudioManager {
 	#audioEl = $state<HTMLAudioElement | undefined>(undefined);
 
 	trackDuration = $state(0);
+	/** The file `trackDuration` was measured on; a swap keeps the last song's until it differs. */
+	durationFile = $state<File | null>(null);
 	trackCurrentTime = $state(0);
 	spanStart = $state(0);
 	spanEnd = $state(0);
@@ -150,6 +152,7 @@ export class AudioManager {
 		const d = this.#audioEl?.duration;
 		if (typeof d === "number" && Number.isFinite(d)) {
 			this.trackDuration = d;
+			this.durationFile = this.trackFile;
 			if (this.pendingSpan) {
 				this.spanStart = Math.max(0, Math.min(this.pendingSpan.start, d));
 				this.spanEnd = Math.max(0, Math.min(this.pendingSpan.end, d));
@@ -294,6 +297,7 @@ export class AudioManager {
 		this.autoplayOnLoad = false;
 		this.trackFile = null;
 		this.trackDuration = 0;
+		this.durationFile = null;
 		this.trackCurrentTime = 0;
 		this.spanStart = 0;
 		this.pastSpan = false;

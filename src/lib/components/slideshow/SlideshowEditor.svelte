@@ -2070,6 +2070,7 @@
 					bind:selectedSegmentId
 					bind:undoSource={segmentUndo}
 					onSeek={seekMaster}
+					durationKnown={audio.durationFile === audio.trackFile}
 				/>
 			{/if}
 			{#if audio.trackFile && audio.trackDuration > 0}
