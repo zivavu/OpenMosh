@@ -24,8 +24,17 @@ export class VideoPreviewPlayer {
 	readonly frameWidth: number;
 	readonly frameHeight: number;
 
+	#loop = true;
 	/** Whether looping at the span end is enabled (set by the editor). */
-	loop = true;
+	get loop(): boolean {
+		return this.#loop;
+	}
+	set loop(on: boolean) {
+		if (on === this.#loop) return;
+		this.#loop = on;
+		// The sound's own loop or stop was planned for the old setting.
+		if (this.#audioSrc) this.#startAudio();
+	}
 
 	#queue: FrameQueue;
 	#spanStart = 0;
@@ -152,8 +161,10 @@ export class VideoPreviewPlayer {
 	}
 
 	setSpan(start: number, end: number) {
+		if (start === this.#spanStart && end === this.#spanEnd) return;
 		this.#spanStart = start;
 		this.#spanEnd = end;
+		if (this.#audioSrc) this.#startAudio();
 	}
 
 	/** Muted while an explicit music track overrides the video's own audio. */
@@ -229,7 +240,10 @@ export class VideoPreviewPlayer {
 		const t = this.#mediaTimeNow();
 		if (this.playing && t >= this.#end()) {
 			if (this.loop) {
-				this.#setPosition(this.#spanStart);
+				// A sound looping at the span end has already turned over by itself; one that
+				// ran on to the video's end loops there, and has to come back to the span.
+				const turned = !!this.#audioSrc?.loop && !this.#pastSpan;
+				this.#setPosition(this.#spanStart, !turned);
 			} else {
 				this.playing = false;
 				this.#baseMedia = this.#end();
@@ -241,14 +255,14 @@ export class VideoPreviewPlayer {
 		this.currentTime = Math.min(t, this.duration);
 	}
 
-	#setPosition(t: number) {
+	#setPosition(t: number, restartAudio = true) {
 		this.#pastSpan = this.#isPastSpan(t);
 		this.#baseMedia = t;
 		this.#baseWall = performance.now();
 		this.currentTime = t;
 		this.#shown = false;
 		this.#queue.start(t);
-		if (this.playing) this.#startAudio();
+		if (this.playing && restartAudio) this.#startAudio();
 	}
 
 	#startAudio() {
@@ -272,7 +286,19 @@ export class VideoPreviewPlayer {
 		node.buffer = this.#audioBuffer;
 		node.playbackRate.value = this.#speed;
 		node.connect(this.#audioDest);
+		// It loops or stops at the span end by itself: a hidden tab runs no frames to tell it.
+		const end = this.#end();
+		if (this.#loop) {
+			node.loop = true;
+			node.loopStart = Math.min(this.#spanStart, end);
+			node.loopEnd = end;
+		}
 		node.start(0, Math.max(0, t));
+		if (!this.#loop) {
+			node.stop(
+				this.#audioCtx.currentTime + Math.max(0, end - t) / this.#speed,
+			);
+		}
 		this.#audioSrc = node;
 	}
 
