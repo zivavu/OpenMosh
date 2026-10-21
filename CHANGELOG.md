@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.9.24](https://github.com/zivavu/OpenMosh/compare/v0.9.23...v0.9.24) (2026-10-21)
+
+You can paste a copied image straight into the editor or the upload screen, and the rotate handle settles on right angles as you drag past them. The rest is fixes. Ctrl+Z takes back a project's growth along with the drag or song that caused it, and no longer gains empty steps from clip clicks or webcam takes. Videos keep playing where they were when their preview copy arrives, sound loops and stops at the span end in a background tab, 3D models play blend shapes and draw even when built from thousands of parts, and Motion Mask no longer saves a dark picture.
+
+Saved projects open as before. Tunnel at zero Decay now fades its trail slowly instead of building up to white, so a project using it looks different. Text you removed from a single edit stays removed after a reload.
+
+
+### Added
+
+* Paste a copied image to add it ([8b845e5](https://github.com/zivavu/OpenMosh/commit/8b845e5bb496b1364ca2f4d76b79180f2d3f0e87))
+* Rotate handles stick at right angles ([80c766a](https://github.com/zivavu/OpenMosh/commit/80c766a28a7d371227c85cf8eb06894e6bd0170a))
+
+
+### Fixed
+
+* Undo a project's growth and the span along with the drag or song that made it longer ([d03c2bb](https://github.com/zivavu/OpenMosh/commit/d03c2bb82b9c8091ec830b2464c091ae2e2f244d), [910de1d](https://github.com/zivavu/OpenMosh/commit/910de1dc01a52b175527b3f4511b6eb640f6f597))
+* Stop clip clicks and webcam takes from leaving stray Ctrl+Z steps, and slideshow undo from putting the last song's cuts or text on a new song ([5543efd](https://github.com/zivavu/OpenMosh/commit/5543efdb3c5091b9b5f7b77664a7cd5a82959c85), [fa6e09d](https://github.com/zivavu/OpenMosh/commit/fa6e09d6b66d2a6215b4f510a2cbca014d046ec8), [818332b](https://github.com/zivavu/OpenMosh/commit/818332bfdd7dd730600693d740d09f90161bbcb3))
+* Keep videos playing where they were when their preview copy lands, and stop making a preview copy you turned off ([2f10ded](https://github.com/zivavu/OpenMosh/commit/2f10ded9dd5625a64b9888eedbd1bebf1d3c7168), [9798e32](https://github.com/zivavu/OpenMosh/commit/9798e324c1f74beb42dc57a0c63c8d3e873b75b1), [f18b62b](https://github.com/zivavu/OpenMosh/commit/f18b62ba688c27d554f98afc63dca2336ff90c7d))
+* Keep sound looping, and stopping at the span end, in a background tab ([99f8e9b](https://github.com/zivavu/OpenMosh/commit/99f8e9b7b170e0621bc41bf816e12ecd3e9a1a5f), [fba2f94](https://github.com/zivavu/OpenMosh/commit/fba2f948c5d5264947b63cfcad62566af4673b1b))
+* Play blend shapes on 3D models, draw ones built from thousands of parts, and turn down compressed ones that claim more data than they hold ([b6227c9](https://github.com/zivavu/OpenMosh/commit/b6227c9d77b1dca5f79487be529f01548f0a86b5), [f04d160](https://github.com/zivavu/OpenMosh/commit/f04d16042ba19dd6f5952daaa970e899369a2e51), [a7146d3](https://github.com/zivavu/OpenMosh/commit/a7146d340581a82040afd022f457a87b33713fea))
+* Draw generated images again after the graphics card resets, and stop a crafted one from using hundreds of MB ([c7e34b9](https://github.com/zivavu/OpenMosh/commit/c7e34b93497859c03d4fb22b6e260c6475923faa), [1709f8d](https://github.com/zivavu/OpenMosh/commit/1709f8d124f92d47371ce7afb7ae3865144a4b3f))
+* Keep text, lyric timings and slideshow cuts where you left them: removed single-mode text stays gone, a dropped song starts without the last one's text, a longer song keeps its slideshow cuts, and the sync dialog keeps unapplied timings ([12b9e35](https://github.com/zivavu/OpenMosh/commit/12b9e352f97bcfd042226a404f5d5c22c00bca89), [44e573a](https://github.com/zivavu/OpenMosh/commit/44e573ae1076297da053b4e0a7e2479baaa36eed), [59f22b3](https://github.com/zivavu/OpenMosh/commit/59f22b3250c0385034a727a131ad719b08cba322), [d5792c1](https://github.com/zivavu/OpenMosh/commit/d5792c1c76170caf6ad106791fe3cd31d67ac67d))
+* Stop Tunnel turning the picture white at zero Decay and Motion Mask saving a dark picture ([6557490](https://github.com/zivavu/OpenMosh/commit/655749068dc941bed1ccfd7d1a3bd5b7ff371326), [678cf1d](https://github.com/zivavu/OpenMosh/commit/678cf1d33f7b4d95cbd3fc50bc7f26bd472deac4))
+* Smaller fixes to the span handles, double-clicking clips, Snap on the beat, media drops and slideshow photos ([b95c7e9](https://github.com/zivavu/OpenMosh/commit/b95c7e93b907785d00c23b695d107401f71b343f), [f467717](https://github.com/zivavu/OpenMosh/commit/f467717457bcb44881ee464c6c15a5e6deed787c), [fe5dc43](https://github.com/zivavu/OpenMosh/commit/fe5dc43f13d49e928e48d883b907118749d1a1f3), [fce6f8a](https://github.com/zivavu/OpenMosh/commit/fce6f8a441dd3feefdb65d0b1cb527c53bf0414f), [cd3297a](https://github.com/zivavu/OpenMosh/commit/cd3297aee9fa229e4eaf87d82abb2d6eb5a1fdf7))
+
 ## [0.9.23](https://github.com/zivavu/OpenMosh/compare/v0.9.22...v0.9.23) (2026-10-21)
 
 You can flip and crop the webcam picture, and the notice on the old open-mosh.vercel.app address now downloads a full backup for you to load on openmosh.com. The rest is fixes. Your work holds up when a read fails or another tab saves, Ctrl+Z covers Clear sources, a detected BPM and a shortened project, and presets and the mosh arrows keep painted Masks, locked effects and your tweaks. Bounced 4K clips export without running out of memory.
