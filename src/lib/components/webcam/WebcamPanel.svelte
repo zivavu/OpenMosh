@@ -1,6 +1,12 @@
 <script lang="ts">
 	import { isInteractiveTarget } from "../../editor/shortcut-target";
-	import { Camera, Circle, Square } from "lucide-svelte";
+	import {
+		Camera,
+		Circle,
+		FlipHorizontal2,
+		FlipVertical2,
+		Square,
+	} from "lucide-svelte";
 	import { onDestroy, onMount } from "svelte";
 	import PanelModal from "../ui/PanelModal.svelte";
 	import {
@@ -11,6 +17,26 @@
 		type CameraInfo,
 	} from "../../webcam/camera";
 	import { snapStill, startTake, type Take } from "../../webcam/take";
+	import {
+		isPlainShape,
+		loadShape,
+		saveShape,
+		shapeLayout,
+		shapeStream,
+		type CameraShape,
+		type ShapedStream,
+	} from "../../webcam/shape";
+	import { FULL_CROP, isFullCrop } from "../../media/source-edit";
+	import {
+		cropCursor as cropCursorFor,
+		dragCrop,
+		edgesAt,
+		grabTolerance,
+		insideCrop,
+		startCropDrag,
+		type CropDrag,
+		type Point,
+	} from "../../media/crop-drag";
 	import ButtonGroup from "../ui/ButtonGroup.svelte";
 
 	/** The one camera overlay, in three shapes: single mode takes the camera as its
@@ -66,6 +92,17 @@
 	let rafId = 0;
 	let countdownTimer: ReturnType<typeof setInterval> | undefined;
 
+	let shape = $state<CameraShape>(loadShape());
+	$effect(() => saveShape($state.snapshot(shape)));
+	/** The take's own copy of the camera, shaped; released when the take ends. */
+	let shaped: ShapedStream | null = null;
+
+	let videoWidth = $state(0);
+	let videoHeight = $state(0);
+	let frameEl = $state<HTMLDivElement | null>(null);
+	let cropDrag: CropDrag | null = null;
+	let cursor = $state("");
+
 	let busy = $derived(phase !== "idle");
 	let title = $derived(
 		mode === "live"
@@ -75,8 +112,9 @@
 				: "Snap on the beat",
 	);
 	let streamSize = $derived.by(() => {
-		const s = stream?.getVideoTracks()[0]?.getSettings();
-		return s ? `${s.width ?? "?"} × ${s.height ?? "?"}` : undefined;
+		if (!videoWidth || !videoHeight) return undefined;
+		const out = shapeLayout(videoWidth, videoHeight, shape);
+		return `${out.width} × ${out.height}`;
 	});
 
 	async function open(id: string | null) {
@@ -122,12 +160,14 @@
 		if (phase === "capturing") onTransport?.(false);
 		take?.cancel();
 		take = null;
+		shaped?.release();
+		shaped = null;
 	}
 
 	function goLive() {
 		if (!stream) return;
 		handedOff = true;
-		onLive?.(createLiveFile(stream, deviceId));
+		onLive?.(createLiveFile(stream, deviceId, $state.snapshot(shape)));
 	}
 
 	/** A count-in, then the transport and the capture together. */
@@ -148,8 +188,23 @@
 	function startRecording() {
 		begin(() => {
 			elapsed = 0;
-			void startTake(stream!)
+			const fixed = $state.snapshot(shape);
+			const size =
+				isPlainShape(fixed) || !videoWidth
+					? undefined
+					: shapeLayout(videoWidth, videoHeight, fixed);
+			void shapeStream(stream!, fixed)
+				.then((s) => {
+					// Closed or failed while the canvas was starting.
+					if (destroyed || phase !== "capturing") {
+						s.release();
+						return null;
+					}
+					shaped = s;
+					return startTake(s.stream, size);
+				})
 				.then((t) => {
+					if (!t) return;
 					take = t;
 					const tick = () => {
 						elapsed = t.elapsed;
@@ -170,6 +225,8 @@
 		take = null;
 		try {
 			const file = await t.stop();
+			shaped?.release();
+			shaped = null;
 			onTake?.(file);
 			onClose();
 		} catch (e) {
@@ -179,6 +236,7 @@
 
 	function startBurst() {
 		begin(() => {
+			const fixed = $state.snapshot(shape);
 			const want = Number(beatCount);
 			const step = Number(every);
 			const files: File[] = [];
@@ -205,7 +263,7 @@
 					lastSlot = slot;
 					const index = files.length + pending;
 					pending++;
-					void snapStill(videoEl!, `snap-${index + 1}.png`).then((f) => {
+					void snapStill(videoEl!, fixed, `snap-${index + 1}.png`).then((f) => {
 						pending--;
 						if (f) files[index] = f;
 						snapped = files.filter(Boolean).length;
@@ -216,6 +274,71 @@
 			};
 			rafId = requestAnimationFrame(tick);
 		});
+	}
+
+	function readVideoSize() {
+		videoWidth = videoEl?.videoWidth ?? 0;
+		videoHeight = videoEl?.videoHeight ?? 0;
+	}
+
+	function cropPoint(e: PointerEvent): Point | null {
+		const rect = frameEl?.getBoundingClientRect();
+		if (!rect?.width || !rect.height) return null;
+		return {
+			x: Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1),
+			y: Math.min(Math.max((e.clientY - rect.top) / rect.height, 0), 1),
+		};
+	}
+
+	function cropTolerance() {
+		const rect = frameEl?.getBoundingClientRect();
+		return grabTolerance(shape.crop, rect?.width ?? 0, rect?.height ?? 0);
+	}
+
+	function onCropDown(e: PointerEvent) {
+		if (e.button !== 0 || busy) return;
+		const n = cropPoint(e);
+		if (!n) return;
+		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+		const started = startCropDrag(shape.crop, n, cropTolerance());
+		cropDrag = started.drag;
+		if (started.crop) shape.crop = started.crop;
+	}
+
+	function onCropMove(e: PointerEvent) {
+		const n = cropPoint(e);
+		if (!n) return;
+		if (cropDrag) {
+			shape.crop = dragCrop(cropDrag, shape.crop, n);
+			return;
+		}
+		const edges = edgesAt(shape.crop, n, cropTolerance());
+		cursor = edges
+			? cropCursorFor(edges)
+			: insideCrop(shape.crop, n)
+				? "move"
+				: "";
+	}
+
+	function onCropUp(e: PointerEvent) {
+		// A click without a drag leaves a sliver; read it as "no crop".
+		const c = shape.crop;
+		if (cropDrag?.kind === "new" && (c.w < 0.03 || c.h < 0.03)) {
+			shape.crop = { ...FULL_CROP };
+		}
+		cropDrag = null;
+		(e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+	}
+
+	/** The crop flips with the picture, so it keeps framing the same thing. */
+	function flipX() {
+		const c = shape.crop;
+		shape = { ...shape, flipX: !shape.flipX, crop: { ...c, x: 1 - c.x - c.w } };
+	}
+
+	function flipY() {
+		const c = shape.crop;
+		shape = { ...shape, flipY: !shape.flipY, crop: { ...c, y: 1 - c.y - c.h } };
 	}
 
 	function fail(e: unknown) {
@@ -254,7 +377,62 @@
 <PanelModal {title} sub={streamSize} {busy} {onClose}>
 	{#snippet icon()}<Camera size={12} />{/snippet}
 	<div class="preview" class:capturing={phase === "capturing"}>
-		<video bind:this={videoEl} autoplay muted playsinline></video>
+		<div
+			class="frame"
+			class:busy
+			bind:this={frameEl}
+			role="presentation"
+			style:--ar={videoWidth && videoHeight
+				? `${videoWidth} / ${videoHeight}`
+				: undefined}
+			style:cursor={busy ? undefined : cursor || "crosshair"}
+			onpointerdown={onCropDown}
+			onpointermove={onCropMove}
+			onpointerup={onCropUp}
+			onpointercancel={onCropUp}
+		>
+			<video
+				bind:this={videoEl}
+				style:scale="{shape.flipX ? -1 : 1}
+				{shape.flipY ? -1 : 1}"
+				onloadedmetadata={readVideoSize}
+				onresize={readVideoSize}
+				autoplay
+				muted
+				playsinline
+			></video>
+			{#if !isFullCrop(shape.crop)}
+				{@const c = shape.crop}
+				<div
+					class="crop-shade"
+					style="left:0; top:0; right:0; height:{c.y * 100}%"
+				></div>
+				<div
+					class="crop-shade"
+					style="left:0; top:{(c.y + c.h) * 100}%; right:0; bottom:0"
+				></div>
+				<div
+					class="crop-shade"
+					style="left:0; top:{c.y * 100}%; width:{c.x * 100}%; height:{c.h *
+						100}%"
+				></div>
+				<div
+					class="crop-shade"
+					style="left:{(c.x + c.w) * 100}%; top:{c.y *
+						100}%; right:0; height:{c.h * 100}%"
+				></div>
+				<div
+					class="crop-box"
+					style="left:{c.x * 100}%; top:{c.y * 100}%; width:{c.w *
+						100}%; height:{c.h * 100}%"
+				>
+					<span class="crop-grip tl"></span>
+					<span class="crop-grip tr"></span>
+					<span class="crop-grip bl"></span>
+					<span class="crop-grip br"></span>
+				</div>
+			{/if}
+		</div>
 		{#if error}
 			<p class="state error">{error}</p>
 		{:else if opening}
@@ -290,6 +468,43 @@
 				{/each}
 			</select>
 		</div>
+		<div class="ctrl">
+			<span class="label">Flip</span>
+			<div class="row">
+				<button
+					class="btn"
+					class:on={shape.flipX}
+					aria-pressed={shape.flipX}
+					aria-label="Flip horizontally"
+					title="Flip horizontally"
+					disabled={busy}
+					onclick={flipX}
+				>
+					<FlipHorizontal2 size={12} />
+				</button>
+				<button
+					class="btn"
+					class:on={shape.flipY}
+					aria-pressed={shape.flipY}
+					aria-label="Flip vertically"
+					title="Flip vertically"
+					disabled={busy}
+					onclick={flipY}
+				>
+					<FlipVertical2 size={12} />
+				</button>
+			</div>
+		</div>
+		<div class="ctrl">
+			<span class="label">Crop</span>
+			<button
+				class="btn"
+				disabled={busy || isFullCrop(shape.crop)}
+				onclick={() => (shape.crop = { ...FULL_CROP })}
+			>
+				Reset
+			</button>
+		</div>
 		{#if mode === "burst"}
 			<div class="ctrl">
 				<span class="label">Snaps</span>
@@ -321,6 +536,7 @@
 			Counts in from three, then snaps a still on every beat of the song into
 			the pool.
 		{/if}
+		Drag across the picture to crop it.
 	</p>
 
 	<div class="actions">
@@ -366,12 +582,65 @@
 	.preview.capturing {
 		border-color: var(--rec);
 	}
-	.preview video {
+	.preview {
+		container-type: size;
+	}
+	/* The camera's own aspect, as large as the box allows, so the crop maps onto it. */
+	.frame {
+		--ar: 16 / 9;
+		position: absolute;
+		left: 50%;
+		top: 50%;
+		translate: -50% -50%;
+		width: min(100cqw, 100cqh * (var(--ar)));
+		aspect-ratio: var(--ar);
+		touch-action: none;
+	}
+	.frame video {
 		position: absolute;
 		inset: 0;
 		width: 100%;
 		height: 100%;
-		object-fit: contain;
+	}
+
+	.crop-shade {
+		position: absolute;
+		background: rgba(0, 0, 0, 0.6);
+		pointer-events: none;
+	}
+	.crop-box {
+		position: absolute;
+		border: 1px dashed var(--live);
+		pointer-events: none;
+	}
+	.frame.busy .crop-box {
+		border: 1px solid rgba(255, 255, 255, 0.25);
+	}
+	.frame.busy .crop-grip {
+		display: none;
+	}
+	.crop-grip {
+		position: absolute;
+		width: 7px;
+		height: 7px;
+		background: var(--live);
+		border-radius: 1px;
+	}
+	.crop-grip.tl {
+		left: -4px;
+		top: -4px;
+	}
+	.crop-grip.tr {
+		right: -4px;
+		top: -4px;
+	}
+	.crop-grip.bl {
+		left: -4px;
+		bottom: -4px;
+	}
+	.crop-grip.br {
+		right: -4px;
+		bottom: -4px;
 	}
 
 	.state {
@@ -384,6 +653,7 @@
 		text-transform: uppercase;
 		color: var(--text-3);
 		text-align: center;
+		pointer-events: none;
 	}
 	.state.error {
 		color: var(--rec);
@@ -391,6 +661,7 @@
 
 	.count {
 		position: relative;
+		pointer-events: none;
 		font-family: var(--font-mono);
 		font-size: 4rem;
 		font-weight: 600;
@@ -442,6 +713,16 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.3rem;
+	}
+
+	.row {
+		display: flex;
+		gap: 0.3rem;
+	}
+
+	.btn.on {
+		color: var(--text);
+		border-color: var(--live);
 	}
 
 	select {
