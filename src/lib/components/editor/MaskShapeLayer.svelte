@@ -279,7 +279,7 @@
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				class="shape-rotate"
-				title="Drag to turn (Shift snaps to 15°). The effects show on this side. Double-click to reset."
+				title="Drag to turn. It sticks at right angles, and Shift snaps to 15°. The effects show on this side. Double-click to reset."
 				onpointerdown={startRotate}
 				ondblclick={resetAngle}
 			></div>
@@ -304,7 +304,7 @@
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				class="shape-rotate"
-				title="Drag to turn (Shift snaps to 15°). Double-click to reset."
+				title="Drag to turn. It sticks at right angles, and Shift snaps to 15°. Double-click to reset."
 				onpointerdown={startRotate}
 				ondblclick={resetAngle}
 			></div>
