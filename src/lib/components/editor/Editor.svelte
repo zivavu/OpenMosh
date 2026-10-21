@@ -2629,10 +2629,21 @@
 			showToast(`${MAX_AUDIO_LANES} audio lanes is the limit`, "error");
 			return;
 		}
+		asOneEdit(() => placeAudioLane(sourceId, length, at, drives, lanes));
+	}
+
+	function placeAudioLane(
+		sourceId: string,
+		length: number,
+		at: number,
+		drives: boolean,
+		lanes: AudioLane[],
+	) {
 		pushMediaHistory();
 		let next = mediaTimeline;
 		const before = mixer.duration;
 		if (drives && lanes.length === 0 && length > before) {
+			lengthHistory.push(before);
 			next = {
 				...next,
 				lanes: next.lanes.map((l) =>
@@ -2846,6 +2857,15 @@
 			mixer.setDuration(next);
 			mixSpanHistory.pushMoved(spanBefore);
 		});
+	}
+
+	/** A drag reaching past the end: joins the drag's undo entry, so Ctrl+Z gives the length back. */
+	function growProjectTo(length: number) {
+		const seq = sharedEditSeq();
+		if (lengthHistory.undoSeq !== seq) {
+			lengthHistory.push(mixer.duration, seq === null ? "grow" : undefined);
+		}
+		mixer.setDuration(length);
 	}
 
 	/** `by` seconds go in before everything (negative takes them back out), and the
@@ -5366,7 +5386,7 @@
 				onRepeatRangeChange={(range) => (repeatSpan = range)}
 				{repeatClipIds}
 				onToggleRepeat={toggleRepeat}
-				onGrow={isSequenceMode ? (length) => mixer.setDuration(length) : null}
+				onGrow={isSequenceMode ? growProjectTo : null}
 				onGrowFront={isSequenceMode ? growProjectFront : null}
 				maxLength={MAX_PROJECT_LENGTH}
 			>
