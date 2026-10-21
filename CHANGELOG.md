@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.9.23](https://github.com/zivavu/OpenMosh/compare/v0.9.22...v0.9.23) (2026-10-21)
+
+You can flip and crop the webcam picture, and the notice on the old open-mosh.vercel.app address now downloads a full backup for you to load on openmosh.com. The rest is fixes. Your work holds up when a read fails or another tab saves, Ctrl+Z covers Clear sources, a detected BPM and a shortened project, and presets and the mosh arrows keep painted Masks, locked effects and your tweaks. Bounced 4K clips export without running out of memory.
+
+Saved projects open as before. A failed read no longer empties a project's media pool or puts an older copy of a timeline over a newer one, and a damaged save or backup opens instead of breaking the editor. A backup holding timelines from a newer OpenMosh is turned down, since this version can't open them.
+
+
+### Added
+
+* Flip and crop the webcam ([06ddf62](https://github.com/zivavu/OpenMosh/commit/06ddf62dc392f81b9c826f4f8796b6366dd94e22))
+* Download a full backup from the old address's notice ([7b0abcf](https://github.com/zivavu/OpenMosh/commit/7b0abcffe4de1d3a492d6bdd8420baae87f514b9))
+
+
+### Fixed
+
+* Stop failed reads and other tabs from losing your work, and save edits made during playback when the tab goes to the background ([4b3d876](https://github.com/zivavu/OpenMosh/commit/4b3d876a4c83b85e3f1e2a08146175ced57bac87), [53428b2](https://github.com/zivavu/OpenMosh/commit/53428b27b47ef7a5e1489bc13df7c14a116e8255), [7c78a51](https://github.com/zivavu/OpenMosh/commit/7c78a51b76edbabfcb29daee3c3e1da7fba9d140), [79ba5da](https://github.com/zivavu/OpenMosh/commit/79ba5da3afa3d5a29421f4d279bc8d09b1f63813), [5ca5d50](https://github.com/zivavu/OpenMosh/commit/5ca5d508091cee3db94fe4e09f4fc169dca3fd04), [58de2ab](https://github.com/zivavu/OpenMosh/commit/58de2ab449c49e177a634a094c1a9ae94933a758), [d706cd9](https://github.com/zivavu/OpenMosh/commit/d706cd98d5e3cc4d76291f6584e2f8bac050f372))
+* Make Ctrl+Z undo Clear sources, a detected BPM and shortening the project, and keep media added after a removal you undo ([f4cfe84](https://github.com/zivavu/OpenMosh/commit/f4cfe848b81b7039b22f64bc88cc4dffdbc9afe7), [c779611](https://github.com/zivavu/OpenMosh/commit/c779611fd5115f320d3183bf94e1fa3d67768607), [1056b3e](https://github.com/zivavu/OpenMosh/commit/1056b3eaec80edd17a9790fc54b6286e1d139987), [d3a9f63](https://github.com/zivavu/OpenMosh/commit/d3a9f633dab62e90f0a967dc7ccc80214e75f03a))
+* Keep painted Masks, locked effects and mosh tweaks through presets and the mosh arrows, and stop moshes moving effects past a Mask ([3d5325e](https://github.com/zivavu/OpenMosh/commit/3d5325e2db99afd7f41312c02cef15cb26abed98), [6b71287](https://github.com/zivavu/OpenMosh/commit/6b71287601debf8e171d754f969c7d94c49a0ffc), [877a096](https://github.com/zivavu/OpenMosh/commit/877a096bd3745e8a6837b59923c8e8ff29a60eab), [1b3aacb](https://github.com/zivavu/OpenMosh/commit/1b3aacb8ce612e6f1f1b87d2160988094cfeea1e))
+* Export bounced 4K clips without running out of memory, and delete an export's file when it's cancelled mid-write ([a800b07](https://github.com/zivavu/OpenMosh/commit/a800b07c287600de5e560b7c4906a4609332ef7a), [c23ead6](https://github.com/zivavu/OpenMosh/commit/c23ead62483f9750eced707d5d23805ad6568351))
+* Keep an imported project's name and its songs' names, handle odd font names in project files, and turn down a backup from a newer OpenMosh ([0451aac](https://github.com/zivavu/OpenMosh/commit/0451aac81272aaf600fb1d27cf4a8dade0f2517d), [985e0e8](https://github.com/zivavu/OpenMosh/commit/985e0e8448f89000cf9c89a03238092aedac9715), [59f3fff](https://github.com/zivavu/OpenMosh/commit/59f3fff31a524ab562bdc3c00c0cb6f192b1e69e), [fc349bf](https://github.com/zivavu/OpenMosh/commit/fc349bf7925deee136a163cfb9accfb334501505))
+* Turn down GIFs and 3D models that would freeze the page ([c70474c](https://github.com/zivavu/OpenMosh/commit/c70474c2eb87779071cc9f2eee4477ccf20ead3c), [a1fecb5](https://github.com/zivavu/OpenMosh/commit/a1fecb513ca660c12b08dd84d65b60c654b4eaa3))
+* Show the right status for a slide's preview copy ([ed7cef0](https://github.com/zivavu/OpenMosh/commit/ed7cef024405950493956dd2be39b852e335a8de), [9a6b874](https://github.com/zivavu/OpenMosh/commit/9a6b87429a8538d2c7686e2ff3930d6f3d98834b))
+* Smaller fixes to the webcam, Grid view, single mode, BPM detection and 3D Transform ([20ee53f](https://github.com/zivavu/OpenMosh/commit/20ee53fb02538a0b744b728a2a3e27c256b37ced), [82d32db](https://github.com/zivavu/OpenMosh/commit/82d32db8f7944663b8a97cebfb7c9ee1bb7cc6ba), [e14030e](https://github.com/zivavu/OpenMosh/commit/e14030ee9c2c4bdfce6b2e69783bcfd25c1774b5), [8f6a0c5](https://github.com/zivavu/OpenMosh/commit/8f6a0c57a9c81617dcd853fbc2dda87efd39690b), [5baeeb4](https://github.com/zivavu/OpenMosh/commit/5baeeb4d3f39f4b818894e6487bea16af9292bae))
+
 ## [0.9.22](https://github.com/zivavu/OpenMosh/compare/v0.9.21...v0.9.22) (2026-10-17)
 
 You can now undo removing media from the pool with Ctrl+Z, and the file comes back with it. The timeline highlights the lane you're pointing at and the one holding the selected clip, and dropdowns have a cleaner look. Everything else is bug fixes, mostly around undo, saving, sound and text.
