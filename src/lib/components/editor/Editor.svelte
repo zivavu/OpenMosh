@@ -660,7 +660,6 @@
 		if (duration <= 0) return;
 		const want = source.duration > 0 ? source.duration : MIN_CLIP_LENGTH;
 		const start = Math.min(takeStart, Math.max(0, duration - MIN_CLIP_LENGTH));
-		pushMediaHistory();
 		const picked = selectedMediaLane;
 		let laneId = picked?.id ?? null;
 		let span = picked ? newClipSpan(picked, start, duration, want) : null;
@@ -677,6 +676,7 @@
 			if (!span) return;
 		}
 		const clip = createMediaClip(span.start, span.end, 0, source.id);
+		pushMediaHistory();
 		setMediaTimeline(
 			updateMediaLaneIn(next, laneId!, (l) => addClip(l, clip, duration)),
 		);
