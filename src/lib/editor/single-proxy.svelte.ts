@@ -134,6 +134,8 @@ export class SingleProxy {
 		const build = this.#builds;
 		const current = () => f === this.#opts.file() && build === this.#builds;
 		const stored = await getSequenceMediaProxy(f);
+		// Reset while storage was read: the transcode would run with no one to stop it.
+		if (!current()) return;
 		let proxy = stored;
 		if (!stored) {
 			const job = startProxyJob(f, {

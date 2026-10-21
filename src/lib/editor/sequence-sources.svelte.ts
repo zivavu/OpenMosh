@@ -625,6 +625,9 @@ export class SequenceSourceRegistry {
 	async #makeProxy(id: string, file: File) {
 		const stored = await getSequenceMediaProxy(file);
 		if (this.#disposed) return;
+		// Turned off or removed while storage was read.
+		const wanted = this.get(id);
+		if (!wanted || wanted.file !== file || wanted.proxyDisabled) return;
 		let proxy = stored;
 		if (!proxy) {
 			const job = startProxyJob(file, {
