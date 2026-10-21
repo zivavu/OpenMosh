@@ -1016,8 +1016,15 @@
 			void addAudioFiles(files);
 			return;
 		}
+		replaceTrackFile(files[0]);
+	}
+
+	/** Single mode: a new song file in place of the current one; it gets its id on registering. */
+	function replaceTrackFile(f: File) {
+		const left = !!currentTrackId;
 		clearTrack();
-		audio.trackFile = files[0];
+		songLeft = left;
+		audio.trackFile = f;
 	}
 
 	function clearTrack() {
@@ -1091,13 +1098,18 @@
 		if (bpm && bpm > 0) restoreSequenceBpm(bpm);
 	}
 
+	/** A dropped or picked song replaced another, so it starts without that one's text. */
+	let songLeft = false;
+
 	/** The editor learned a track's library id without being asked to load it. */
 	function adoptLibraryTrack(trackId: string) {
 		if (currentTrackId === trackId) return;
 		currentTrackId = trackId;
 		// The project, not its song, owns what's saved in sequence mode.
 		if (isSequenceMode) return;
-		void applySavedTrackState(trackId);
+		const switchingSongs = songLeft;
+		songLeft = false;
+		void applySavedTrackState(trackId, switchingSongs);
 	}
 
 	/** Give a song that arrived without a library id one; the id keys everything per-song. */
@@ -1129,6 +1141,7 @@
 		}
 		const switchingSongs = !!currentTrackId && currentTrackId !== trackId;
 		clearTrack();
+		songLeft = false;
 		currentTrackId = trackId;
 		audio.trackFile = file;
 		// The media pool is deliberately left alone on a switch.
@@ -4660,8 +4673,7 @@
 		if (isSequenceMode && audioFiles.length > 0) {
 			void addAudioFiles(audioFiles);
 		} else if (audioFiles[0]) {
-			clearTrack();
-			audio.trackFile = audioFiles[0];
+			replaceTrackFile(audioFiles[0]);
 		}
 		if (!isSequenceMode && all.some(isMeshFile)) {
 			showToast("3D models work in the Editor", "error");
