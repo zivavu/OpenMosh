@@ -1310,7 +1310,12 @@
 			getRenderer: () => glRenderer!,
 			sources: {
 				getImage: getCachedImage,
-				getSampler: (slide) => videoSamplers.get(slide.id),
+				getSampler: (slide) => {
+					const sampler = videoSamplers.get(slide.id);
+					// Dropped for its preview copy, or back, mid-run: build the next one.
+					if (!sampler) void ensureSampler(slide);
+					return sampler;
+				},
 			},
 			// Preview ignores the `ready` promise; this stops the decoder stalling inside it too.
 			waitForFrames: false,
