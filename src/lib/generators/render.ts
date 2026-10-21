@@ -31,7 +31,8 @@ interface Ctx {
 let ctx: Ctx | null = null;
 
 function getCtx(): Ctx {
-	if (ctx) return ctx;
+	// A GPU reset loses the context for good; the next render starts a fresh one.
+	if (ctx && !ctx.gl.isContextLost()) return ctx;
 	const canvas = new OffscreenCanvas(1, 1);
 	const gl = canvas.getContext("webgl2", {
 		antialias: false,
@@ -211,7 +212,12 @@ export function renderSpec(
 	type: "image/png" | "image/jpeg" = "image/png",
 	aa = 3,
 ): Promise<Blob> {
-	const canvas = drawSpec(spec, width, height, aa);
+	let canvas = drawSpec(spec, width, height, aa);
+	// Lost mid-draw, the picture is blank: draw it again on a fresh context.
+	if (ctx?.gl.isContextLost()) canvas = drawSpec(spec, width, height, aa);
+	if (ctx?.gl.isContextLost()) {
+		throw new Error("The graphics card reset while drawing a generated image");
+	}
 	return canvas.convertToBlob(
 		type === "image/jpeg" ? { type, quality: 0.95 } : { type },
 	);
