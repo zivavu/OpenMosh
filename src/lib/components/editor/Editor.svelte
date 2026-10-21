@@ -3676,12 +3676,14 @@
 	/** As `seqSavePending`, for the single edit's session. */
 	let sessionSavePending = false;
 
+	/** Once stored, an edit keeps saving, or removing its last text would leave that text saved. */
+	let sessionStored = $state(untrack(() => !!initialSession));
 	/** Single mode keeps an edit once there's something in it; a camera never. Lane
 	 * presence, not `enabled`: keying off the visibility toggle would discard hidden timelines. */
 	let singleSessionKept = $derived(
 		!isSequenceMode &&
 			!isLive &&
-			(moshSession.worked || textTimeline.lanes.length > 0),
+			(sessionStored || moshSession.worked || textTimeline.lanes.length > 0),
 	);
 
 	function singleStateNow(): SingleSessionState {
@@ -3721,6 +3723,7 @@
 		});
 		void saves.track("session", write).then((ok) => {
 			if (!ok) return;
+			sessionStored = true;
 			onProjectReady?.(singleSessionKey!);
 			void pruneSequenceMediaThrottled().catch(() => {});
 		});
