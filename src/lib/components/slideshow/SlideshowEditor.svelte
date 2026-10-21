@@ -1525,6 +1525,14 @@
 	let lyricsOpen = $state(false);
 	let textTime = $state(0);
 	const textHistory = createTextHistory();
+	// A switch brings the next song's text in; undo mustn't put the last song's over it.
+	let textHistoryTrack: string | null = null;
+	$effect(() => {
+		const id = currentTrackId;
+		if (!id || id === textHistoryTrack) return;
+		if (textHistoryTrack !== null) untrack(() => textHistory.reset());
+		textHistoryTrack = id;
+	});
 
 	let textTimeline = $derived(config.text ?? EMPTY_TEXT_TIMELINE);
 	let textDuration = $derived(
@@ -2069,14 +2077,17 @@
 				{/if}
 			</div>
 			{#if audio.trackFile && audio.trackDuration > 0}
-				<TimelineSegments
-					{config}
-					{onConfigChange}
-					bind:selectedSegmentId
-					bind:undoSource={segmentUndo}
-					onSeek={seekMaster}
-					durationKnown={audio.durationFile === audio.trackFile}
-				/>
+				<!-- Each song's cuts keep their own undo stack. -->
+				{#key currentTrackId}
+					<TimelineSegments
+						{config}
+						{onConfigChange}
+						bind:selectedSegmentId
+						bind:undoSource={segmentUndo}
+						onSeek={seekMaster}
+						durationKnown={audio.durationFile === audio.trackFile}
+					/>
+				{/key}
 			{/if}
 			{#if audio.trackFile && audio.trackDuration > 0}
 				<AudioTimeline
