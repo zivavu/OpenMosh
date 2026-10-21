@@ -76,6 +76,9 @@ void main(){
 const FIELD_CELLS = 160;
 /** Vertex: x, y (f32) · rgba (u8) · across, seed (u8) · along (u16). */
 const STRIDE = 16;
+/** Vertices one image may hold: thrice the most a planned spec draws, so only a
+ * spec read from a file that asks for far more is cut short. */
+const MAX_VERTS = 8_000_000;
 
 /** Draws into the default framebuffer at w×h. Every rng draw is part of the
  * saved format: reorder one and old images re-render differently. */
@@ -177,6 +180,7 @@ export function drawInk(
 		trace(st.x, st.y, 1, fwd);
 		const count = back.length / 2 - 1 + fwd.length / 2;
 		if (count < 4) continue;
+		if (verts + count * 2 + 2 > MAX_VERTS) break;
 		const pts = new Float32Array(count * 2);
 		let k = 0;
 		for (let i = back.length - 2; i >= 2; i -= 2) {
