@@ -658,7 +658,7 @@
 							title="{clipLabel(lane, clip)}{transitionNote(clip)}{repeatNote(
 								repeats,
 							)} — double-click to edit"
-							ondblclick={() => ctrl.openLane(lane)}
+							ondblclick={() => ctrl.selectOnly(clip.id)}
 							draggable="false"
 							ondragstart={(e) => e.preventDefault()}
 							onpointerdown={(e) =>
