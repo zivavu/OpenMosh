@@ -58,6 +58,8 @@
 		onSeek?: (time: number) => void;
 		/** Out: this lane's undo stack, for the editor's Ctrl+Z router. */
 		undoSource?: UndoSource;
+		/** False while a song swap still shows the last song's length. */
+		durationKnown?: boolean;
 	}
 
 	let {
@@ -66,6 +68,7 @@
 		selectedSegmentId = $bindable(null),
 		onSeek,
 		undoSource = $bindable(),
+		durationKnown = true,
 	}: Props = $props();
 
 	// One axis for the whole stack: zoom, pan and the playhead live there.
@@ -79,6 +82,8 @@
 	// Re-fit on duration change, and repair lists already out of range.
 	// An empty list starts as one flat line at the current beat division.
 	$effect(() => {
+		// Fitted to the last song's length, the next song's cuts would be cut short.
+		if (!durationKnown) return;
 		const td = trackDuration;
 		const segs = config.segments;
 		if (td > 0 && segs.length === 0) {
