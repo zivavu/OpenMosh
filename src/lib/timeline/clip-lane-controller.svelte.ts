@@ -451,8 +451,8 @@ export class ClipLaneController<
 			grabOffset: this.timeAt(e.clientX) - clip.start,
 		};
 		this.stack.beginDrag();
-		// One undo entry per gesture, not per pointermove.
-		this.#recordDrag(`${host.kind}-${mode}-${clipId}`);
+		// One undo entry per gesture, taken once it moves: a click alone isn't an edit.
+		this.#pendingEditKey = `${host.kind}-${mode}-${clipId}`;
 		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 	}
 
