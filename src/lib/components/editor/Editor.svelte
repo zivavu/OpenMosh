@@ -24,6 +24,7 @@
 		ZapOff,
 	} from "lucide-svelte";
 	import { fileDrop } from "../../actions/file-drop";
+	import { pastedFiles } from "../../media/paste";
 	import {
 		createAudioGraph,
 		createOutputAudioGraph,
@@ -4455,9 +4456,21 @@
 		return drawn.every((id) => id && id === drawn[0]) ? drawn[0] : null;
 	});
 
+	/** A pasted image stays lit in the rail until the clip selection moves. */
+	let pastedSourceId = $state<string | null>(null);
+	$effect(() => {
+		void selectedMediaClipIds;
+		pastedSourceId = null;
+	});
+
 	/** The thumb the rail lights up; falls back to the lane behind the primary clip. */
 	let railSourceId = $derived(
-		mediaSelectedSourceId ?? selectedMediaLane?.sourceId ?? null,
+		(pastedSourceId && sourceRegistry.get(pastedSourceId)
+			? pastedSourceId
+			: null) ??
+			mediaSelectedSourceId ??
+			selectedMediaLane?.sourceId ??
+			null,
 	);
 
 	/** How many clips a rail click assigns to. */
@@ -4695,7 +4708,16 @@
 	}
 
 	/** Audio sets the track; media replaces the file in single mode, joins the pool in sequence. */
-	function handleDroppedFiles(files: FileList) {
+	async function pasteFiles(e: ClipboardEvent) {
+		const files = pastedFiles(e);
+		if (files.length === 0) return;
+		await handleDroppedFiles(files);
+		// By id rather than what was added, so a repeat lights up the copy already pooled.
+		const id = stableSourceId(files[0]);
+		if (sourceRegistry.get(id)) pastedSourceId = id;
+	}
+
+	function handleDroppedFiles(files: FileList | File[]) {
 		const all = Array.from(files, withMediaType);
 		const audioFiles = all.filter((f) => f.type.startsWith("audio/"));
 		if (isSequenceMode && audioFiles.length > 0) {
@@ -4713,13 +4735,14 @@
 				(isSequenceMode && (isMeshFile(f) || isOtherModelFile(f))),
 		);
 		if (media.length === 0) return;
-		if (isSequenceMode) void addSequenceSources(media);
-		else onfile(media[0]);
+		if (isSequenceMode) return addSequenceSources(media);
+		onfile(media[0]);
 	}
 </script>
 
 <svelte:window
 	onkeydown={handleKeydown}
+	onpaste={(e) => void pasteFiles(e)}
 	onpointerdown={(e) => {
 		audio.audioContext?.resume();
 		moshGroupRef?.handleClickOutside(e);
