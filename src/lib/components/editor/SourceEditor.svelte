@@ -1851,6 +1851,8 @@
 		display: block;
 		width: 100%;
 		height: 100%;
+		/* A drag is a crop or a stroke; the dialog mustn't scroll under it. */
+		touch-action: none;
 	}
 
 	.canvas-wrap canvas.tool-crop {
