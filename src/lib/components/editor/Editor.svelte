@@ -398,6 +398,10 @@
 				}
 				liveStream = stream;
 				if (!stream) showToast("The camera is gone", "error");
+				// Unplugged while live: the feed would freeze on its last frame, unexplained.
+				stream?.getVideoTracks()[0]?.addEventListener("ended", () => {
+					if (!dropped) showToast("The camera disconnected", "error");
+				});
 			})
 			.catch((e) => {
 				if (!dropped)
