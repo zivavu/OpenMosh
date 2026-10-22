@@ -219,5 +219,14 @@ export function startLinkTick({
 		applyAll(level, dt);
 	};
 	// Read before the frame draws, so the draw shows this frame's audio.
-	return onFrame("read", tick);
+	const stop = onFrame("read", tick);
+	return () => {
+		stop();
+		// The sound went mid-play (the song removed): settle as a pause does, or the
+		// linked params hold their last level.
+		if (wasPaused) return;
+		onLevel(0);
+		frequencyData?.fill(0);
+		applyAll(0, (performance.now() - lastTick) / 1000);
+	};
 }
