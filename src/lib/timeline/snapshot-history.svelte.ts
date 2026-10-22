@@ -134,11 +134,12 @@ export function snapshotUndoSource<T>(
 		},
 		undo: () => {
 			const prev = history.undo(get());
-			if (prev) set(prev);
+			// Compared with null: a falsy state (a BPM of 0) is still one to restore.
+			if (prev !== null) set(prev);
 		},
 		redo: () => {
 			const next = history.redo(get());
-			if (next) set(next);
+			if (next !== null) set(next);
 		},
 	};
 }
