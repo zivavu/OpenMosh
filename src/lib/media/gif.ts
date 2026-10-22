@@ -1,6 +1,7 @@
 /** Animated GIF intake: a GIF is re-encoded to an MP4 once, on the way in, and
  * takes the video path everywhere after that. Browsers can animate a GIF in an
  * <img> but can't seek one, and Firefox has no ImageDecoder. */
+import { showToast } from "../components/ui/toast.svelte";
 import { withMediaType } from "./file-type";
 
 export interface GifFrame {
@@ -66,7 +67,9 @@ export async function gifToVideo(untyped: File): Promise<File> {
 		output.addVideoTrack(source);
 		await output.start();
 		let t = 0;
+		let seeThrough = false;
 		const add = async (frame: GifFrame) => {
+			seeThrough ||= hasTransparency(frame.pixels);
 			ctx.putImageData(
 				new ImageData(frame.pixels, gif.width, gif.height),
 				0,
@@ -80,6 +83,13 @@ export async function gifToVideo(untyped: File): Promise<File> {
 		for (const frame of frames) await add(frame);
 		await output.finalize();
 		if (!target.buffer) return file;
+		if (seeThrough) {
+			showToast(
+				`Transparent parts of ${file.name} show as black, since a GIF plays as a video here`,
+				"info",
+				6000,
+			);
+		}
 		return new File([target.buffer], file.name, {
 			type: "video/mp4",
 			lastModified: file.lastModified,
@@ -87,6 +97,12 @@ export async function gifToVideo(untyped: File): Promise<File> {
 	} catch {
 		return file;
 	}
+}
+
+/** The encoded video has no alpha, so a clear pixel comes out black. */
+function hasTransparency(pixels: Uint8ClampedArray): boolean {
+	for (let i = 3; i < pixels.length; i += 4) if (pixels[i] < 255) return true;
+	return false;
 }
 
 /** Hardware decoders take 4:2:0 frames in even sizes only: Chrome on a GPU decodes an
