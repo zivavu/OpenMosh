@@ -47,9 +47,10 @@ float fbm(vec2 p) {
   return vnoise(p) * 0.55 + vnoise(p * 2.13 + 5.0) * 0.3
        + vnoise(p * 4.41 + 9.0) * 0.15;
 }
+uniform vec2 u_resolution;
 void main() {
   vec3 lum = vec3(0.299, 0.587, 0.114);
-  vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
+  vec2 px = max(1.0 / u_resolution, 1.0 / vec2(textureSize(u_texture, 0)));
   float t = u_time;
 
   // Broad slow columns crossed with fine streaks; wanders gently over time.

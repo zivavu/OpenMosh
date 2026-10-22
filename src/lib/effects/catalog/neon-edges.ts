@@ -44,8 +44,9 @@ export const shader: EffectShaderDef = {
 uniform float u_glow;
 uniform float u_bg;
 
+uniform vec2 u_resolution;
 void main() {
-  vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
+  vec2 px = max(1.0 / u_resolution, 1.0 / vec2(textureSize(u_texture, 0)));
   vec4 orig = texture(u_texture, v_uv);
 
   // Sobel on pre-blurred luminance: each tap is a 2x2 average, suppressing

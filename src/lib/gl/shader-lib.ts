@@ -10,6 +10,22 @@ in vec2 v_uv;
 out vec4 outColor;
 `;
 
+/** Short side, in px, of the frame effects measure their pixel sizes in. */
+export const EFFECT_FRAME_SHORT_SIDE = 720;
+
+/** The frame effects size things in, their u_resolution: the render's aspect at a
+ * fixed short side. A size in its pixels covers the same share of the picture at any
+ * render size, so the preview and the full-size export match. */
+export function effectFrameSize(
+	width: number,
+	height: number,
+): [number, number] {
+	const short = Math.min(width, height);
+	if (short <= 0) return [Math.max(width, 1), Math.max(height, 1)];
+	const k = EFFECT_FRAME_SHORT_SIDE / short;
+	return [width * k, height * k];
+}
+
 export const BOUNCE_GLSL = `float bounce(float v) {
   v = mod(abs(v), 2.0);
   return v > 1.0 ? 2.0 - v : v;
@@ -183,7 +199,7 @@ export function floats(...keys: string[]): EffectShaderDef["setUniforms"] {
 export const BLUR_H_FRAG = `uniform float u_radius;
 uniform vec2 u_resolution;
 void main() {
-  // Pixel size from the full output resolution, so blur width ignores pre-pass downsampling.
+  // Pixel size from the effect frame, so blur width ignores pre-pass downsampling.
   vec2 px = 1.0 / u_resolution;
   float spread = u_radius * 3.0;
   float sigma = spread * 0.4;

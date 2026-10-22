@@ -48,9 +48,10 @@ export const shader: EffectShaderDef = {
 uniform float u_angle;
 uniform float u_sharpness;
 uniform float u_color;
+uniform vec2 u_resolution;
 void main() {
   vec4 src = texture(u_texture, v_uv);
-  vec2 pos = v_uv * vec2(textureSize(u_texture, 0));
+  vec2 pos = v_uv * u_resolution;
   float a = radians(u_angle);
   vec2 rp = mat2(cos(a), sin(a), -sin(a), cos(a)) * pos * (3.14159265 / u_scale);
   float dots = sin(rp.x) * sin(rp.y) * 0.4;

@@ -43,7 +43,7 @@ import {
 import { DEFAULT_AUDIO_RESPONSE } from "../audio/auto-range";
 import { dropSpectrumBars, stepSpectrumBars } from "../audio/spectrum-bars";
 import { createProgram, getUniformLocations } from "./utils";
-import { PYRAMID_DOWN_FRAG } from "./shader-lib";
+import { effectFrameSize, PYRAMID_DOWN_FRAG } from "./shader-lib";
 import {
 	VERTEX_SHADER,
 	PASSTHROUGH_FRAG,
@@ -1289,6 +1289,12 @@ export class GlRenderer {
 		});
 	}
 
+	/** The frame effects measure pixels in: the render's aspect at a fixed short side,
+	 * so a preview and its full-size export match. */
+	private effectFrame(): [number, number] {
+		return effectFrameSize(this.imgW, this.imgH);
+	}
+
 	resize(width: number, height: number) {
 		if (width <= 0 || height <= 0) return;
 		if (width === this.imgW && height === this.imgH) return;
@@ -2056,7 +2062,7 @@ export class GlRenderer {
 		if (prog.uniforms["u_density"])
 			gl.uniform1i(prog.uniforms["u_density"], density);
 		if (prog.uniforms["u_resolution"])
-			gl.uniform2f(prog.uniforms["u_resolution"], this.imgW, this.imgH);
+			gl.uniform2f(prog.uniforms["u_resolution"], ...this.effectFrame());
 		if (prog.uniforms["u_time"]) gl.uniform1f(prog.uniforms["u_time"], time);
 		gl.activeTexture(gl.TEXTURE0);
 		gl.bindTexture(gl.TEXTURE_2D, texA);
@@ -3769,7 +3775,7 @@ export class GlRenderer {
 		this.deletePyramid();
 		let w = this.hdrW,
 			h = this.hdrH;
-		while (this.pyramidLevels.length < 8 && Math.min(w, h) >= 16) {
+		while (this.pyramidLevels.length < 12 && Math.min(w, h) >= 16) {
 			w = Math.max(1, w >> 1);
 			h = Math.max(1, h >> 1);
 			const down = this.createHdrTexture(w, h);
@@ -3870,7 +3876,13 @@ export class GlRenderer {
 		if (u["u_flipY"]) gl.uniform1f(u["u_flipY"], 1);
 		if (u["u_texel"]) gl.uniform2f(u["u_texel"], 1 / srcW, 1 / srcH);
 		if (u["u_resolution"])
-			gl.uniform2f(u["u_resolution"], this.imgW, this.imgH);
+			gl.uniform2f(u["u_resolution"], ...this.effectFrame());
+		if (u["u_finerThanFrame"]) {
+			// How far this level is past the effect frame's own finest, in halvings.
+			const finest = Math.min(...this.effectFrame()) / 2;
+			const over = Math.log2(Math.min(w, h) / finest);
+			gl.uniform1f(u["u_finerThanFrame"], Math.min(1, Math.max(0, over)));
+		}
 		if (level && u["u_level"]) {
 			gl.activeTexture(gl.TEXTURE1);
 			gl.bindTexture(gl.TEXTURE_2D, level);
@@ -4048,7 +4060,7 @@ export class GlRenderer {
 			gl.uniform1f(compiled.uniforms["u_flipY"], flipY);
 		}
 		if (compiled.uniforms["u_resolution"]) {
-			gl.uniform2f(compiled.uniforms["u_resolution"], this.imgW, this.imgH);
+			gl.uniform2f(compiled.uniforms["u_resolution"], ...this.effectFrame());
 		}
 		if (compiled.uniforms["u_mediaFill"]) {
 			gl.uniform1f(compiled.uniforms["u_mediaFill"], this.chainMediaFill);

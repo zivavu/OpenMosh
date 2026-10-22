@@ -36,6 +36,7 @@ export const shader: EffectShaderDef = {
 		`uniform float u_amount;
 uniform float u_rgb;
 uniform int u_blendMode;
+uniform vec2 u_resolution;
 // Sine-free hash (Dave Hoskins): stable on ANGLE/D3D where fract(sin(x)*K)
 // collapses to a constant for large x, which pixel coords hit.
 float hash(vec2 p) {
@@ -56,7 +57,7 @@ void main() {
 
   // Hard per-pixel speckle: one hash per pixel, no interpolation, so grains
   // re-seat every frame and boil like film.
-  vec2 p = floor(gl_FragCoord.xy) + frame * vec2(13.7, 57.3);
+  vec2 p = floor(v_uv * u_resolution) + frame * vec2(13.7, 57.3);
 
   // RGB mode gives each channel its own grain -> colored speckle
   vec3 g = u_rgb > 0.5

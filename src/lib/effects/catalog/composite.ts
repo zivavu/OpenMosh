@@ -78,8 +78,9 @@ vec3 yiq2rgb(float y, vec2 c) {
               y - 0.272 * c.x - 0.647 * c.y,
               y - 1.106 * c.x + 1.703 * c.y);
 }
+uniform vec2 u_resolution;
 void main() {
-  vec2 res = vec2(textureSize(u_texture, 0));
+  vec2 res = u_resolution;
   vec2 pos = v_uv * res;
   vec4 src = texture(u_texture, v_uv);
 

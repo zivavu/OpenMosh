@@ -77,8 +77,9 @@ uniform float u_amount;
 uniform float u_angle;
 uniform float u_falloff;
 uniform float u_saturation;
+uniform vec2 u_resolution;
 void main() {
-  vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
+  vec2 px = 1.0 / u_resolution;
 
   if (u_mode == 0) {
     float rad = u_angle * 3.14159265 / 180.0;

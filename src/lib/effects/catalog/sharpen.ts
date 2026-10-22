@@ -42,8 +42,9 @@ export const shader: EffectShaderDef = {
 		`uniform float u_amount;
 uniform float u_radius;
 uniform float u_threshold;
+uniform vec2 u_resolution;
 void main() {
-  vec2 px = 1.0 / vec2(textureSize(u_texture, 0)) * u_radius;
+  vec2 px = u_radius / u_resolution;
   vec4 c = texture(u_texture, v_uv);
 
   // 3x3 Gaussian blur (sigma ~0.85): center=4/16, edges=2/16, corners=1/16

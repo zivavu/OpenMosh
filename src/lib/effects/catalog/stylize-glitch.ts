@@ -71,7 +71,7 @@ vec4 stylize(vec4 col, int style) {
   if (style == 0) return vec4(1.0 - col.rgb, col.a);
   if (style == 1) {
     float luma = (col.r + col.g + col.b) / 3.0;
-    return vec4(col.rgb * step(bayer8(v_uv * u_resolution), luma), col.a);
+    return vec4(col.rgb * step(bayer8(v_uv * min(u_resolution, vec2(textureSize(u_texture, 0)))), luma), col.a);
   }
   vec3 hsv = rgb2hsv(col.rgb);
   hsv.x = mod(hsv.x + 0.333, 1.0);

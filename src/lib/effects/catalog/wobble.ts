@@ -65,8 +65,9 @@ float fbm(vec2 p) {
   return v / 0.875;
 }
 
+uniform vec2 u_resolution;
 void main() {
-  vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
+  vec2 px = 1.0 / u_resolution;
   float t = u_time;
   vec2 st = v_uv * u_frequency;
 
