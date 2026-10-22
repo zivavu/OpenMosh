@@ -55,15 +55,14 @@
 	import ConfirmDialog from "./ConfirmDialog.svelte";
 	import RenameInput from "./RenameInput.svelte";
 	import { showToast } from "./toast.svelte";
-	import { downloadFile, fmtAgo } from "../../utils";
+	import { fmtAgo } from "../../utils";
 	import { downloadProjectFile } from "../../project-file/export";
+	import { BACKUP_EXTENSION } from "../../backup/backup";
 	import {
-		BACKUP_EXTENSION,
-		backupFileName,
-		buildBackup,
-		restoreBackup,
-	} from "../../backup/backup";
-	import { noteRestored } from "../../backup/restored-notice";
+		backupJob,
+		loadBackup,
+		saveBackup,
+	} from "../../backup/backup-job.svelte";
 
 	let { onClose, onChanged }: Props = $props();
 
@@ -136,43 +135,14 @@
 		void downloadProjectFile(key, { mode });
 	}
 
-	/** Which backup step is running, for the button's label. */
-	let backingUp = $state<"save" | "load" | null>(null);
+	/** Which backup step is running, here or from an earlier opening of this dialog. */
+	let backingUp = $derived(backupJob());
+	/** Nothing else may change storage while a backup reads or writes it. */
+	let working = $derived(busy || backingUp !== null);
 	let backupInput = $state<HTMLInputElement>();
 
-	async function downloadBackup() {
-		busy = true;
-		backingUp = "save";
-		try {
-			const name = backupFileName();
-			downloadFile(await buildBackup(), name);
-			showToast(`Backup saved as ${name}`, "success");
-		} catch (e) {
-			console.error(e);
-			showToast("Couldn't build the backup", "error");
-		} finally {
-			busy = false;
-			backingUp = null;
-		}
-	}
-
-	/** Merged in, then reloaded: settings and fonts are read once at startup. */
-	async function loadBackup(file: File) {
-		busy = true;
-		backingUp = "load";
-		try {
-			noteRestored(await restoreBackup(file));
-			location.reload();
-		} catch (e) {
-			showToast(
-				e instanceof Error ? e.message : "Couldn't load that backup",
-				"error",
-				8000,
-			);
-			busy = false;
-			backingUp = null;
-			void refresh();
-		}
+	async function onBackupPicked(file: File) {
+		if (!(await loadBackup(file))) void refresh();
 	}
 
 	function toggle(key: string) {
@@ -184,7 +154,7 @@
 
 	async function runPending() {
 		const action = pending;
-		if (!action || busy) return;
+		if (!action || working) return;
 		pending = null;
 		busy = true;
 		try {
@@ -593,7 +563,7 @@
 											class="icon-btn"
 											title="Save to a project file"
 											aria-label={`Save ${p.name} to a file`}
-											disabled={busy}
+											disabled={working}
 											onclick={() => downloadProject(downloadKey)}
 										>
 											<Download size={13} />
@@ -603,7 +573,7 @@
 										class="icon-btn"
 										title="Rename project"
 										aria-label={`Rename ${p.name}`}
-										disabled={busy}
+										disabled={working}
 										onclick={() => (renaming = key)}
 									>
 										<Pencil size={13} />
@@ -612,7 +582,7 @@
 										class="icon-btn danger"
 										title="Delete project"
 										aria-label={`Delete ${p.name}`}
-										disabled={busy}
+										disabled={working}
 										onclick={() => askDeleteProject(p)}
 									>
 										<Trash2 size={13} />
@@ -722,7 +692,7 @@
 										class="icon-btn"
 										title="Save to a project file"
 										aria-label={`Save ${e.label} to a file`}
-										disabled={busy}
+										disabled={working}
 										onclick={() => downloadProject(e.key, e.mode)}
 									>
 										<Download size={13} />
@@ -731,7 +701,7 @@
 										class="icon-btn"
 										title="Rename edit"
 										aria-label={`Rename ${e.label}`}
-										disabled={busy}
+										disabled={working}
 										onclick={() => (renaming = key)}
 									>
 										<Pencil size={13} />
@@ -740,7 +710,7 @@
 										class="icon-btn danger"
 										title="Delete edit"
 										aria-label={`Delete ${e.label}`}
-										disabled={busy}
+										disabled={working}
 										onclick={() => askDeleteLoose(e)}
 									>
 										<Trash2 size={13} />
@@ -800,7 +770,7 @@
 								</button>
 								<button
 									class="text-btn danger"
-									disabled={busy}
+									disabled={working}
 									onclick={() => askClearUnassigned(inventory!.unassigned)}
 								>
 									Clear
@@ -841,7 +811,7 @@
 								</div>
 								<button
 									class="text-btn danger"
-									disabled={busy}
+									disabled={working}
 									onclick={askClearProxies}
 								>
 									Clear
@@ -860,7 +830,7 @@
 									class="icon-btn danger"
 									title="Remove font"
 									aria-label={`Remove ${f.name}`}
-									disabled={busy}
+									disabled={working}
 									onclick={() => askDeleteFont(f.id, f.name)}
 								>
 									<Trash2 size={13} />
@@ -885,8 +855,8 @@
 					<span class="backup-actions">
 						<button
 							class="text-btn outline"
-							disabled={busy || isEmpty}
-							onclick={downloadBackup}
+							disabled={working || isEmpty}
+							onclick={saveBackup}
 						>
 							{#if backingUp === "save"}
 								<LoaderCircle size={12} class="backup-spin" />
@@ -897,7 +867,7 @@
 						</button>
 						<button
 							class="text-btn outline"
-							disabled={busy}
+							disabled={working}
 							onclick={() => backupInput?.click()}
 						>
 							{#if backingUp === "load"}
@@ -917,7 +887,7 @@
 							const input = e.currentTarget;
 							const file = input.files?.[0];
 							input.value = "";
-							if (file) void loadBackup(file);
+							if (file) void onBackupPicked(file);
 						}}
 					/>
 				</div>
@@ -934,7 +904,7 @@
 						</button>
 						<button
 							class="text-btn danger outline"
-							disabled={busy}
+							disabled={working}
 							onclick={askDeleteSelected}
 						>
 							Delete selected
@@ -950,7 +920,7 @@
 					>
 					<button
 						class="text-btn danger outline"
-						disabled={busy}
+						disabled={working}
 						onclick={askDeleteEverything}
 					>
 						Delete everything
