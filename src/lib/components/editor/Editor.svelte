@@ -4816,6 +4816,10 @@
 		activeTrackName={audio.trackFile?.name ?? null}
 		activeTrackId={currentTrackId}
 		onLoadTrack={onLibraryLoadTrack}
+		onTrackRenamed={(id, name) => {
+			if (audioTrackNames[id])
+				audioTrackNames = { ...audioTrackNames, [id]: name };
+		}}
 		onUnloadTrack={clearTrack}
 		onTrackDeleted={isSequenceMode ? dropDeletedTrack : undefined}
 		onPlay={isSequenceMode ? playSpan : () => audio.playAudio()}

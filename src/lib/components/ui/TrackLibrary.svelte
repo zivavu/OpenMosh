@@ -54,6 +54,8 @@
 		onUnloadTrack?: () => void;
 		/** A track is gone from the library, so whatever plays it has to let go. */
 		onTrackDeleted?: (trackId: string) => void;
+		/** The song's library name changed; clip labels show it. */
+		onTrackRenamed?: (trackId: string, name: string) => void;
 		onPlay?: () => void;
 		onPause?: () => void;
 		mainPlaying?: boolean;
@@ -81,6 +83,7 @@
 		onLoadTrack,
 		onUnloadTrack,
 		onTrackDeleted,
+		onTrackRenamed,
 		onPlay,
 		onPause,
 		mainPlaying = false,
@@ -333,6 +336,8 @@
 				const fileName = trackFileName(t);
 				return { ...t, fileName, name: name.trim() || fileName };
 			});
+			const renamed = tracks.find((t) => t.id === track.id);
+			if (renamed) onTrackRenamed?.(renamed.id, renamed.name);
 		} catch (e) {
 			console.error("Failed to rename track:", e);
 		}
