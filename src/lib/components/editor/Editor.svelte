@@ -1040,6 +1040,7 @@
 		currentTrackId = null;
 		// Belongs to the song that just left; the next one restores or detects its own.
 		sequenceBpm = 0;
+		sequenceBeatOffset = 0;
 	}
 
 	/** Pull back whatever was stored against a song; every track-id path runs this. */
@@ -1075,7 +1076,7 @@
 			return;
 		}
 		// BPM comes back in both modes; beat-synced effects read it in single mode too.
-		restoreSequenceBpm(savedSeq.bpm);
+		restoreSequenceBpm(savedSeq.bpm, savedSeq.beatOffset);
 		if (isSequenceMode) restoreFxLanes(savedSeq.fx);
 		restoreTextTimeline(savedSeq.text);
 		restoreMediaTimeline(savedSeq.media);
@@ -1095,8 +1096,8 @@
 			loadSeqEntry(trackId),
 		]);
 		if (currentTrackId !== trackId) return;
-		const bpm = own?.song === trackId && own.bpm > 0 ? own.bpm : song?.bpm;
-		if (bpm && bpm > 0) restoreSequenceBpm(bpm);
+		const found = own?.song === trackId && own.bpm > 0 ? own : song;
+		if (found && found.bpm > 0) restoreSequenceBpm(found.bpm, found.beatOffset);
 	}
 
 	/** A dropped or picked song replaced another, so it starts without that one's text. */
@@ -1265,6 +1266,8 @@
 
 	// Beats per minute, feeding the auto clips' re-roll spacing; 0 = not detected yet.
 	let sequenceBpm = $state(0);
+	/** Seconds into the song of its first beat, as detection found it. */
+	let sequenceBeatOffset = $state(0);
 
 	/** Segments waiting for the song's duration to be folded into the lanes. */
 	let legacySegments = $state<{
@@ -1419,7 +1422,7 @@
 				loadedTimelineKey = storeKey;
 				if (saved === null) return;
 				if (saved.song && saved.song === currentTrackId) {
-					restoreSequenceBpm(saved.bpm);
+					restoreSequenceBpm(saved.bpm, saved.beatOffset);
 				}
 				restoreTextTimeline(saved.text);
 				restoreMediaTimeline(saved.media);
@@ -1429,9 +1432,10 @@
 	});
 
 	/** A restored BPM wins over any detection in flight: the clips were built against it. */
-	function restoreSequenceBpm(bpm: number) {
+	function restoreSequenceBpm(bpm: number, beatOffset = 0) {
 		if (bpm > 0) bpmDetection.settle();
 		sequenceBpm = bpm;
+		sequenceBeatOffset = beatOffset;
 	}
 
 	/** Every autosave below reports here, for the top bar's saved/saving/failed word. */
@@ -1471,6 +1475,7 @@
 		const entry: SeqEntry = {
 			v: SEQ_ENTRY_VERSION,
 			bpm: sequenceBpm,
+			beatOffset: sequenceBeatOffset,
 			text: layersAsLoaded(
 				$state.snapshot(textTimeline) as TextTimeline,
 				"text",
@@ -2308,7 +2313,7 @@
 			return;
 		}
 		bpmPoolSource = saved.bpmSource ?? null;
-		restoreSequenceBpm(saved.bpm);
+		restoreSequenceBpm(saved.bpm, saved.beatOffset);
 		restoreFxLanes(saved.fx);
 		restoreTextTimeline(saved.text);
 		restoreMediaTimeline(saved.media);
@@ -2588,7 +2593,10 @@
 	function dropSong() {
 		audio.clearTrack();
 		currentTrackId = null;
-		if (!bpmPoolSource) sequenceBpm = 0;
+		if (!bpmPoolSource) {
+			sequenceBpm = 0;
+			sequenceBeatOffset = 0;
+		}
 	}
 
 	/** Sequence mode: sound files onto lanes. The first becomes the song when there's none. */
@@ -2753,6 +2761,7 @@
 		const from = songSourceId;
 		const to = trackSourceId(trackId);
 		sequenceBpm = 0;
+		sequenceBeatOffset = 0;
 		bpmPoolSource = null;
 		setSong(songFile, trackId);
 		const lanes = mediaTimeline.audioLanes ?? [];
@@ -2781,12 +2790,14 @@
 			if (sourceId === bpmPoolSource) return;
 			bpmPoolSource = sourceId;
 			sequenceBpm = 0;
+			sequenceBeatOffset = 0;
 			return;
 		}
 		if (trackId === currentTrackId) {
 			if (!bpmPoolSource) return;
 			bpmPoolSource = null;
 			sequenceBpm = 0;
+			sequenceBeatOffset = 0;
 			return;
 		}
 		bpmPoolSource = null;
@@ -2797,6 +2808,7 @@
 		}
 		// Zero, so the new song is measured rather than keeping the old one's tempo.
 		sequenceBpm = 0;
+		sequenceBeatOffset = 0;
 		setSong(trackToFile(track), trackId);
 	}
 
@@ -3139,7 +3151,8 @@
 
 	/** A detection over a BPM that was already set is undoable, like typing one in; the
 	 * first one a fresh song gets isn't an edit. */
-	function setSequenceBpmDetected(bpm: number) {
+	function setSequenceBpmDetected(bpm: number, beatOffset: number) {
+		sequenceBeatOffset = beatOffset;
 		if (sequenceBpm > 0 && bpm !== sequenceBpm) setSequenceBpmByHand(bpm);
 		else setSequenceBpm(bpm);
 	}
@@ -4670,6 +4683,7 @@
 					textTimeOffset,
 					textTimeScale,
 					bpm: sequenceBpm,
+					beatOffset: sequenceBeatOffset,
 					sequence: isSequenceMode
 						? {
 								moshOptions: getMoshOptions(),
@@ -5060,6 +5074,7 @@
 				baseSize={isSequenceMode ? seqBaseSize : null}
 				textTime={previewTime}
 				bpm={sequenceBpm}
+				beatOffset={sequenceBeatOffset}
 				forceAnimation={isLive ||
 					((textTimeline.enabled || mediaTimeline.enabled) && textClockRunning)}
 				overlay={mediaLoading
@@ -5398,6 +5413,7 @@
 				onSeek={seekMaster}
 				spanStart={textTimeOffset}
 				bpm={isSequenceMode ? sequenceBpm : 0}
+				beatOffset={sequenceBeatOffset}
 				selectionHint={isSequenceMode
 					? "Click a media clip or an FX clip to edit it"
 					: null}

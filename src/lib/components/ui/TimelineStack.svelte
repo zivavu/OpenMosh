@@ -44,6 +44,8 @@
 		selectionHint?: string | null;
 		/** Tempo of the master track, when known: drags snap to its beats. */
 		bpm?: number;
+		/** Seconds to the master track's first beat, where the beat grid starts. */
+		beatOffset?: number;
 		/** The editor's dragged split, in px; omitted, the stack takes its own height. */
 		height?: number | null;
 		children: Snippet;
@@ -72,6 +74,7 @@
 		toolbar,
 		selectionHint = null,
 		bpm = 0,
+		beatOffset = 0,
 		height = null,
 		children,
 		axis = $bindable(),
@@ -87,6 +90,7 @@
 
 	$effect(() => {
 		stack.bpm = bpm;
+		stack.beatOffset = beatOffset;
 	});
 	$effect(() => {
 		stack.repeatClipIds = repeatClipIds;

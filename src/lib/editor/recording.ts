@@ -93,6 +93,8 @@ export interface RecordingContext {
 	textTimeScale?: number;
 	/** Song tempo, for beat-synced effects. 0 = unknown. */
 	bpm?: number;
+	/** Seconds into the song of its first beat. */
+	beatOffset?: number;
 }
 
 export async function executeRecording(ctx: RecordingContext): Promise<void> {
@@ -129,6 +131,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 		textTimeOffset = 0,
 		textTimeScale = 1,
 		bpm = 0,
+		beatOffset = 0,
 	} = ctx;
 	// The preview's mask tint must never reach a file.
 	renderer.maskPreviewId = null;
@@ -373,6 +376,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 			textTimeOffset,
 			textTimeScale,
 			bpm,
+			beatOffset,
 			effects: effects.map((e): EffectInstance => ({
 				...e,
 				values: { ...e.values },

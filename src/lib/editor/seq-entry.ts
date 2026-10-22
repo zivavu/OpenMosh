@@ -25,6 +25,8 @@ export interface SeqEntry {
 	segments?: LegacySegmentEntry[];
 	/** Absent on entries saved before BPM existed. */
 	bpm?: number;
+	/** Seconds to the song's first beat; absent on entries saved before it was kept. */
+	beatOffset?: number;
 	/** Absent on entries saved before the text timeline existed. */
 	text?: TextTimeline;
 	/** Absent on entries saved before media layers existed. */
@@ -46,6 +48,7 @@ export interface SeqEntry {
 /** A saved entry, normalised into what the editor restores. */
 export interface RestoredEntry {
 	bpm: number;
+	beatOffset: number;
 	fx: FxLane[];
 	text: TextTimeline | null;
 	media: MediaTimeline | null;
@@ -104,6 +107,7 @@ export function readSeqEntry(
 	const legacy = (entry.v ?? 0) < 4;
 	return {
 		bpm: entry.bpm ?? 0,
+		beatOffset: Number.isFinite(entry.beatOffset) ? entry.beatOffset! : 0,
 		fx: legacy ? legacyAutoChains(fx) : fx,
 		text:
 			legacy && text ? { ...text, lanes: legacyAutoChains(text.lanes) } : text,

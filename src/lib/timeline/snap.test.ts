@@ -45,6 +45,11 @@ describe("findSnap", () => {
 		expect(nearer?.at).toBe(1.5);
 	});
 
+	it("starts the beat grid at the first beat", () => {
+		const hit = findSnap([1.68], [], 0.1, none, 0.5, 0.2);
+		expect(hit?.at).toBeCloseTo(1.7);
+	});
+
 	it("ignores the grid when beatSec is 0", () => {
 		expect(findSnap([1.52], [], 0.1, none, 0)).toBeNull();
 	});

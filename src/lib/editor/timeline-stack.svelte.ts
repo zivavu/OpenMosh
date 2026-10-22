@@ -78,6 +78,7 @@ export class TimelineStackState {
 
 	/** Tempo of the master track, for the beat grid. 0 = none known. */
 	bpm = $state(0);
+	beatOffset = $state(0);
 
 	/** The target the current drag is snapped to, for the guide line. */
 	snapGuide = $state<number | null>(null);
@@ -116,6 +117,7 @@ export class TimelineStackState {
 			SNAP_PX * secPerPx,
 			exclude,
 			beatSec / secPerPx >= MIN_BEAT_PX ? beatSec : 0,
+			this.beatOffset,
 		);
 		this.snapGuide = hit?.at ?? null;
 		return hit?.shift ?? 0;
