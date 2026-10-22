@@ -554,6 +554,10 @@
 		let handle = 0;
 		const step = () => {
 			const s = untrack(() => span);
+			// Repeat loops the element natively, which wraps to 0, not the in-point.
+			if (untrack(() => trimmed && loop) && v.currentTime < s.start) {
+				v.currentTime = s.start;
+			}
 			if (untrack(() => trimmed) && v.currentTime >= s.end) {
 				if (untrack(() => loop)) v.currentTime = s.start;
 				else {
