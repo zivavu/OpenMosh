@@ -1101,6 +1101,11 @@
 	}
 
 	function onPreviewUp(e: PointerEvent) {
+		endDrag();
+		(e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+	}
+
+	function endDrag() {
 		if (drag?.kind === "erase") {
 			commitMask();
 			painting = false;
@@ -1108,7 +1113,6 @@
 		}
 		drag = null;
 		gestureTime = null;
-		(e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
 	}
 
 	function setCrop(next: CropRect) {
@@ -1236,6 +1240,8 @@
 	function onKeydown(e: KeyboardEvent) {
 		if (e.key === "Escape") {
 			e.preventDefault();
+			// A stroke under way is kept, not dropped with an undo step left for it.
+			endDrag();
 			onClose();
 			return;
 		}
