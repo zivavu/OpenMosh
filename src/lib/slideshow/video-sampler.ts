@@ -1,11 +1,7 @@
-import {
-	openPlayableVideo,
-	sleep,
-	toVideoFrame,
-	type FrameQueue,
-} from "../video/decode";
+import { openPlayableVideo, sleep, type FrameQueue } from "../video/decode";
 import { openVideoFrameSource } from "../video/frame-source";
 import { ReverseFrames } from "../video/reverse-frames";
+import { uprightFrame } from "../video/upright";
 
 export interface SlideVideoProbe {
 	duration: number;
@@ -14,8 +10,8 @@ export interface SlideVideoProbe {
 	thumb: Blob | null;
 }
 
-/** Eligibility check for a video slide, mirroring the single-editor WebCodecs rules
- * (no rotation metadata, decodable codec); also grabs duration and a thumbnail. */
+/** Eligibility check for a video slide (a codec WebCodecs decodes); also grabs
+ * duration and a thumbnail. */
 export async function probeSlideVideo(
 	file: File,
 	thumbSize = 100,
@@ -28,7 +24,7 @@ export async function probeSlideVideo(
 		// Iterated rather than getSample(0): that returns null whenever the track's first
 		// frame sits past zero (edit list or phone/camera muxer).
 		for await (const sample of opened.sink.samples()) {
-			const frame = toVideoFrame(sample);
+			const frame = await uprightFrame(sample);
 			thumb = await drawThumb(frame, thumbSize);
 			frame.close();
 			break;

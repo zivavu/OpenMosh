@@ -2,10 +2,10 @@ import type {
 	Input,
 	InputAudioTrack,
 	InputVideoTrack,
-	VideoSample,
 	VideoSampleSink,
 } from "mediabunny";
 import { decoderOptions } from "./decoder-options";
+import { uprightFrame } from "./upright";
 
 export const sleep = (ms: number) =>
 	new Promise<void>((r) => setTimeout(r, ms));
@@ -30,7 +30,7 @@ export interface PlayableVideo extends DecodableVideo {
 }
 
 /** Open a file's primary video track for WebCodecs decoding, or null when it
- * can't drive that path; rotated files fall back to the <video> element. */
+ * can't drive that path. Frames come out through uprightFrame. */
 export async function openDecodableVideo(
 	file: File,
 ): Promise<DecodableVideo | null> {
@@ -42,7 +42,7 @@ export async function openDecodableVideo(
 			formats: mb.ALL_FORMATS,
 		});
 		const track = await input.getPrimaryVideoTrack();
-		if (track && track.rotation === 0 && (await track.canDecode())) {
+		if (track && (await track.canDecode())) {
 			return {
 				input,
 				track,
@@ -95,13 +95,6 @@ export async function openAudioTrack(
 	} catch {
 		return null;
 	}
-}
-
-/** Convert a sample to a VideoFrame and close the sample. */
-export function toVideoFrame(sample: VideoSample): VideoFrame {
-	const frame = sample.toVideoFrame();
-	sample.close();
-	return frame;
 }
 
 /** A bounded queue of decoded frames fed by a decode pump, drained synchronously
@@ -230,7 +223,12 @@ export class SampleQueue implements FrameQueue {
 				this.#head = sample.timestamp;
 				this.#received++;
 				decodeStats.frames++;
-				this.#frames.push(toVideoFrame(sample));
+				const frame = await uprightFrame(sample);
+				if (id !== this.#genId || this.#disposed) {
+					frame.close();
+					return;
+				}
+				this.#frames.push(frame);
 			}
 			if (id === this.#genId) this.#done = true;
 		} catch {

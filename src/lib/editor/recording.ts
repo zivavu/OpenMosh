@@ -13,6 +13,7 @@ import {
 	type TextTimeline,
 } from "../text";
 import { openDecodableVideo } from "../video/decode";
+import { uprightFrame } from "../video/upright";
 import type { AudioLinkGroup } from "../audio/audio-utils";
 import {
 	createFxLayerSource,
@@ -245,10 +246,9 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 	const decodeBeforeRender = async () => {
 		const sample = (await videoFrames!.next()).value;
 		if (!sample) return;
-		const frame = sample.toVideoFrame();
+		const frame = await uprightFrame(sample);
 		renderer.updateSourceFrame(frame);
 		frame.close();
-		sample.close();
 	};
 
 	// Live camera: the frame is due at `start + time`; wait for it, then grab.

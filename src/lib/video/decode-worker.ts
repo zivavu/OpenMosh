@@ -4,6 +4,7 @@
 // Statically imported: a dynamic import would split the worker bundle Vite can't emit.
 import { ALL_FORMATS, BlobSource, Input, VideoSampleSink } from "mediabunny";
 import { decoderOptions } from "./decoder-options";
+import { uprightFrame } from "./upright";
 
 export type DecodeWorkerRequest =
 	| { type: "open"; id: number; file: File; depth: number }
@@ -90,12 +91,10 @@ async function open(id: number, file: File, depth: number) {
 			source: new BlobSource(file),
 			formats: ALL_FORMATS,
 		});
-		// Same eligibility rules as the main-thread path: rotated files fall back.
 		const track = await input.getPrimaryVideoTrack();
 		const duration = track ? await track.computeDuration() : 0;
 		if (
 			!track ||
-			track.rotation !== 0 ||
 			!(await track.canDecode()) ||
 			!Number.isFinite(duration) ||
 			duration <= 0 ||
@@ -144,8 +143,11 @@ async function pump(
 				sample.close();
 				return;
 			}
-			const frame = sample.toVideoFrame();
-			sample.close();
+			const frame = await uprightFrame(sample);
+			if (stream.gen !== gen) {
+				frame.close();
+				return;
+			}
 			stream.credit--;
 			post({ type: "frame", id, gen, frame }, [frame]);
 		}
