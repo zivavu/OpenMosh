@@ -27,7 +27,7 @@ const { createMediaClip, createMediaLane } = await import("../media/types");
 const { createAudioClip, createAudioLane } = await import("../mix/types");
 const { createSourceEdit } = await import("../media/source-edit");
 const { createTextClip, createTextLane } = await import("../text/types");
-const { buildProjectFile } = await import("./export");
+const { buildProjectFile, projectFileName } = await import("./export");
 const { findStoredCopy, readProjectFile, storeProjectFile } =
 	await import("./import");
 type ImportProgress = import("./import").ProjectImportProgress;
@@ -91,6 +91,13 @@ beforeEach(async () => {
 
 afterAll(() => {
 	delete (globalThis as { localStorage?: unknown }).localStorage;
+});
+
+describe("projectFileName", () => {
+	test("keeps the marks Hindi and Thai letters are written with", () => {
+		expect(projectFileName("नमस्ते दुनिया")).toBe("नमस्ते-दुनिया.openmosh");
+		expect(projectFileName("สวัสดี")).toBe("สวัสดี.openmosh");
+	});
 });
 
 describe("a project file round trip", () => {

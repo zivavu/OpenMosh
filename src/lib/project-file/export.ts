@@ -69,7 +69,7 @@ export function projectFileName(
 ): string {
 	const base = name
 		.trim()
-		.replace(/[^\p{L}\p{N}\-_. ]+/gu, "")
+		.replace(/[^\p{L}\p{M}\p{N}\-_. ]+/gu, "")
 		.replace(/\s+/g, "-")
 		.replace(/^-+|-+$/g, "");
 	return `${base || "openmosh-project"}${PROJECT_EXTENSIONS[mode]}`;
