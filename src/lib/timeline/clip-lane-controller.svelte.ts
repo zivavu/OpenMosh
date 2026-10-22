@@ -128,6 +128,8 @@ export class ClipLaneController<
 	#joinPress: { rightId: string; anchor: DOMRect } | null = null;
 	/** Undo key a join drag records on its first move, so a click adds no step. */
 	#pendingEditKey: string | null = null;
+	/** Counted into each gesture's undo key, so two quick drags stay two steps. */
+	#gestures = 0;
 	/** Several selected joins dragged as one, from where they sat at the press. */
 	#joinGroup: {
 		joins: JoinRef[];
@@ -454,7 +456,7 @@ export class ClipLaneController<
 		};
 		this.stack.beginDrag();
 		// One undo entry per gesture, taken once it moves: a click alone isn't an edit.
-		this.#pendingEditKey = `${host.kind}-${mode}-${clipId}`;
+		this.#pendingEditKey = `${host.kind}-${mode}-${clipId}-${++this.#gestures}`;
 		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 		this.#endOnRelease();
 	}
@@ -503,7 +505,7 @@ export class ClipLaneController<
 				...joinDeltaLimits(this.host.lanes, group),
 			};
 			this.#joinPress = { rightId, anchor: target.getBoundingClientRect() };
-			this.#pendingEditKey = `${this.host.kind}-joins-${rightId}`;
+			this.#pendingEditKey = `${this.host.kind}-joins-${rightId}-${++this.#gestures}`;
 			target.setPointerCapture(e.pointerId);
 			this.#endOnRelease();
 			return;
@@ -519,7 +521,7 @@ export class ClipLaneController<
 			? { rightId, anchor: target.getBoundingClientRect() }
 			: null;
 		// One undo entry per gesture, taken once it moves.
-		this.#pendingEditKey = `${this.host.kind}-boundary-${leftId}`;
+		this.#pendingEditKey = `${this.host.kind}-boundary-${leftId}-${++this.#gestures}`;
 		target.setPointerCapture(e.pointerId);
 		this.#endOnRelease();
 	}
