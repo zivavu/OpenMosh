@@ -716,7 +716,13 @@
 	});
 </script>
 
-<svelte:window onkeydown={onModeKey} onpaste={onPaste} />
+<!-- A file let go past the panel would open in the tab and leave the app. -->
+<svelte:window
+	onkeydown={onModeKey}
+	onpaste={onPaste}
+	ondragover={(e) => e.preventDefault()}
+	ondrop={(e) => e.preventDefault()}
+/>
 
 <DemoBackground
 	{warmCanvas}
