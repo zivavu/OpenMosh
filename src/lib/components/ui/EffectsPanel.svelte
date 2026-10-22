@@ -173,7 +173,11 @@
 	function handleUpdatePreset(index: number) {
 		const seen = $state.snapshot(presets[index]) as Preset;
 		presets = updatePreset(index, $state.snapshot(effects), seen);
-		const at = presets.findIndex((p) => p.name === seen.name);
+		// Its own row first: another preset can share the name.
+		const at =
+			presets[index]?.name === seen.name
+				? index
+				: presets.findIndex((p) => p.name === seen.name);
 		appliedIndex = at === -1 ? null : at;
 		if (at !== -1) onPresetUpdated?.($state.snapshot(presets[at]) as Preset);
 	}

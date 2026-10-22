@@ -91,7 +91,10 @@ function serializeEffects(effects: EffectInstance[]): Preset["effects"] {
 export function savePreset(name: string, effects: EffectInstance[]): Preset[] {
 	const presets = loadPresets();
 	presets.push({
-		name: normalizePresetName(name),
+		name: freeName(
+			normalizePresetName(name),
+			new Set(presets.map((p) => p.name)),
+		),
 		effects: serializeEffects(effects),
 	});
 	writeJson(PRESETS_KEY, presets);
@@ -231,16 +234,22 @@ export function parsePresetFile(text: string): Preset[] {
 	return presets;
 }
 
+/** `name`, numbered if it's taken: clips find their preset by name. */
+function freeName(name: string, taken: Set<string>): string {
+	let free = name;
+	for (let n = 2; taken.has(free); n++) {
+		const suffix = ` (${n})`;
+		free = name.slice(0, PRESET_NAME_MAX_LENGTH - suffix.length) + suffix;
+	}
+	return free;
+}
+
 /** Appends imported presets, numbering a name that's already taken. */
 export function importPresets(incoming: Preset[]): Preset[] {
 	const presets = loadPresets();
 	const taken = new Set(presets.map((p) => p.name));
 	for (const p of incoming) {
-		let name = p.name;
-		for (let n = 2; taken.has(name); n++) {
-			const suffix = ` (${n})`;
-			name = p.name.slice(0, PRESET_NAME_MAX_LENGTH - suffix.length) + suffix;
-		}
+		const name = freeName(p.name, taken);
 		taken.add(name);
 		presets.push({ ...p, name });
 	}
