@@ -151,6 +151,13 @@ export class VideoPreviewPlayer {
 		this.#setPosition(Math.max(0, Math.min(this.duration, t)));
 	}
 
+	/** The texture showing the last frame was lost (a new GL context): decode the
+	 * frame under the playhead again, since a paused player has nothing new due. */
+	redeliver() {
+		if (this.#disposed || this.playing) return;
+		this.#setPosition(this.#clampedTime(), false);
+	}
+
 	setSpeed(speed: number) {
 		if (speed === this.#speed) return;
 		// Rebase the clock so the speed change doesn't jump the position

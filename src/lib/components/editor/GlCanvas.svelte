@@ -1091,11 +1091,18 @@
 		};
 	});
 
+	/** The player the source texture was last set up for. */
+	let videoSourceOf: VideoPreviewPlayer | null = null;
+
 	// WebCodecs preview: dimensions are known upfront, no element to wait on
 	$effect(() => {
 		if (!renderer || !frameSource) return;
 		// The texture is sized to the frames that will land in it, smaller than the media.
 		renderer.initVideoSource(frameSource.frameWidth, frameSource.frameHeight);
+		// Set up again for the same player: a GPU reset, which took its frame with it.
+		const player = frameSource;
+		if (videoSourceOf === player) untrack(() => player.redeliver());
+		videoSourceOf = player;
 		refitPreview();
 		naturalWidth = frameSource.width;
 		naturalHeight = frameSource.height;
