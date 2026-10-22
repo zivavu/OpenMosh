@@ -456,6 +456,19 @@ export class ClipLaneController<
 		// One undo entry per gesture, taken once it moves: a click alone isn't an edit.
 		this.#pendingEditKey = `${host.kind}-${mode}-${clipId}`;
 		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+		this.#endOnRelease();
+	}
+
+	/** A clip changing rows re-renders and loses pointer capture, so the release can
+	 * land outside every lane; the window hears it wherever it does. */
+	#endOnRelease(): void {
+		const end = (e: PointerEvent) => {
+			window.removeEventListener("pointerup", end);
+			window.removeEventListener("pointercancel", end);
+			this.onPointerUp(e);
+		};
+		window.addEventListener("pointerup", end);
+		window.addEventListener("pointercancel", end);
 	}
 
 	onBoundaryPointerDown(
@@ -492,6 +505,7 @@ export class ClipLaneController<
 			this.#joinPress = { rightId, anchor: target.getBoundingClientRect() };
 			this.#pendingEditKey = `${this.host.kind}-joins-${rightId}`;
 			target.setPointerCapture(e.pointerId);
+			this.#endOnRelease();
 			return;
 		}
 		this.drag = {
@@ -507,6 +521,7 @@ export class ClipLaneController<
 		// One undo entry per gesture, taken once it moves.
 		this.#pendingEditKey = `${this.host.kind}-boundary-${leftId}`;
 		target.setPointerCapture(e.pointerId);
+		this.#endOnRelease();
 	}
 
 	/** Empty lane space places the start marker, which takes the clock with it: with no
@@ -673,6 +688,11 @@ export class ClipLaneController<
 	}
 
 	onPointerMove(e: PointerEvent): void {
+		// A release nothing heard: no button is down any more.
+		if (e.buttons === 0 && (this.drag || this.#joinGroup)) {
+			this.onPointerUp(e);
+			return;
+		}
 		if (this.pastingJoins) {
 			const over = this.stack.laneIdAt(e.clientY);
 			if (over && this.laneOf(over)) {
