@@ -154,8 +154,20 @@ function decodedName(name: string): string {
 	}
 }
 
+/** A fetch that says why it failed: a site blocking other pages reads as a bare
+ * "Failed to fetch" otherwise. */
+async function fetchOrExplain(url: string): Promise<Response> {
+	try {
+		return await fetch(url);
+	} catch {
+		throw new Error(
+			"That site won't let other pages load its fonts. Download the font file and add it from your computer instead.",
+		);
+	}
+}
+
 async function fetchBytes(url: string): Promise<ArrayBuffer> {
-	const res = await fetch(url);
+	const res = await fetchOrExplain(url);
 	if (!res.ok) throw new Error(`Couldn't fetch the font file (${res.status}).`);
 	return res.arrayBuffer();
 }
@@ -168,7 +180,7 @@ export async function addCustomFont(input: string): Promise<CustomFont> {
 
 	const cssUrl = toStylesheetUrl(trimmed);
 	if (cssUrl) {
-		const res = await fetch(cssUrl);
+		const res = await fetchOrExplain(cssUrl);
 		if (!res.ok) {
 			throw new Error(`Google Fonts didn't return that font (${res.status}).`);
 		}
