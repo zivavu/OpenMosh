@@ -80,6 +80,24 @@ describe("createSnapshotHistory", () => {
 	});
 });
 
+describe("snapshotUndoSource", () => {
+	it("puts back a state of 0, like a BPM nothing had set", () => {
+		const history = createSnapshotHistory<number>();
+		let bpm = 0;
+		const source = snapshotUndoSource(
+			history,
+			() => bpm,
+			(v) => (bpm = v),
+		);
+		history.push(bpm);
+		bpm = 120;
+		source.undo();
+		expect(bpm).toBe(0);
+		source.redo();
+		expect(bpm).toBe(120);
+	});
+});
+
 describe("amend", () => {
 	it("folds a change into every stored state, so undo and redo keep it", () => {
 		const history = createSnapshotHistory<string[]>();
