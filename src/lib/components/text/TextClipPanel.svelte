@@ -307,7 +307,7 @@
 					id="tc-color"
 					value={lane.style.color}
 					defaultValue="#ffffff"
-					onChange={(hex) => setStyle("color", hex)}
+					onChange={(hex) => setStyle("color", hex, `tc-color-${clip.id}`)}
 				/>
 			</div>
 
@@ -338,7 +338,8 @@
 						id="tc-outline-color"
 						value={lane.style.outlineColor}
 						defaultValue="#000000"
-						onChange={(hex) => setStyle("outlineColor", hex)}
+						onChange={(hex) =>
+							setStyle("outlineColor", hex, `tc-outline-color-${clip.id}`)}
 					/>
 				</div>
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
