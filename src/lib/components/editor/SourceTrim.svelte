@@ -254,6 +254,7 @@
 
 	.trim-handle {
 		position: absolute;
+		touch-action: none;
 		top: 0;
 		bottom: 0;
 		width: 6px;
