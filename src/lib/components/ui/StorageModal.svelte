@@ -12,6 +12,7 @@
 		ChevronRight,
 		Box,
 		Download,
+		LoaderCircle,
 		Film,
 		Image,
 		ListVideo,
@@ -62,6 +63,7 @@
 		buildBackup,
 		restoreBackup,
 	} from "../../backup/backup";
+	import { noteRestored } from "../../backup/restored-notice";
 
 	let { onClose, onChanged }: Props = $props();
 
@@ -142,7 +144,9 @@
 		busy = true;
 		backingUp = "save";
 		try {
-			downloadFile(await buildBackup(), backupFileName());
+			const name = backupFileName();
+			downloadFile(await buildBackup(), name);
+			showToast(`Backup saved as ${name}`, "success");
 		} catch (e) {
 			console.error(e);
 			showToast("Couldn't build the backup", "error");
@@ -157,7 +161,7 @@
 		busy = true;
 		backingUp = "load";
 		try {
-			await restoreBackup(file);
+			noteRestored(await restoreBackup(file));
 			location.reload();
 		} catch (e) {
 			showToast(
@@ -884,7 +888,11 @@
 							disabled={busy || isEmpty}
 							onclick={downloadBackup}
 						>
-							<Download size={12} />
+							{#if backingUp === "save"}
+								<LoaderCircle size={12} class="backup-spin" />
+							{:else}
+								<Download size={12} />
+							{/if}
 							{backingUp === "save" ? "Packing…" : "Download"}
 						</button>
 						<button
@@ -892,7 +900,11 @@
 							disabled={busy}
 							onclick={() => backupInput?.click()}
 						>
-							<Upload size={12} />
+							{#if backingUp === "load"}
+								<LoaderCircle size={12} class="backup-spin" />
+							{:else}
+								<Upload size={12} />
+							{/if}
 							{backingUp === "load" ? "Loading…" : "Load"}
 						</button>
 					</span>
@@ -1553,6 +1565,16 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 0.35rem;
+	}
+
+	.backup-actions :global(.backup-spin) {
+		animation: backup-spin 0.8s linear infinite;
+	}
+
+	@keyframes backup-spin {
+		to {
+			transform: rotate(360deg);
+		}
 	}
 
 	.footer {
