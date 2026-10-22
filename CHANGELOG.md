@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.9.25](https://github.com/zivavu/OpenMosh/compare/v0.9.24...v0.9.25) (2026-10-22)
+
+Saving a backup spins its button while it packs, then names the file it wrote; loading one says what came back: how many projects, media files, songs and fonts. Pasting lyrics that carry LRC timestamps times them for you. Beat-synced effects and Snap line up with the song's first beat, and pixel-sized effects such as Pixelate and Halftone keep the same look from preview to export. Portrait videos from phones open upright, crop, erase and trim drags work with a finger, and a click in Edit media no longer shifts the crop. Ctrl+Z takes one colour drag or two quick clip drags back as a single step each, and can undo a BPM typed over none.
+
+Saved projects open as before. A single edit's project file now keeps its song's trim and loudness match, and a project remembers where its first beat falls; projects saved before this keep starting at zero. Re-exporting a project with pixel-sized effects can look different from its earlier export, since exports now match the preview. A slideshow file that arrives without its song is turned down up front instead of importing and then losing it.
+
+
+### Added
+
+* Show progress while a backup saves or loads, then confirm it ([2f2a934](https://github.com/zivavu/OpenMosh/commit/2f2a934ef719283898428aa7f20b0dd3eda4d960))
+* Time pasted LRC lyrics from their own stamps ([bf7171d](https://github.com/zivavu/OpenMosh/commit/bf7171d0c523582d333a8aed9d84d86cc0008458))
+
+
+### Fixed
+
+* Line beat-synced effects and Snap up with the song's first beat ([bd0e486](https://github.com/zivavu/OpenMosh/commit/bd0e486e9e13fbff488226b6dbfcc8b9bc99b5bc))
+* Stop a click from moving the crop in Edit media, keep an erase stroke when Escape closes it mid-stroke, repeat a start-trimmed clip from its in-point, and let its crop, erase and trim drags work on phones ([c4c1014](https://github.com/zivavu/OpenMosh/commit/c4c10149d6a82002d8d97797e5db6dc779e61f76), [fd34788](https://github.com/zivavu/OpenMosh/commit/fd347888077d07195aa399084104213d66267234), [f7fdccb](https://github.com/zivavu/OpenMosh/commit/f7fdccb492b6ff04b673b47402d5e58996c6210f), [ac01c7c](https://github.com/zivavu/OpenMosh/commit/ac01c7c7a71e97736fd2e1d9403a8e113662648c))
+* Export pixel-sized effects at the scale the preview shows ([46f927e](https://github.com/zivavu/OpenMosh/commit/46f927e4bf698e3f9aaea3e6fa78187900c88b93))
+* Make one colour drag and two quick clip drags single undo steps, and let Ctrl+Z take back a BPM typed over none ([fd8dc2a](https://github.com/zivavu/OpenMosh/commit/fd8dc2a1a2b992aad7d151bbf181865efcd01bf7), [3fb4c59](https://github.com/zivavu/OpenMosh/commit/3fb4c59ad7770931f1f033cc180f9014e6fc2b35), [1a8d6eb](https://github.com/zivavu/OpenMosh/commit/1a8d6eb85b0d21bbb2fb36567f87c0aa6679da6c))
+* Open portrait videos from phones upright, bring back a paused video's frame after the GPU resets, and sharpen the preview after moving to a screen with another pixel ratio ([8cc49cc](https://github.com/zivavu/OpenMosh/commit/8cc49cc21ba383e246a62f2d6c1c2593473aaa47), [f80fc8f](https://github.com/zivavu/OpenMosh/commit/f80fc8f7a002d5199ac7275f19d319aadfaaa541), [bd9553d](https://github.com/zivavu/OpenMosh/commit/bd9553d386ad76cffdeea378010a839f4cd88a4a))
+* Keep earlier photos when dropping more into a new slideshow, and stop a file dropped beside the upload box from leaving the app ([b7c90ef](https://github.com/zivavu/OpenMosh/commit/b7c90ef9fe7adde58d25b5e2acccc51127bcbb08), [d4c0736](https://github.com/zivavu/OpenMosh/commit/d4c0736b7fac3175cf4cfa1d773cd9b0e7a40e9d))
+* Keep a single edit's trim and loudness match in its project file, and turn down a slideshow file that arrives without its song instead of losing it later ([854d5e0](https://github.com/zivavu/OpenMosh/commit/854d5e024182afbd065b1270887bbdf030799fad), [2032068](https://github.com/zivavu/OpenMosh/commit/2032068e066a67f7e711423b6d2ceb40968ec064))
+* Draw every script a Google Font covers, explain when a site blocks its font link, and wrap captions that have no spaces ([1ae10bd](https://github.com/zivavu/OpenMosh/commit/1ae10bd21550b1646384bdccd56b15be5ec74b4f), [dac94c1](https://github.com/zivavu/OpenMosh/commit/dac94c1ca71ef2de48bc48c106af38ea65e95f6f), [c3df46e](https://github.com/zivavu/OpenMosh/commit/c3df46ec6b4207d2cb0428f4e253cd39b082f275))
+* End a clip drag wherever the button is let go, scroll the timeline when a joined clip's boundary reaches its edge, and update song clip labels as soon as the song is renamed ([848e890](https://github.com/zivavu/OpenMosh/commit/848e890b55556350e86b803abbd253746c88c677), [5581581](https://github.com/zivavu/OpenMosh/commit/55815817ba4dd9e308f187979490d39fa17bbff3), [2a23991](https://github.com/zivavu/OpenMosh/commit/2a2399182580ce1fae2859774dcc936aa1a0527e))
+* Keep hand tweaks when the clip bar's Mosh rolls a new one, and number a preset saved under a name already taken ([d7226ef](https://github.com/zivavu/OpenMosh/commit/d7226ef924ea909552bf5bd51b9f01be25bb0f90), [354489e](https://github.com/zivavu/OpenMosh/commit/354489e6328ba58b83715f4e2f614bd07a44fe5d))
+* Keep Hindi and Thai project names whole in file names, and keep one backup running at a time even after closing Storage ([2b9ba9b](https://github.com/zivavu/OpenMosh/commit/2b9ba9bd354fecfa53debd63447534b39c1c9a42), [7888538](https://github.com/zivavu/OpenMosh/commit/7888538480a09484f87b0dc7e4b19099af6a774f))
+* Smaller fixes to a slide's preview copy, the notice a transparent GIF gets, the webcam dropping out mid-take, a hex colour typed without #, and audio-linked effects when their song is removed ([3560187](https://github.com/zivavu/OpenMosh/commit/3560187d71a395e88904fffc293640e00f0ea11d), [ad0e92b](https://github.com/zivavu/OpenMosh/commit/ad0e92b9109ddf4ac1c9c5d283496f3272e494f4), [d0f0922](https://github.com/zivavu/OpenMosh/commit/d0f0922114e4fbf9fcb26cee5df154c142134c20), [32c7e3e](https://github.com/zivavu/OpenMosh/commit/32c7e3ea6a44bc3f38c4cbe7a0019bed49ff2b34), [f12fd4b](https://github.com/zivavu/OpenMosh/commit/f12fd4be3cf5e1693d10eb65bbf5dfa4a5655405))
+
+
+### Faster
+
+* Free a generated image's preview when the editor closes, and let go of the old audio nodes when Single mode swaps songs ([2af4161](https://github.com/zivavu/OpenMosh/commit/2af4161689e63eb71cb312b712517d14e98ac422), [4afbb32](https://github.com/zivavu/OpenMosh/commit/4afbb329fe8c1960a18dbd93cb970722de9954a8))
+
 ## [0.9.24](https://github.com/zivavu/OpenMosh/compare/v0.9.23...v0.9.24) (2026-10-21)
 
 You can paste a copied image straight into the editor or the upload screen, and the rotate handle settles on right angles as you drag past them. The rest is fixes. Ctrl+Z takes back a project's growth along with the drag or song that caused it, and no longer gains empty steps from clip clicks or webcam takes. Videos keep playing where they were when their preview copy arrives, sound loops and stops at the span end in a background tab, 3D models play blend shapes and draw even when built from thousands of parts, and Motion Mask no longer saves a dark picture.
