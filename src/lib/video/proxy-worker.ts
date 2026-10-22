@@ -418,6 +418,8 @@ async function convert(id: number, file: File) {
 				width: size.width,
 				height: size.height,
 				fit: "fill",
+				// Baked upright: a rotated proxy would need a canvas pass per previewed frame.
+				allowTransformationMetadata: false,
 				quality: PROXY_QUALITY,
 				keyFrameInterval: KEY_FRAME_INTERVAL,
 				...(codec ? { codec } : {}),
