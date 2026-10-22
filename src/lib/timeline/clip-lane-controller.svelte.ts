@@ -517,6 +517,8 @@ export class ClipLaneController<
 			mode: "boundary",
 			grabOffset: 0,
 		};
+		// Without it the view won't scroll when the boundary reaches its edge.
+		this.stack.beginDrag();
 		this.#joinPress = joins
 			? { rightId, anchor: target.getBoundingClientRect() }
 			: null;
