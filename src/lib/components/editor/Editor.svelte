@@ -636,7 +636,10 @@
 		primarySync.resize(resizeWidth, resizeHeight);
 		sourceRegistry.setOutputSize(resizeWidth, resizeHeight);
 	});
-	$effect(() => () => primarySync.dispose());
+	$effect(() => () => {
+		primarySync.dispose();
+		if (generatedSrc) URL.revokeObjectURL(generatedSrc);
+	});
 
 	let generateOpen = $state(false);
 
