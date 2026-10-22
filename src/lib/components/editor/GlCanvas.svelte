@@ -116,6 +116,8 @@
 		textTime?: number;
 		/** Song tempo for beat-synced effects. 0 = unknown, they run free. */
 		bpm?: number;
+		/** Seconds into the song of its first beat. */
+		beatOffset?: number;
 		/** Keep the animation loop running even when nothing else needs it. */
 		forceAnimation?: boolean;
 		/** Drawn over the whole preview box when the canvas holds nothing worth looking at. */
@@ -175,6 +177,7 @@
 		baseSize = null,
 		textTime = 0,
 		bpm = 0,
+		beatOffset = 0,
 		forceAnimation = false,
 		overlay = undefined,
 		onPickLayer = null,
@@ -899,7 +902,7 @@
 	function drawFrame(now: number) {
 		// Before anything renders: the bars have to see this frame's audio.
 		renderer!.setSpectrum(spectrum, now, spectrumSampleRate);
-		const beat = bpm > 0 ? (textTime * bpm) / 60 : null;
+		const beat = bpm > 0 ? ((textTime - beatOffset) * bpm) / 60 : null;
 		renderer!.setBeat(beat, bpm / 60);
 		const solo = soloMediaLaneId;
 		const layers =

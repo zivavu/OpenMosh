@@ -17,13 +17,15 @@ export interface SnapHit {
 
 /** The nearest target within `threshold` of any of `edges`, as the shift that lands
  * that edge on it. Edges move together, so the closest one decides for all. `beatSec`
- * > 0 adds the beat grid at lower priority, since a thing on screen explains the pull. */
+ * > 0 adds the beat grid, from `beatOffset`, at lower priority, since a thing on screen
+ * explains the pull. */
 export function findSnap(
 	edges: number[],
 	targets: SnapPoint[],
 	threshold: number,
 	exclude: ReadonlySet<string>,
 	beatSec = 0,
+	beatOffset = 0,
 ): SnapHit | null {
 	let best: SnapHit | null = null;
 	let bestDist = threshold;
@@ -39,7 +41,8 @@ export function findSnap(
 	}
 	if (beatSec > 0) {
 		for (const edge of edges) {
-			const beat = Math.round(edge / beatSec) * beatSec;
+			const beat =
+				Math.round((edge - beatOffset) / beatSec) * beatSec + beatOffset;
 			const dist = Math.abs(beat - edge);
 			if (dist < bestDist) {
 				bestDist = dist;

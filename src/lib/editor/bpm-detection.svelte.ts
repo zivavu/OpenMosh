@@ -7,7 +7,8 @@ interface BpmDetectionOptions {
 	source: () => File | string | null;
 	decode: (sourceId: string) => Promise<AudioBuffer | null>;
 	bpm: () => number;
-	onDetected: (bpm: number) => void;
+	/** `beatOffset`: seconds into the sound of its first beat. */
+	onDetected: (bpm: number, beatOffset: number) => void;
 }
 
 /** The editor's tempo detection: the slideshow's detector, in a shared worker. Construct
@@ -61,7 +62,7 @@ export class BpmDetection {
 			// The automatic pass never overrules what landed while it ran.
 			if (auto && (this.#epoch !== epoch || this.#opts.source() !== source))
 				return;
-			this.#opts.onDetected(Math.round(result.bpm));
+			this.#opts.onDetected(Math.round(result.bpm), result.offset);
 		} catch (e) {
 			if (!(e instanceof DOMException && e.name === "AbortError")) {
 				console.error("BPM detection failed:", e);

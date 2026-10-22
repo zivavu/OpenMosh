@@ -25,6 +25,8 @@ describe.each(Object.entries(FIXTURES))("a %s entry", (_, entry) => {
 
 	it("keeps its bpm, text and source edits", () => {
 		expect(restored.bpm).toBe(128);
+		// No version kept the first beat's offset before it existed.
+		expect(restored.beatOffset).toBe(0);
 		expect(restored.text?.lanes[0].clips.map((c) => c.text)).toEqual(["HELLO"]);
 		expect(restored.sourceEdits["src-a"].chromaKey.enabled).toBe(true);
 	});
