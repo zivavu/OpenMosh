@@ -15,6 +15,7 @@
 		MIN_CLIP_LENGTH,
 		type TextClip,
 	} from "../../text";
+	import { parsePastedLyrics } from "../../text/lrc";
 
 	export interface LyricsDraft {
 		lines: string[];
@@ -82,12 +83,9 @@
 	let panelEl = $state<HTMLElement | undefined>(undefined);
 	let linesEl = $state<HTMLElement | undefined>(undefined);
 
-	let lines = $derived(
-		lyricsText
-			.split("\n")
-			.map((l) => l.trim())
-			.filter(Boolean),
-	);
+	/** Pasted LRC comes in with its stamps taken off and kept as timings. */
+	let pasted = $derived(parsePastedLyrics(lyricsText));
+	let lines = $derived(pasted.lines);
 	/** First line without a time yet; past the end once every line is timed. */
 	let activeIndex = $derived.by(() => {
 		const i = timings.findIndex((t) => t == null);
@@ -146,7 +144,8 @@
 	function startSync() {
 		const n = lines.length;
 		if (n === 0) return;
-		timings = new Array(n).fill(null);
+		const stamped = pasted.times.every((t) => t !== null);
+		timings = stamped ? [...pasted.times] : new Array(n).fill(null);
 		phase = "sync";
 		markEdited();
 		onSeek(spanStart);
