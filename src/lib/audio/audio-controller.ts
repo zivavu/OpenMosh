@@ -17,6 +17,7 @@ export interface AudioGraphState {
 	/** Feeds the analyser, holding it back by the output latency. */
 	analysisDelay: DelayNode;
 	analyser: AnalyserNode;
+	analysisSink: GainNode;
 	gain: GainNode;
 	frequencyData: Uint8Array;
 	sampleRate: number;
@@ -63,6 +64,7 @@ function heardLatency(ctx: AudioContext): number {
 export function createAnalysisTap(ctx: AudioContext): {
 	input: DelayNode;
 	analyser: AnalyserNode;
+	sink: GainNode;
 } {
 	const input = ctx.createDelay(1);
 	const analyser = ctx.createAnalyser();
@@ -78,7 +80,7 @@ export function createAnalysisTap(ctx: AudioContext): {
 	analyser.connect(sink);
 	sink.connect(ctx.destination);
 	syncAnalysisDelay(input);
-	return { input, analyser };
+	return { input, analyser, sink };
 }
 
 /** The output latency is only known once the context runs, and moves with the device.
@@ -111,6 +113,7 @@ function buildGraph(
 		normalizeGain,
 		analysisDelay: tap.input,
 		analyser: tap.analyser,
+		analysisSink: tap.sink,
 		gain,
 		frequencyData: new Uint8Array(tap.analyser.frequencyBinCount),
 		sampleRate: ctx.sampleRate,
@@ -118,15 +121,25 @@ function buildGraph(
 	};
 }
 
-/** Tearing down the graph is just closing its context; the nodes go with it. */
-export function disposeAudioGraph(context: AudioContext): void {
-	const source = captureSources.get(context);
+/** Tearing down a graph closes its context, nodes and all. A context holding a media
+ * element's capture lives on for the next graph, so this one's nodes come off it. */
+export function disposeAudioGraph(graph: AudioGraphState): void {
+	const source = captureSources.get(graph.context);
 	if (!source) {
-		context.close();
+		graph.context.close();
 		return;
 	}
 	source.disconnect();
-	context.suspend().catch(() => {});
+	for (const node of [
+		graph.normalizeGain,
+		graph.analysisDelay,
+		graph.analyser,
+		graph.analysisSink,
+		graph.gain,
+	]) {
+		node.disconnect();
+	}
+	graph.context.suspend().catch(() => {});
 }
 
 export function computeVolumeLevel(

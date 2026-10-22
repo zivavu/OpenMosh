@@ -120,7 +120,11 @@ export class AudioManager {
 		this.applyAudioGraphState(createAudioGraph(this.#audioEl));
 	}
 
+	/** The graph in use, whole, for taking it apart again. */
+	#graph: AudioGraphState | null = null;
+
 	applyAudioGraphState(state: AudioGraphState) {
+		this.#graph = state;
 		this.audioContext = state.context;
 		this.mediaSource = state.source;
 		this.normalizeGainNode = state.normalizeGain;
@@ -135,7 +139,8 @@ export class AudioManager {
 	}
 
 	disposeAudioGraph() {
-		if (this.audioContext) disposeGraph(this.audioContext);
+		if (this.#graph) disposeGraph(this.#graph);
+		this.#graph = null;
 		this.mediaSource = null;
 		this.normalizeGainNode = null;
 		this.analyserNode = null;
