@@ -472,6 +472,11 @@
 		clearTimeout(pending.timer);
 		pendingRemovals.delete(id);
 		slides.splice(Math.min(pending.index, slides.length), 0, pending.slide);
+		// The removal stopped its preview copy mid-transcode; start it again.
+		const slide = pending.slide;
+		if (slide.kind === "video" && slide.proxyPending && !slide.proxyFile) {
+			void makeSlideProxy(slide.id, slide.file);
+		}
 	}
 
 	let showClearSlidesConfirm = $state(false);
