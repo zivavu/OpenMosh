@@ -507,9 +507,10 @@
 		}
 		// The slideshow cuts media to a track, so hold the files until a song arrives.
 		if (!pendingAudio && songRequired) {
-			stagedMedia = accepted;
+			const staged = [...(stagedMedia ?? []), ...accepted];
+			stagedMedia = staged;
 			showToast(
-				`${accepted.length} file${accepted.length === 1 ? "" : "s"} ready — add a song to start`,
+				`${staged.length} file${staged.length === 1 ? "" : "s"} ready — add a song to start`,
 				"info",
 			);
 			return;
