@@ -786,9 +786,22 @@
 			timer = setTimeout(measure, 150);
 		});
 		ro.observe(el);
+		// A screen with another pixel ratio changes the device size, not the box.
+		let dpr: MediaQueryList | null = null;
+		const watchRatio = () => {
+			dpr?.removeEventListener("change", onRatio);
+			dpr = matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+			dpr.addEventListener("change", onRatio);
+		};
+		const onRatio = () => {
+			measure();
+			watchRatio();
+		};
+		watchRatio();
 		return () => {
 			clearTimeout(timer);
 			ro.disconnect();
+			dpr?.removeEventListener("change", onRatio);
 		};
 	});
 
