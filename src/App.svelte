@@ -34,6 +34,7 @@
 	import type { SessionMode } from "./lib/editor/sequence-media-store";
 	import type { SlideshowConfig } from "./lib/slideshow/types";
 	import { showToast } from "./lib/components/ui/toast.svelte";
+	import { takeRestoredNotice } from "./lib/backup/restored-notice";
 	import { gifsToVideo, gifToVideo } from "./lib/media/gif";
 	import {
 		closeFeedback,
@@ -455,6 +456,10 @@
 	}
 
 	onMount(() => {
+		// A backup was just loaded; the reload it took came back here.
+		const restored = takeRestoredNotice();
+		if (restored) showToast(restored, "success", 6000);
+
 		// Text layers and captions can be restored with a user font already selected,
 		// so their faces have to be registered before anything draws.
 		void loadCustomFonts();

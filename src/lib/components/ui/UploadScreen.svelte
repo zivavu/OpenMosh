@@ -18,6 +18,7 @@
 	import {
 		Camera,
 		Download,
+		LoaderCircle,
 		HardDrive,
 		Image,
 		Info,
@@ -124,7 +125,9 @@
 		packingBackup = true;
 		try {
 			const backup = await import("../../backup/backup");
-			downloadFile(await backup.buildBackup(), backup.backupFileName());
+			const name = backup.backupFileName();
+			downloadFile(await backup.buildBackup(), name);
+			showToast(`Backup saved as ${name}`, "success");
 		} catch (err) {
 			console.error(err);
 			showToast("Couldn't build the backup", "error");
@@ -756,7 +759,11 @@
 				onclick={downloadBackup}
 				disabled={packingBackup}
 			>
-				<Download size={12} />
+				{#if packingBackup}
+					<LoaderCircle size={12} class="backup-spin" />
+				{:else}
+					<Download size={12} />
+				{/if}
 				{packingBackup ? "Packing…" : "Download backup"}
 			</button>
 		</div>
@@ -1273,6 +1280,16 @@
 
 	.compat p :global(svg) {
 		vertical-align: -0.15em;
+	}
+
+	.compat-action :global(.backup-spin) {
+		animation: backup-spin 0.8s linear infinite;
+	}
+
+	@keyframes backup-spin {
+		to {
+			transform: rotate(360deg);
+		}
 	}
 
 	.compat-action {
