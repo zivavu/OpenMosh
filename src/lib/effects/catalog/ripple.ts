@@ -41,8 +41,9 @@ export const shader: EffectShaderDef = {
 		H +
 		`uniform float u_amount;
 uniform float u_frequency;
+uniform vec2 u_resolution;
 void main() {
-  vec2 res = vec2(textureSize(u_texture, 0));
+  vec2 res = u_resolution;
   vec2 px = 1.0 / res;
   float aspect = res.x / res.y;
   vec2 c = v_uv - 0.5;

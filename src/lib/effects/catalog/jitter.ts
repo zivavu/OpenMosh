@@ -33,8 +33,9 @@ export const shader: EffectShaderDef = {
 		NOISE_GLSL +
 		`uniform float u_amount;
 float tri(vec2 s) { return hash(s) + hash(s + 19.1) - 1.0; }
+uniform vec2 u_resolution;
 void main() {
-  vec2 size = vec2(textureSize(u_texture, 0));
+  vec2 size = u_resolution;
   vec2 pix = v_uv * size;
   float beat = floor(u_time * 12.0);
   // Each beat rolls its own zone scale, patch size and axis balance.

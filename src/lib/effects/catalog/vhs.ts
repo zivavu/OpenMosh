@@ -54,8 +54,9 @@ vec3 hue(float h) {
 float hash1(float n) {
   return fract(sin(n * 43758.5453) * 28947.3);
 }
+uniform vec2 u_resolution;
 void main() {
-  vec2 res = vec2(textureSize(u_texture, 0));
+  vec2 res = u_resolution;
   vec2 px = 1.0 / res;
   float t = u_time;
   float tFrame = floor(t * 30.0);

@@ -33,8 +33,9 @@ export const shader: EffectShaderDef = {
 		H +
 		`uniform float u_amount;
 float hash(float n) { return fract(sin(n * 12.9898) * 43758.5453); }
+uniform vec2 u_resolution;
 void main() {
-  vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
+  vec2 px = 1.0 / u_resolution;
   float t = floor(u_time);
   vec2 off = vec2(
     (hash(t) - 0.5) * 2.0,

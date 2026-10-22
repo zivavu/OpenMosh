@@ -68,8 +68,11 @@ void main() {
 				`uniform sampler2D u_level;
 uniform vec2 u_texel;
 uniform float u_radius;
+uniform float u_finerThanFrame;
 void main() {
-  float spread = mix(0.2, 0.75, (u_radius - 1.0) / 9.0);
+  // Levels finer than a preview would have pass the wider one through, so a big
+  // export glows as wide as its preview.
+  float spread = mix(mix(0.2, 0.75, (u_radius - 1.0) / 9.0), 1.0, u_finerThanFrame);
   vec3 wide = upsampleTent(u_texture, v_uv, u_texel);
   vec3 tight = texture(u_level, v_uv).rgb;
   outColor = vec4(mix(tight, wide, spread), 1.0);

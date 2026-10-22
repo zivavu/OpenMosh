@@ -55,8 +55,9 @@ uniform float u_ceiling;
 uniform float u_range;
 uniform int u_direction;
 uniform float u_reverse;
+uniform vec2 u_resolution;
 void main() {
-  vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
+  vec2 px = 1.0 / u_resolution;
   vec4 c = texture(u_texture, v_uv);
   float luma = dot(c.rgb, vec3(0.299, 0.587, 0.114));
   float lo = min(u_threshold, u_ceiling);

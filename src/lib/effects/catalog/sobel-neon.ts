@@ -76,7 +76,7 @@ vec3 sobel(vec2 st, vec2 c) {
 }
 void main() {
   vec4 scene = texture(u_texture, v_uv);
-  vec3 grad = sobel(u_width / u_resolution, v_uv);
+  vec3 grad = sobel(max(u_width / u_resolution, 1.0 / vec2(textureSize(u_texture, 0))), v_uv);
   vec3 bg = mix(u_bgColor, scene.rgb, u_bgFade);
   vec3 col = mix(bg, grad, u_neon) * u_brightness;
   outColor = vec4(clamp(col, 0.0, 1.0), scene.a);

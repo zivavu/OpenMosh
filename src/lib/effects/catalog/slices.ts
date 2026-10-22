@@ -43,8 +43,9 @@ export const shader: EffectShaderDef = {
 uniform float u_offset;
 uniform float u_angle;
 float hash(float n) { return fract(sin(n) * 43758.5453); }
+uniform vec2 u_resolution;
 void main() {
-  vec2 size = vec2(textureSize(u_texture, 0));
+  vec2 size = u_resolution;
   float rad = radians(u_angle);
   vec2 along = vec2(cos(rad), sin(rad));
   vec2 across = vec2(-along.y, along.x);

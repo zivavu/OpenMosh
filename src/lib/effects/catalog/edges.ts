@@ -76,10 +76,15 @@ vec3 sobel(vec2 r) {
   vec3 gy = -tl - 2.0*tm - tr + bl + 2.0*bm + br;
   return sqrt(gx*gx + gy*gy) * 0.25;
 }
+uniform vec2 u_resolution;
 void main() {
-  vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
+  vec2 px = 1.0 / u_resolution;
+  vec2 texel = 1.0 / vec2(textureSize(u_texture, 0));
   // Half scale too, so thick lines don't skip detail thinner than their radius.
-  vec3 mag = max(sobel(px * u_thickness), sobel(px * max(u_thickness * 0.5, 1.0)));
+  vec3 mag = max(
+    sobel(max(px * u_thickness, texel)),
+    sobel(max(px * max(u_thickness * 0.5, 1.0), texel))
+  );
   // Past a small floor, so grain and compression noise don't speckle.
   vec3 lines = clamp((mag * u_strength * 4.0 - 0.05) / 0.95, 0.0, 1.0);
   vec4 orig = texture(u_texture, v_uv);

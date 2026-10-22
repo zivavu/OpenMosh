@@ -65,18 +65,20 @@ uniform float u_angle;
 uniform int u_mode;
 uniform int u_depthSource;
 uniform float u_focus;
+uniform vec2 u_resolution;
 void main() {
-  vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
+  vec2 px = 1.0 / u_resolution;
+  vec2 tap = max(1.0 / u_resolution, 1.0 / vec2(textureSize(u_texture, 0)));
   vec4 c = texture(u_texture, v_uv);
 
   float d;
   if (u_depthSource == 0) {
     d = dot(c.rgb, vec3(0.299, 0.587, 0.114));
   } else if (u_depthSource == 1) {
-    float lL = dot(texture(u_texture, v_uv + vec2(-px.x, 0.0)).rgb, vec3(0.299, 0.587, 0.114));
-    float lR = dot(texture(u_texture, v_uv + vec2( px.x, 0.0)).rgb, vec3(0.299, 0.587, 0.114));
-    float lT = dot(texture(u_texture, v_uv + vec2(0.0, -px.y)).rgb, vec3(0.299, 0.587, 0.114));
-    float lB = dot(texture(u_texture, v_uv + vec2(0.0,  px.y)).rgb, vec3(0.299, 0.587, 0.114));
+    float lL = dot(texture(u_texture, v_uv + vec2(-tap.x, 0.0)).rgb, vec3(0.299, 0.587, 0.114));
+    float lR = dot(texture(u_texture, v_uv + vec2( tap.x, 0.0)).rgb, vec3(0.299, 0.587, 0.114));
+    float lT = dot(texture(u_texture, v_uv + vec2(0.0, -tap.y)).rgb, vec3(0.299, 0.587, 0.114));
+    float lB = dot(texture(u_texture, v_uv + vec2(0.0,  tap.y)).rgb, vec3(0.299, 0.587, 0.114));
     d = clamp(length(vec2(lR - lL, lB - lT)) * 4.0, 0.0, 1.0);
   } else {
     d = 1.0;

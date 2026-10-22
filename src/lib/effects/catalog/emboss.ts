@@ -42,8 +42,9 @@ export const shader: EffectShaderDef = {
 		`uniform float u_strength;
 uniform float u_angle;
 uniform float u_mix;
+uniform vec2 u_resolution;
 void main() {
-  vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
+  vec2 px = max(1.0 / u_resolution, 1.0 / vec2(textureSize(u_texture, 0)));
   float rad = u_angle * 3.14159265 / 180.0;
   vec2 dir = vec2(cos(rad), sin(rad));
   vec2 off = dir * max(px.x, px.y) * 2.0;
