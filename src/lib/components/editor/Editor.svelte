@@ -968,6 +968,14 @@
 		"openmosh-single-size",
 	);
 
+	/** The opened edit's saved trim, used up by the first song it loads. */
+	let sessionSpan = untrack(() => {
+		const span = initialSession?.span;
+		return span && Number.isFinite(span.start) && span.end > span.start
+			? span
+			: null;
+	});
+
 	// Persist span changes for library tracks; the span sits at 0/0 until duration is known.
 	$effect(() => {
 		const start = audio.spanStart;
@@ -1049,7 +1057,12 @@
 		/** Moving between songs starts the new one clean when it has nothing saved. */
 		clearOnMissing = false,
 	): Promise<void> {
-		const savedSpan = spanStore.load(trackId);
+		// The edit's own trim wins for its first song: a project file brings only that.
+		const own = sessionSpan;
+		sessionSpan = null;
+		const savedSpan = own
+			? { spanStart: own.start, spanEnd: own.end }
+			: spanStore.load(trackId);
 		// An empty span is left by the overwrite above, never a user choice.
 		if (savedSpan !== null && savedSpan.spanEnd > savedSpan.spanStart) {
 			audio.pendingSpan = {
@@ -3727,11 +3740,18 @@
 
 	function singleStateNow(): SingleSessionState {
 		const hasText = textTimeline.lanes.length > 0;
+		const trimmed =
+			currentTrackId &&
+			audio.pendingSpan === null &&
+			audio.spanEnd > audio.spanStart;
 		return {
 			effects: $state.snapshot(effects) as EffectInstance[],
 			text: hasText
 				? layersAsLoaded($state.snapshot(textTimeline) as TextTimeline, "text")
 				: null,
+			...(trimmed
+				? { span: { start: audio.spanStart, end: audio.spanEnd } }
+				: {}),
 		};
 	}
 
@@ -3779,6 +3799,8 @@
 		$state.snapshot(effects);
 		$state.snapshot(textTimeline);
 		file;
+		audio.spanStart;
+		audio.spanEnd;
 		// Loading a different song re-keys the session, so it has to re-save.
 		currentTrackId;
 		if (!singleSessionKept) return;

@@ -1,6 +1,10 @@
 /** Read a `.openmosh` file back into storage as a new project or edit. */
 
 import {
+	readNormalizedTracks,
+	writeNormalizedTracks,
+} from "../audio/normalized-tracks";
+import {
 	addTrack,
 	getAllTracks,
 	renameTrack,
@@ -275,6 +279,9 @@ export async function storeProjectFile(
 			if (track.name === item.fileName && item.name !== item.fileName)
 				await renameTrack(track.id, item.name);
 			storedTracks.add(track.id);
+			if (item.normalized) {
+				writeNormalizedTracks(readNormalizedTracks().add(track.id));
+			}
 			if (track.id !== item.trackId) trackIds.set(item.trackId, track.id);
 		}
 		const songId =

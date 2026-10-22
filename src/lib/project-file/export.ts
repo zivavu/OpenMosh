@@ -1,5 +1,6 @@
 /** Build a `.openmosh` project file from what's stored for a project key. */
 
+import { readNormalizedTracks } from "../audio/normalized-tracks";
 import { getTrack } from "../audio/track-library";
 import { APP_VERSION } from "../build-info";
 import {
@@ -255,6 +256,7 @@ export async function buildProjectFile(
 	const songs: ProjectSongEntry[] = [];
 	const songParts: ZipEntryInput[] = [];
 	let missingSongs = 0;
+	const normalized = readNormalizedTracks();
 	for (const trackId of songIdsOf(content)) {
 		const track = await getTrack(trackId).catch(() => null);
 		if (!track) {
@@ -269,6 +271,7 @@ export async function buildProjectFile(
 			fileName,
 			type: track.blob.type,
 			path,
+			...(normalized.has(trackId) ? { normalized: true as const } : {}),
 		});
 		songParts.push({ name: path, blob: track.blob });
 	}

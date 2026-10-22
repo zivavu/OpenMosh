@@ -40,6 +40,10 @@ import projectV1 from "./fixtures/v1.json";
 import projectV2Single from "./fixtures/v2-single.json";
 import projectV2Slideshow from "./fixtures/v2-slideshow.json";
 import type { ProjectManifest } from "./manifest";
+import {
+	readNormalizedTracks,
+	writeNormalizedTracks,
+} from "../audio/normalized-tracks";
 
 const PROJECT_FIXTURES = {
 	v1: projectV1,
@@ -359,6 +363,7 @@ describe("single and slideshow edits", () => {
 				},
 			],
 			text: { enabled: true, lanes: [text] },
+			span: { start: 1, end: 3 },
 		};
 		await store.putSession({
 			key,
@@ -396,6 +401,19 @@ describe("single and slideshow edits", () => {
 		});
 		expect(loadRenderSettings(landed.key)).toEqual({ fps: 25, duration: 6 });
 		expect(readProjectNames()[landed.key]).toBe("My single");
+	});
+
+	test("a normalized song comes back normalized", async () => {
+		const { key, trackId } = await seedSingle();
+		writeNormalizedTracks([trackId]);
+		const built = await buildProjectFile(key, { mode: "single" });
+		await store.clearAllSequenceStores();
+		await tracks.clearTracks();
+		localData.clear();
+
+		await storeProjectFile(await readProjectFile(built.blob));
+		const [song] = await tracks.getAllTracks();
+		expect(readNormalizedTracks().has(song.id)).toBe(true);
 	});
 
 	test("an unnamed edit comes back under its own name, not as a copy", async () => {
