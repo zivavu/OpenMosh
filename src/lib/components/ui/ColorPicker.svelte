@@ -139,7 +139,13 @@
 			aria-label="Hex color"
 			spellcheck="false"
 			{value}
-			oninput={(e) => onChange(e.currentTarget.value)}
+			oninput={(e) => {
+				const v = e.currentTarget.value;
+				// A complete hex applies as typed, with its # or without.
+				onChange(
+					/^#?[0-9a-f]{6}$/i.test(v.trim()) ? normalizeHex(v, defaultValue) : v,
+				);
+			}}
 			onblur={(e) =>
 				onChange(normalizeHex(e.currentTarget.value, defaultValue))}
 		/>
