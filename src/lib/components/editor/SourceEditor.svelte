@@ -1007,7 +1007,12 @@
 
 	type Drag =
 		| { kind: "erase" }
-		| { kind: "crop"; crop: CropDrag }
+		| {
+				kind: "crop";
+				crop: CropDrag;
+				/** Where it was pressed, until it moves: a click alone changes nothing. */
+				press: { x: number; y: number } | null;
+		  }
 		| { kind: "mask-move"; ax: number; ay: number; from: MaskTransform };
 	let drag: Drag | null = null;
 
@@ -1054,11 +1059,12 @@
 		}
 		const n = normAt(e);
 		if (!n) return;
-		// Once for the gesture, before it starts: setCrop runs on every move.
-		beforeEdit();
 		const started = startCropDrag(crop, n, cropTolerance());
-		drag = { kind: "crop", crop: started.drag };
-		if (started.crop) setCrop(started.crop);
+		drag = {
+			kind: "crop",
+			crop: started.drag,
+			press: { x: e.clientX, y: e.clientY },
+		};
 	}
 
 	function onPreviewMove(e: PointerEvent) {
@@ -1097,7 +1103,19 @@
 			return;
 		}
 		const n = normAt(e);
-		if (n) setCrop(dragCrop(drag.crop, crop, n));
+		if (!n) return;
+		if (drag.press) {
+			// A few pixels of slack, so a shaky click stays a click.
+			const moved = Math.hypot(
+				e.clientX - drag.press.x,
+				e.clientY - drag.press.y,
+			);
+			if (moved < 3) return;
+			drag.press = null;
+			// Once for the gesture, before it starts: setCrop runs on every move.
+			beforeEdit();
+		}
+		setCrop(dragCrop(drag.crop, crop, n));
 	}
 
 	function onPreviewUp(e: PointerEvent) {
