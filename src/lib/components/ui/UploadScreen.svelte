@@ -53,7 +53,8 @@
 	import { readRaw, writeRaw } from "../../storage";
 	import { onOldHost, SITE_URL } from "../../site";
 	import { showToast } from "./toast.svelte";
-	import { downloadFile, fmtAgo } from "../../utils";
+	import { fmtAgo } from "../../utils";
+	import { backupJob, saveBackup } from "../../backup/backup-job.svelte";
 	import { downloadProjectFile } from "../../project-file/export";
 	import { isModalKeyboardOpen } from "../../modal-keyboard";
 	import { isInteractiveTarget } from "../../editor/shortcut-target";
@@ -118,23 +119,8 @@
 	const loadStorageModal = lazy(() => import("./StorageModal.svelte"));
 	let storageOpen = $state(false);
 
-	/** Only the old address offers this, so the backup code loads on first use. */
-	let packingBackup = $state(false);
-	async function downloadBackup() {
-		if (packingBackup) return;
-		packingBackup = true;
-		try {
-			const backup = await import("../../backup/backup");
-			const name = backup.backupFileName();
-			downloadFile(await backup.buildBackup(), name);
-			showToast(`Backup saved as ${name}`, "success");
-		} catch (err) {
-			console.error(err);
-			showToast("Couldn't build the backup", "error");
-		} finally {
-			packingBackup = false;
-		}
-	}
+	/** The old address's backup, the same job the storage dialog runs. */
+	let backupRunning = $derived(backupJob());
 
 	// Owned here rather than inside the demo, so STOP quiets the wordmark's tear too.
 	let demoPlaying = $state(demoBackgroundEnabled());
@@ -756,15 +742,15 @@
 			</p>
 			<button
 				class="compat-action"
-				onclick={downloadBackup}
-				disabled={packingBackup}
+				onclick={saveBackup}
+				disabled={backupRunning !== null}
 			>
-				{#if packingBackup}
+				{#if backupRunning === "save"}
 					<LoaderCircle size={12} class="backup-spin" />
 				{:else}
 					<Download size={12} />
 				{/if}
-				{packingBackup ? "Packing…" : "Download backup"}
+				{backupRunning === "save" ? "Packing…" : "Download backup"}
 			</button>
 		</div>
 	{/if}
