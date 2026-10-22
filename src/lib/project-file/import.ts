@@ -232,6 +232,18 @@ export async function storeProjectFile(
 	onProgress?: (progress: ProjectImportProgress) => void,
 ): Promise<{ mode: ProjectFileMode; key: string }> {
 	const { manifest, manifestEntry, byPath } = project;
+	// A slideshow cuts to its song, and one without it is never saved: it would sit in
+	// the list until a prune took it.
+	if (
+		manifest.mode === "slideshow" &&
+		!manifest.songs.some(
+			(s) => s.trackId === manifest.trackId && byPath.has(s.path),
+		)
+	) {
+		throw new Error(
+			"That slideshow has no song in the file, and a slideshow can't open without one",
+		);
+	}
 	// Checked before anything is stored: a file damaged in transit would otherwise
 	// import its media broken, with nothing said.
 	const used = [
