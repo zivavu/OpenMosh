@@ -170,6 +170,14 @@ describe("savePreset", () => {
 		expect(stored().map((p) => p.name)).toEqual(["one", "two"]);
 	});
 
+	it("numbers a name that's taken, so clips can't mix the two up", () => {
+		savePreset("one", []);
+		expect(savePreset("one", []).map((p) => p.name)).toEqual([
+			"one",
+			"one (2)",
+		]);
+	});
+
 	it("normalizes the name on the way in", () => {
 		expect(savePreset("  spaced  ", [])[0].name).toBe("spaced");
 	});
