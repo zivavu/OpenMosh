@@ -29,7 +29,10 @@ export class ClipMoshes<Clip extends { id: string }> {
 	roll = (clipIds: string[]) => {
 		const ids = new Set(clipIds);
 		for (const clip of this.#opts.clips(ids)) {
-			this.#history.seed(clip.id, this.#snapshot(clip));
+			// The mosh being left keeps its tweaks, however the roll was asked for.
+			const now = this.#snapshot(clip);
+			this.#history.replace(clip.id, now);
+			this.#history.seed(clip.id, now);
 		}
 		this.#opts.beforeChange?.();
 		this.#opts.roll(ids);
