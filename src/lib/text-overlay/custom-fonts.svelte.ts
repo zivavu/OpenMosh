@@ -9,6 +9,8 @@ import {
 	setFontsPending,
 	unregisterFamily,
 } from "./font-registry";
+import { packFontSlices, unpackFontSlices, type FontSlice } from "./font-pack";
+import { parseFontFaces, pickFaces, requestedFamily } from "./font-faces";
 import { FONT_OPTIONS } from "./fonts";
 
 export interface CustomFont {
@@ -23,7 +25,7 @@ export interface CustomFont {
 }
 
 interface StoredFont extends CustomFont {
-	/** The woff2/ttf/otf bytes. */
+	/** The woff2/ttf/otf bytes, or several packed by font-pack.ts. */
 	data: ArrayBuffer;
 }
 
@@ -67,20 +69,31 @@ function faceName(font: Pick<CustomFont, "family">): string {
 	return font.family.replace(/^'|'$/g, "");
 }
 
+/** The font's files, one per script subset when it came from Google Fonts. */
+function fontSlices(data: ArrayBuffer): FontSlice[] {
+	return unpackFontSlices(data) ?? [{ data, unicodeRange: "" }];
+}
+
 /** Register a stored face with the document so 2D-canvas drawing can use it. */
 function registerFont(font: StoredFont): void {
-	// A slice: FontFace takes ownership of the buffer, and the same record may come
-	// back from a later getAll().
-	const face = new FontFace(faceName(font), font.data.slice(0));
-	const promise = face
-		.load()
-		.then((f) => {
-			document.fonts.add(f);
-			bumpFontsVersion();
-		})
-		.catch(() => {
+	const loads = fontSlices(font.data).map((slice) =>
+		// A copy: FontFace takes ownership of the buffer, and the same record may come
+		// back from a later getAll().
+		new FontFace(
+			faceName(font),
+			slice.data.slice(0),
+			slice.unicodeRange ? { unicodeRange: slice.unicodeRange } : {},
+		).load(),
+	);
+	const promise = Promise.allSettled(loads).then((results) => {
+		const loaded = results.filter((r) => r.status === "fulfilled");
+		if (loaded.length === 0) {
 			unregisterFamily(font.family);
-		});
+			return;
+		}
+		for (const r of loaded) document.fonts.add(r.value);
+		bumpFontsVersion();
+	});
 	registerFamily(font.family, promise);
 }
 
@@ -122,50 +135,6 @@ function toStylesheetUrl(input: string): string | null {
 	return null;
 }
 
-interface ParsedFace {
-	name: string;
-	url: string;
-	weight: number;
-	italic: boolean;
-	/** Empty when the block covers everything. */
-	unicodeRange: string;
-}
-
-function parseFontFaces(css: string): ParsedFace[] {
-	const faces: ParsedFace[] = [];
-	for (const block of css.matchAll(/@font-face\s*\{([^}]*)\}/g)) {
-		const body = block[1];
-		const name = /font-family:\s*(['"]?)(.+?)\1\s*;/.exec(body)?.[2]?.trim();
-		const src =
-			/url\(\s*['"]?(https?:\/\/[^'")\s]+\.woff2[^'")\s]*)/i.exec(body)?.[1] ??
-			/url\(\s*['"]?(https?:\/\/[^'")\s]+)/i.exec(body)?.[1];
-		if (!name || !src) continue;
-		faces.push({
-			name,
-			url: src,
-			weight: Number(/font-weight:\s*(\d+)/.exec(body)?.[1] ?? 400),
-			italic: /font-style:\s*italic/.test(body),
-			unicodeRange: /unicode-range:\s*([^;]+)/.exec(body)?.[1]?.trim() ?? "",
-		});
-	}
-	return faces;
-}
-
-/** A Google Fonts stylesheet is one @font-face per script subset and weight. Take
- * the upright regular latin one: the overlays draw a single weight. */
-function pickFace(faces: ParsedFace[]): ParsedFace | null {
-	if (faces.length === 0) return null;
-	const upright = faces.filter((f) => !f.italic);
-	const pool = upright.length > 0 ? upright : faces;
-	const latin = pool.filter(
-		(f) => f.unicodeRange === "" || f.unicodeRange.includes("U+0000-00FF"),
-	);
-	const candidates = latin.length > 0 ? latin : pool;
-	return candidates.reduce((best, f) =>
-		Math.abs(f.weight - 400) < Math.abs(best.weight - 400) ? f : best,
-	);
-}
-
 /** Title-case a file stem so `press-start-2p.woff2` reads as a face name. */
 function nameFromFileUrl(url: string): string {
 	const stem = decodedName(url.split(/[?#]/)[0].split("/").pop() ?? "")
@@ -197,29 +166,36 @@ export async function addCustomFont(input: string): Promise<CustomFont> {
 	const trimmed = input.trim();
 	if (!trimmed) throw new Error("Paste a font link first.");
 
-	let name: string;
-	let fileUrl: string;
-
 	const cssUrl = toStylesheetUrl(trimmed);
 	if (cssUrl) {
 		const res = await fetch(cssUrl);
 		if (!res.ok) {
 			throw new Error(`Google Fonts didn't return that font (${res.status}).`);
 		}
-		const face = pickFace(parseFontFaces(await res.text()));
-		if (!face) throw new Error("No font face in that stylesheet.");
-		name = face.name;
-		fileUrl = face.url;
-	} else if (FONT_FILE_RE.test(trimmed)) {
-		name = nameFromFileUrl(trimmed);
-		fileUrl = trimmed;
-	} else {
-		throw new Error(
-			"Paste a Google Fonts link, or a direct .woff2/.ttf/.otf URL.",
+		const faces = pickFaces(
+			parseFontFaces(await res.text()),
+			requestedFamily(cssUrl),
+		);
+		if (faces.length === 0) throw new Error("No font face in that stylesheet.");
+		const slices = await Promise.all(
+			faces.map(async (f) => ({
+				data: await fetchBytes(f.url),
+				unicodeRange: f.unicodeRange,
+			})),
+		);
+		const data = slices.length > 1 ? packFontSlices(slices) : slices[0].data;
+		return addCustomFontData(faces[0].name, trimmed, data);
+	}
+	if (FONT_FILE_RE.test(trimmed)) {
+		return addCustomFontData(
+			nameFromFileUrl(trimmed),
+			trimmed,
+			await fetchBytes(trimmed),
 		);
 	}
-
-	return addCustomFontData(name, trimmed, await fetchBytes(fileUrl));
+	throw new Error(
+		"Paste a Google Fonts link, or a direct .woff2/.ttf/.otf URL.",
+	);
 }
 
 /** Add a font the user picked off disk. Same result as a pasted link, minus the
@@ -245,7 +221,10 @@ export async function addCustomFontData(
 	// Parse it before it goes anywhere: a file the browser can't read would otherwise
 	// sit in the list and silently draw as the fallback face.
 	try {
-		await new FontFace("OpenMoshProbe", data.slice(0)).load();
+		await new FontFace(
+			"OpenMoshProbe",
+			fontSlices(data)[0].data.slice(0),
+		).load();
 	} catch {
 		throw new Error(`${name} isn't a font this browser can read.`);
 	}
