@@ -201,21 +201,62 @@ function wrapLines(
 	text: string,
 	maxWidth: number,
 ): string[] {
+	return wrapText(text, maxWidth, (s) => ctx.measureText(s).width);
+}
+
+const wordSegmenter =
+	typeof Intl !== "undefined" && "Segmenter" in Intl
+		? new Intl.Segmenter(undefined, { granularity: "word" })
+		: null;
+const graphemeSegmenter =
+	typeof Intl !== "undefined" && "Segmenter" in Intl
+		? new Intl.Segmenter(undefined, { granularity: "grapheme" })
+		: null;
+
+/** Words and the spaces between them. Chinese and Japanese have no spaces, so the
+ * segmenter finds their words. */
+function wordsOf(part: string): string[] {
+	if (wordSegmenter)
+		return [...wordSegmenter.segment(part)].map((s) => s.segment);
+	return part.split(/(\s)/).filter(Boolean);
+}
+
+function charsOf(word: string): string[] {
+	if (graphemeSegmenter) {
+		return [...graphemeSegmenter.segment(word)].map((s) => s.segment);
+	}
+	return [...word];
+}
+
+/** Lines of `text` no wider than `maxWidth`, breaking between words, and inside a word
+ * (a long URL) only when it can't fit on a line of its own. */
+export function wrapText(
+	text: string,
+	maxWidth: number,
+	measure: (s: string) => number,
+): string[] {
 	const lines: string[] = [];
-	for (const part of text.split("\n")) {
-		const words = part.split(/\s+/).filter(Boolean);
-		if (words.length === 0) continue;
+	for (const raw of text.split("\n")) {
+		const part = raw.replace(/\s+/g, " ").trim();
+		if (!part) continue;
 		let current = "";
-		for (const word of words) {
-			const test = current ? `${current} ${word}` : word;
-			if (current && ctx.measureText(test).width > maxWidth) {
-				lines.push(current);
-				current = word;
+		const add = (piece: string) => {
+			const test = current + piece;
+			if (current.trim() && measure(test.trimEnd()) > maxWidth) {
+				lines.push(current.trimEnd());
+				current = piece.trimStart();
 			} else {
 				current = test;
 			}
+		};
+		for (const word of wordsOf(part)) {
+			if (word.trim() && measure(word) > maxWidth) {
+				for (const char of charsOf(word)) add(char);
+			} else {
+				add(word);
+			}
 		}
-		if (current) lines.push(current);
+		if (current.trim()) lines.push(current.trimEnd());
 	}
 	return lines;
 }
