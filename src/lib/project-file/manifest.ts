@@ -59,6 +59,8 @@ export interface ProjectSongEntry {
 	/** MIME type; a slice of the zip carries none. */
 	type: string;
 	path: string;
+	/** Loudness normalization was on; absent when off. */
+	normalized?: true;
 }
 
 export interface ProjectFontEntry {
@@ -156,6 +158,7 @@ function parseSongs(raw: unknown): ProjectSongEntry[] {
 			fileName: typeof item.fileName === "string" ? item.fileName : name,
 			type: typeof item.type === "string" ? item.type : "",
 			path: safePath(item.path, "songs/"),
+			...(item.normalized === true ? { normalized: true as const } : {}),
 		});
 	}
 	return out;
@@ -232,9 +235,15 @@ function parseState(mode: SessionMode, raw: unknown): unknown {
 	if (mode === "slideshow") {
 		return { config: parseSlideshowConfig(state.config) };
 	}
+	const span = isRecord(state.span) ? state.span : null;
+	const start = finiteOr(span?.start, null);
+	const end = finiteOr(span?.end, null);
 	return {
 		effects: Array.isArray(state.effects) ? records(state.effects) : [],
 		text: isRecord(state.text) ? state.text : null,
+		...(start !== null && end !== null && end > start
+			? { span: { start, end } }
+			: {}),
 	};
 }
 

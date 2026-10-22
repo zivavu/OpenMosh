@@ -32,6 +32,8 @@ import type { TextTimeline } from "../text/types";
 export interface SingleSessionState {
 	effects: EffectInstance[];
 	text: TextTimeline | null;
+	/** The song's trim, so it travels in a project file; absent before it was kept here. */
+	span?: { start: number; end: number };
 }
 
 export interface SavedSession {

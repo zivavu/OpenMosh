@@ -11,9 +11,13 @@
 		X,
 	} from "lucide-svelte";
 	import { onMount } from "svelte";
-	import { readJson, readRaw, writeJson, writeRaw } from "../../storage";
+	import { readRaw, writeRaw } from "../../storage";
 	import { getDecodedAudioBuffer } from "../../audio/audio-buffer-cache";
 	import { computeNormalizeGain, measureLoudness } from "../../audio/loudness";
+	import {
+		readNormalizedTracks,
+		writeNormalizedTracks,
+	} from "../../audio/normalized-tracks";
 	import {
 		addTrack,
 		deleteTrack,
@@ -155,16 +159,13 @@
 	let fileInput: HTMLInputElement;
 	let libraryEl: HTMLDivElement;
 
-	const NORMALIZE_KEY = "openmosh-library-normalize";
-	let normalizedIds = $state<Set<string>>(
-		new Set(readJson<string[]>(NORMALIZE_KEY, [])),
-	);
+	let normalizedIds = $state<Set<string>>(readNormalizedTracks());
 	// Not $state: only used internally, never read in the template directly
 	let gainCache = new Map<string, number>();
 	let measuringIds = $state<Set<string>>(new Set());
 
 	$effect(() => {
-		writeJson(NORMALIZE_KEY, [...normalizedIds]);
+		writeNormalizedTracks(normalizedIds);
 	});
 
 	$effect(() => {
