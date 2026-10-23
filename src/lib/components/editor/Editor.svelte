@@ -252,6 +252,7 @@
 		type MediaLane,
 		type MediaTimeline,
 		type SourceEdit,
+		createSourceEdit,
 	} from "../../media";
 	import { chainClipMoshSnapshot } from "../../editor/chain-clip";
 	import {
@@ -2201,6 +2202,12 @@
 			sourceRegistry.remove(s.id);
 			setMediaTimeline(detachMediaSource(mediaTimeline, s.id));
 		}
+		// Edits come back too: an undo can be of a crop, key or erase alone.
+		for (const e of entries) {
+			if (sourceRegistry.get(e.id)) {
+				sourceRegistry.setEdit(e.id, e.edit ?? createSourceEdit());
+			}
+		}
 		const missing = entries.filter((e) => !sourceRegistry.get(e.id));
 		if (missing.length === 0) return;
 		for (const e of missing) poolUndoIds.add(e.id);
@@ -3325,7 +3332,32 @@
 	let sourceEditOpen = $state(false);
 
 	/** The modal has its own transport, so the preview stops while it is up. */
+	/** The pool as Edit media opened on: its crop, key and erase edits land on Ctrl+Z
+	 * as one step when it closes, while its own undo covers the steps inside. */
+	let poolBeforeSourceEdit: PoolEntry[] | null = null;
+
+	/** A source edit from outside Edit media (a clip's speed) is its own undo step. */
+	function editSource(id: string, edit: SourceEdit) {
+		if (!sourceEditOpen) poolHistory.push(poolNow(), `source-edit-${id}`);
+		sourceRegistry.setEdit(id, edit);
+	}
+
 	function onSourceEditingChange(open: boolean) {
+		if (open && !sourceEditOpen) {
+			poolBeforeSourceEdit = poolNow().map((e) => ({
+				...e,
+				edit: e.edit && ($state.snapshot(e.edit) as SourceEdit),
+			}));
+		} else if (!open && sourceEditOpen && poolBeforeSourceEdit) {
+			const before = poolBeforeSourceEdit;
+			poolBeforeSourceEdit = null;
+			const changed = before.some(
+				(e) =>
+					JSON.stringify(e.edit ?? null) !==
+					JSON.stringify(sourceRegistry.edits[e.id] ?? null),
+			);
+			if (changed) poolHistory.push(before);
+		}
 		sourceEditOpen = open;
 		if (open) pauseTrack();
 	}
@@ -5389,7 +5421,7 @@
 				onRemove={removeSequenceSource}
 				onReorder={(from, to) => sourceRegistry.reorder(from, to)}
 				edits={sourceRegistry.edits}
-				onEditChange={(id, edit) => sourceRegistry.setEdit(id, edit)}
+				onEditChange={editSource}
 				onEditingChange={onSourceEditingChange}
 				onProxyAction={sourceProxyAction}
 			/>
@@ -5859,7 +5891,7 @@
 					? laneAudioResponse(selectedMediaLane, audioResponse)
 					: audioResponse}
 				edits={sourceRegistry.edits}
-				onEditChange={(id, edit) => sourceRegistry.setEdit(id, edit)}
+				onEditChange={editSource}
 				onEditingChange={onSourceEditingChange}
 				{section}
 				chainNote={mediaChainNote}
