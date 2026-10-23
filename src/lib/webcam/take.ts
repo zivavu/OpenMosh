@@ -1,3 +1,5 @@
+import type { StreamTargetChunk } from "mediabunny";
+import { openOutputBuffer } from "../recorder";
 import { drawShaped, type CameraShape } from "./shape";
 
 /** A webcam take: the camera's frames straight into a WebM, in real time. mediabunny
@@ -31,7 +33,16 @@ export async function startTake(
 	);
 	if (!codec) throw new Error("This browser can't encode WEBM video.");
 
-	const target = new mb.BufferTarget();
+	// On disk where the browser allows: a long take would otherwise grow in memory.
+	const buffer = await openOutputBuffer("take");
+	const target = new mb.StreamTarget(
+		new WritableStream<StreamTargetChunk>({
+			write(chunk) {
+				return buffer.write(chunk.data, chunk.position);
+			},
+		}),
+		{ chunked: true },
+	);
 	const output = new mb.Output({ format, target });
 	const source = new mb.MediaStreamVideoTrackSource(track, {
 		codec,
@@ -55,12 +66,15 @@ export async function startTake(
 		async stop() {
 			if (done) throw new Error("Take already ended");
 			done = true;
-			if (sourceError) throw sourceError;
+			if (sourceError) {
+				buffer.discard();
+				throw sourceError;
+			}
 			source.close();
 			await output.finalize();
-			const buffer = target.buffer;
-			if (!buffer) throw new Error("The take came out empty.");
-			return new File([buffer], `take-${Date.now()}.webm`, {
+			const blob = await buffer.toBlob("video/webm");
+			if (blob.size === 0) throw new Error("The take came out empty.");
+			return new File([blob], `take-${Date.now()}.webm`, {
 				type: "video/webm",
 			});
 		},
@@ -68,7 +82,7 @@ export async function startTake(
 			if (done) return;
 			done = true;
 			source.close();
-			void output.cancel();
+			void output.cancel().finally(() => buffer.discard());
 		},
 	};
 }

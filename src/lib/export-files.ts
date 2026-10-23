@@ -35,8 +35,12 @@ export async function clearStaleExports(): Promise<void> {
 	}
 }
 
-/** A fresh file for the next export, or null where the browser can't write one. */
-export async function openExportFile(): Promise<FileSystemFileHandle | null> {
+/** A fresh file for the next export, or null where the browser can't write one. A
+ * webcam take is kept until a startup with no other tab open: its file backs a pool
+ * entry until the pool is stored. */
+export async function openExportFile(
+	kind: "export" | "take" = "export",
+): Promise<FileSystemFileHandle | null> {
 	try {
 		if (!navigator.storage?.getDirectory) return null;
 		if (!navigator.locks) {
@@ -55,6 +59,11 @@ export async function openExportFile(): Promise<FileSystemFileHandle | null> {
 			}
 		}
 		const dir = await exportDir();
+		if (kind === "take") {
+			return await dir.getFileHandle(`take-${Date.now()}.webm`, {
+				create: true,
+			});
+		}
 		// This tab's last export was saved long before another was started.
 		if (lastFile) await dir.removeEntry(lastFile).catch(() => {});
 		lastFile = `export-${Date.now()}.webm`;
