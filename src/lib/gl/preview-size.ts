@@ -56,3 +56,16 @@ export function measureDisplaySize(el: Element): {
 		height: Math.round(r.height * dpr),
 	};
 }
+
+/** `w`x`h` shrunk to fit a square of `max`, keeping its shape. */
+export function fitTextureSize(
+	w: number,
+	h: number,
+	max: number,
+): { width: number; height: number } {
+	const k = Math.min(1, max / Math.max(w, h));
+	return {
+		width: Math.max(1, Math.floor(w * k)),
+		height: Math.max(1, Math.floor(h * k)),
+	};
+}

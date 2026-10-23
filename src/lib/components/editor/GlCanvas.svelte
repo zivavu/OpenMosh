@@ -3,7 +3,11 @@
 	import type { Snippet } from "svelte";
 	import type { EffectInstance } from "../../effects";
 	import { ANIMATED_EFFECTS } from "../../gl/effect-shaders";
-	import { fitPreviewSize, measureDisplaySize } from "../../gl/preview-size";
+	import {
+		fitPreviewSize,
+		fitTextureSize,
+		measureDisplaySize,
+	} from "../../gl/preview-size";
 	import {
 		GlRenderer,
 		highlightKey,
@@ -1094,8 +1098,14 @@
 			if (cancelled) return;
 			renderer!.loadImage(img);
 			refitPreview();
-			naturalWidth = img.naturalWidth;
-			naturalHeight = img.naturalHeight;
+			// Past the GPU's texture limit the frame is drawn down to fit, and saves at that.
+			const fitted = fitTextureSize(
+				img.naturalWidth,
+				img.naturalHeight,
+				renderer!.maxTextureSize,
+			);
+			naturalWidth = fitted.width;
+			naturalHeight = fitted.height;
 			imageReady = true;
 		};
 		img.src = imageSrc;
