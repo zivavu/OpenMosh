@@ -22,6 +22,23 @@ function asLyricLine(text: string): string {
 	return text.replace(/\s*\n\s*/g, " ").trim();
 }
 
+/** The lines timed inside the span. Pasted LRC is stamped against the whole song, so a
+ * trimmed span leaves some lines outside it, where they'd only flash by at an edge. */
+export function linesInSpan(
+	lines: string[],
+	timings: number[],
+	spanStart: number,
+	spanEnd: number,
+): { lines: string[]; timings: number[] } {
+	const keep = timings.flatMap((t, i) =>
+		t >= spanStart && t <= spanEnd ? [i] : [],
+	);
+	return {
+		lines: keep.map((i) => lines[i]),
+		timings: keep.map((i) => timings[i]),
+	};
+}
+
 /** One clip per line, back-to-back: each line stays up until the next starts,
  * and the last holds to `spanEnd`.
  *
@@ -42,7 +59,7 @@ export function createLyricsClips(
 		// Hold back room for every line still to come, so the tail keeps its
 		// clips inside the span instead of running off the end.
 		const latest = spanEnd - (lines.length - i) * MIN_CLIP_LENGTH;
-		const capped = Math.min(timings[i], latest);
+		const capped = Math.max(0, Math.min(timings[i], latest));
 		starts.push(
 			i > 0 ? Math.max(capped, starts[i - 1] + MIN_CLIP_LENGTH) : capped,
 		);
