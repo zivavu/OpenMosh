@@ -26,6 +26,9 @@ export interface SlideshowFrameDriverOptions {
 	/** Whether a video slide's advance may stall waiting for its decoder. Export
 	 * needs the exact frame; preview holds the one on screen instead. */
 	waitForFrames?: boolean;
+	/** Every source is loaded up front (an export), so a slide without one couldn't be
+	 * read: it shows blank instead of holding the slide before it. */
+	blankMissing?: boolean;
 }
 
 export interface SlideshowFrame {
@@ -47,6 +50,7 @@ export class SlideshowFrameDriver {
 	#getRenderer: () => GlRenderer;
 	#sources: SlideshowFrameSources;
 	#waitForFrames: boolean;
+	#blankMissing: boolean;
 
 	#smoothState: { effects: EffectInstance[] };
 	#effects: EffectInstance[];
@@ -62,6 +66,7 @@ export class SlideshowFrameDriver {
 		this.#getRenderer = opts.getRenderer;
 		this.#sources = opts.sources;
 		this.#waitForFrames = opts.waitForFrames ?? true;
+		this.#blankMissing = opts.blankMissing ?? false;
 		this.#smoothState = { effects: cloneEffects(opts.baseEffects) };
 		this.#effects = cloneEffects(opts.baseEffects);
 	}
@@ -97,6 +102,9 @@ export class SlideshowFrameDriver {
 			if (img) {
 				this.#getRenderer().updateSourceImage(img);
 				this.#currentSlideId = slide.id;
+			} else if (this.#blankMissing) {
+				this.#getRenderer().clearSource();
+				this.#currentSlideId = slide.id;
 			}
 		}
 
@@ -112,6 +120,13 @@ export class SlideshowFrameDriver {
 
 		let ready: Promise<void> | null = null;
 		if (slide.kind === "video") {
+			if (
+				this.#blankMissing &&
+				slide.id !== this.#currentSlideId &&
+				!this.#sources.getSampler(slide)
+			) {
+				this.#getRenderer().clearSource();
+			}
 			ready = this.#advanceVideo(slide, time);
 			this.#currentSlideId = slide.id;
 		}
