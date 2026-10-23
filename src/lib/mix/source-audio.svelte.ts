@@ -1,7 +1,13 @@
 /** Decoded sound per source, shared by the live mixer, the export and the waveforms. */
 
 import { getDecodedAudioBuffer } from "../audio/audio-buffer-cache";
-import { decodeAudioTrackToBuffer, openAudioTrack } from "../video/decode";
+import { showToast } from "../components/ui/toast.svelte";
+import {
+	decodeAudioTrackToBuffer,
+	openAudioTrack,
+	SoundTooLongError,
+	soundTooLongMessage,
+} from "../video/decode";
 
 /** Waveform resolution: loudest sample per this slice of a second. */
 export const PEAKS_PER_SEC = 100;
@@ -26,10 +32,15 @@ async function decodeSourceAudio(file: File): Promise<AudioBuffer | null> {
 		}
 	};
 	const viaBrowser = () => getDecodedAudioBuffer(file).catch(() => null);
+	// Too long for one buffer: the browser's decode would hold it whole too.
+	const orNull = (e: unknown) => {
+		if (e instanceof SoundTooLongError) throw e;
+		return null;
+	};
 	if (file.type.startsWith("audio/")) {
-		return (await viaBrowser()) ?? (await viaMediabunny().catch(() => null));
+		return (await viaBrowser()) ?? (await viaMediabunny().catch(orNull));
 	}
-	return (await viaMediabunny().catch(() => null)) ?? (await viaBrowser());
+	return (await viaMediabunny().catch(orNull)) ?? (await viaBrowser());
 }
 
 function computePeaks(buffer: AudioBuffer): Float32Array {
@@ -147,16 +158,20 @@ export class SourceAudioBank {
 
 	async #decode(id: string): Promise<void> {
 		let entry: Entry | null = { state: "none" };
+		let file: File | null = null;
 		try {
-			const file = await this.#resolve(id);
+			file = await this.#resolve(id);
 			// Not there yet (still coming back from storage): asked again later.
 			if (!file) entry = null;
 			const buffer = file ? await decodeSourceAudio(file) : null;
 			if (buffer && buffer.length > 0) {
 				entry = { state: "ready", buffer, peaks: computePeaks(buffer) };
 			}
-		} catch {
-			// Undecodable is the same as silent here.
+		} catch (e) {
+			// Otherwise undecodable is the same as silent here.
+			if (e instanceof SoundTooLongError && file) {
+				showToast(soundTooLongMessage(file.name), "info", 8000);
+			}
 		} finally {
 			this.#release();
 		}
