@@ -28,8 +28,13 @@ export async function loadDemoSources(): Promise<HTMLImageElement[]> {
 	});
 	const images: HTMLImageElement[] = [];
 	for (const spec of specs) {
-		const blob = await renderSpec(spec, WIDTH, HEIGHT, "image/jpeg");
-		images.push(await blobToImage(blob));
+		// One kind this GPU can't draw (attractors need float targets) shouldn't take the rest.
+		try {
+			const blob = await renderSpec(spec, WIDTH, HEIGHT, "image/jpeg");
+			images.push(await blobToImage(blob));
+		} catch (e) {
+			console.warn("Demo image skipped:", e);
+		}
 	}
 	return images;
 }

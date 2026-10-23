@@ -57,9 +57,12 @@
 			}
 		}
 		let cancelled = false;
-		void loadDemoSources().then((imgs) => {
-			if (!cancelled) sources = imgs;
-		});
+		// The demo is decoration: with no images, the screen just goes without it.
+		loadDemoSources()
+			.then((imgs) => {
+				if (!cancelled) sources = imgs;
+			})
+			.catch((e) => console.warn("Demo unavailable:", e));
 		return () => {
 			cancelled = true;
 		};
