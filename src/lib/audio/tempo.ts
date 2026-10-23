@@ -149,6 +149,7 @@ export function estimateTempo(
 	sampleRate: number,
 ): TempoEstimate {
 	const { full: env, low } = onsetEnvelopes(samples, sampleRate);
+	if (!hasOnsets(env)) throw new Error("No beat to measure");
 	const fps = FRAMES_PER_SECOND;
 	const maxLag = Math.min(
 		env.length - 1,
@@ -200,6 +201,19 @@ export function estimateTempo(
 	const beat = 60 / refined;
 	const offset = (phase / fps + frameSize(sampleRate) / 2 / sampleRate) % beat;
 	return { bpm: refined, offset };
+}
+
+/** Music's onsets stand far above the rest of its envelope: across the test songs,
+ * three quarters of the frames sit under 7% of the peak. A tone or hiss sits at 18%
+ * and up, and any tempo read off it would be made up. */
+const MAX_ONSET_FLATNESS = 0.12;
+
+function hasOnsets(env: Float64Array): boolean {
+	let peak = 0;
+	for (const v of env) if (v > peak) peak = v;
+	if (!(peak > 0)) return false;
+	const sorted = Float64Array.from(env).sort();
+	return sorted[Math.floor(sorted.length * 0.75)] / peak <= MAX_ONSET_FLATNESS;
 }
 
 function gridSum(env: Float64Array, period: number, phase: number): number {
