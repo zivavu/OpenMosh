@@ -60,4 +60,18 @@ describe("estimateTempo", () => {
 			"No beat",
 		);
 	});
+
+	test("finds no beat in a steady tone or hiss", () => {
+		const rate = 44100;
+		const tone = Float32Array.from(
+			{ length: rate * 10 },
+			(_, i) => 0.5 * Math.sin((2 * Math.PI * 440 * i) / rate),
+		);
+		const hiss = Float32Array.from(
+			{ length: rate * 10 },
+			() => (Math.random() - 0.5) * 0.5,
+		);
+		expect(() => estimateTempo(tone, rate)).toThrow("No beat");
+		expect(() => estimateTempo(hiss, rate)).toThrow("No beat");
+	});
 });
