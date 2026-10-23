@@ -108,6 +108,8 @@
 	let view: View = $state(parseRoute(window.location.hash).view);
 	/** What the open edit saves under, once it saves: a new edit gets linked late. */
 	let openKey: string | null = null;
+	/** Bumped when Back or Forward changes the view: an open still loading then lands nowhere. */
+	let navEpoch = 0;
 
 	function navigateTo(v: View, replace = false, key: string | null = null) {
 		const hash = routeHash(v, key);
@@ -240,15 +242,18 @@
 		return whileOpening(
 			readProjectNames()[projectKeyForSession(key)] ?? "",
 			async () => {
+				const epoch = navEpoch;
 				const opened = await openSession(key);
 				if (!opened) return false;
-				rememberLastOpened({ mode, key });
 				// Older single sessions stored layer media after the source; only the source
 				// is wanted now.
 				const files =
 					mode === "single"
 						? [await gifToVideo(opened.files[0])]
 						: await gifsToVideo(opened.files);
+				// The user navigated away while it loaded: nothing failed, there's just nothing to show.
+				if (epoch !== navEpoch) return true;
+				rememberLastOpened({ mode, key });
 				if (replacing) releaseWarm();
 				// The song comes back too, so the per-song text timeline and segments the
 				// editor restores have the track they're keyed to.
@@ -298,10 +303,12 @@
 		replacing = false,
 	): Promise<boolean> {
 		return whileOpening(readProjectNames()[trackId] ?? "", async () => {
+			const epoch = navEpoch;
 			const opened = await openSavedSequence(trackId);
 			if (!opened) return false;
-			rememberLastOpened({ mode: "sequence", key: trackId });
 			const files = await gifsToVideo(opened.sources);
+			if (epoch !== navEpoch) return true;
+			rememberLastOpened({ mode: "sequence", key: trackId });
 			if (replacing) releaseWarm();
 			sequenceFiles = files;
 			pendingAudioFile = opened.trackFile;
@@ -480,6 +487,7 @@
 				);
 				return;
 			}
+			if (route.view !== from) navEpoch++;
 			view = route.view;
 			if (view === "upload") {
 				resetFiles();
