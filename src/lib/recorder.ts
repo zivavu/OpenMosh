@@ -271,7 +271,7 @@ const POOL_FRAME_BUDGET = 1024 * 1024 * 1024;
 const SLAB_SIZE = 64 * 1024 * 1024;
 
 /** Where the muxer's bytes land until the export is handed over as a Blob. */
-interface OutputBuffer {
+export interface OutputBuffer {
 	write(data: Uint8Array, position: number): void | Promise<void>;
 	toBlob(type: string): Promise<Blob>;
 	/** Throw the partial output away; the export failed or was cancelled. */
@@ -324,8 +324,10 @@ class SlabBuffer implements OutputBuffer {
 
 /** A file in the origin's private storage, so a long export never sits in memory.
  * Null where the browser can't write one; the slabs take over there. */
-async function openDiskBuffer(): Promise<OutputBuffer | null> {
-	const handle = await openExportFile();
+async function openDiskBuffer(
+	kind: "export" | "take" = "export",
+): Promise<OutputBuffer | null> {
+	const handle = await openExportFile(kind);
 	if (!handle || typeof handle.createWritable !== "function") return null;
 	try {
 		const writable = await handle.createWritable();
@@ -348,6 +350,13 @@ async function openDiskBuffer(): Promise<OutputBuffer | null> {
 		void removeExportFile(handle);
 		return null;
 	}
+}
+
+/** Where a muxer's bytes go: a file on disk where the browser allows, else memory. */
+export async function openOutputBuffer(
+	kind: "export" | "take" = "export",
+): Promise<OutputBuffer> {
+	return (await openDiskBuffer(kind)) ?? new SlabBuffer();
 }
 
 async function recordWebM(opts: RecordOptions): Promise<Blob> {
@@ -478,7 +487,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		);
 	}
 
-	const buffer = (await openDiskBuffer()) ?? new SlabBuffer();
+	const buffer = await openOutputBuffer();
 	// Chunked so the muxer batches its writes instead of calling us per packet.
 	const target = new mb.StreamTarget(
 		new WritableStream<StreamTargetChunk>({
