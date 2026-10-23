@@ -131,6 +131,7 @@ export async function executeSlideshowRecording(
 			getImage: (slide) => imageMap.get(slide.id),
 			getSampler: (slide) => samplerMap.get(slide.id),
 		},
+		blankMissing: true,
 	});
 
 	await preloadCaptionFonts(baseEffects);
