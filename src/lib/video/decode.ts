@@ -238,6 +238,20 @@ export class SampleQueue implements FrameQueue {
 	}
 }
 
+/** Longest sound decoded whole: 20 minutes of 48 kHz stereo is about 460 MB of PCM. */
+export const MAX_SOUND_SECONDS = 20 * 60;
+
+export class SoundTooLongError extends Error {
+	constructor() {
+		super("Sound too long to decode");
+	}
+}
+
+/** The toast for a source whose sound runs past MAX_SOUND_SECONDS. */
+export function soundTooLongMessage(name: string): string {
+	return `"${name}" runs over ${MAX_SOUND_SECONDS / 60} minutes, so its sound is left out`;
+}
+
 /** Decode a full audio track into a single AudioBuffer for Web Audio playback. */
 export async function decodeAudioTrackToBuffer(
 	track: InputAudioTrack,
@@ -245,6 +259,7 @@ export async function decodeAudioTrackToBuffer(
 	const { AudioBufferSink } = await import("mediabunny");
 	const duration = await track.computeDuration();
 	if (!Number.isFinite(duration) || duration <= 0) return null;
+	if (duration > MAX_SOUND_SECONDS) throw new SoundTooLongError();
 
 	// Rate/channels come from the first decoded chunk, not container metadata: mediabunny
 	// reads HE-AAC's rate as half the real output (SBR) and 1 channel (PS).
