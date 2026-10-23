@@ -105,7 +105,7 @@ export function lyricsDraftFromTimeline(
 
 /** The timeline's lyrics lane, or undefined before the first sync lands. */
 export function lyricsLane(timeline: TextTimeline): TextLane | undefined {
-	return timeline.lanes.find((l) => l.name === LYRICS_LANE_NAME);
+	return timeline.lanes.find((l) => l.lyrics);
 }
 
 /** Refill the lyrics lane with `clips`, creating the lane on the first sync.
@@ -123,6 +123,7 @@ export function applyLyricsToTimeline(
 				...createTextLane(LYRICS_LANE_NAME, z),
 				style: { ...DEFAULT_TEXT_STYLE, ...LYRICS_STYLE },
 				clips,
+				lyrics: true,
 			};
 	return {
 		...timeline,

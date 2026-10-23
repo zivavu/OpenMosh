@@ -107,11 +107,15 @@ export interface TextLane {
 	z: number;
 	style: TextStyle;
 	clips: TextClip[];
+	/** The lane Lyrics sync writes to; a lane only renamed "Lyrics" isn't it. */
+	lyrics?: true;
 }
 
 export interface TextTimeline {
 	enabled: boolean;
 	lanes: TextLane[];
+	/** Saved since lyrics lanes carried `lyrics`; before, the name alone marked one. */
+	lyricsTagged?: true;
 }
 
 export const DEFAULT_TEXT_STYLE: TextStyle = {
@@ -129,7 +133,11 @@ export const DEFAULT_TEXT_STYLE: TextStyle = {
 	fontCycle: DEFAULT_FONT_CYCLE,
 };
 
-export const EMPTY_TEXT_TIMELINE: TextTimeline = { enabled: false, lanes: [] };
+export const EMPTY_TEXT_TIMELINE: TextTimeline = {
+	enabled: false,
+	lanes: [],
+	lyricsTagged: true,
+};
 
 let idCounter = 0;
 function nextId(prefix: string): string {
@@ -176,7 +184,11 @@ export function createTextLane(
 }
 
 export function createTextTimeline(z = TEXT_Z_BASE): TextTimeline {
-	return { enabled: true, lanes: [createTextLane("Text 1", z)] };
+	return {
+		enabled: true,
+		lanes: [createTextLane("Text 1", z)],
+		lyricsTagged: true,
+	};
 }
 
 /** Add an empty lane, named after its position. `z` comes from the caller: the
@@ -204,13 +216,18 @@ function clipEffects(saved: unknown): EffectInstance[] {
 	return hydrated.length > 0 ? hydrated : cleanEffects();
 }
 
+/** What marked the lyrics lane before it carried `lyrics`. */
+const LEGACY_LYRICS_NAME = "Lyrics";
+
 /** Fill in anything a saved timeline predates or dropped. */
 export function normalizeTextTimeline(raw: unknown): TextTimeline {
 	if (!raw || typeof raw !== "object") return { ...EMPTY_TEXT_TIMELINE };
 	const t = raw as Partial<TextTimeline>;
 	const lanes = records<TextLane>(t.lanes);
+	const tagged = t.lyricsTagged === true;
 	return {
 		enabled: !!t.enabled,
+		lyricsTagged: true,
 		lanes: lanes.map((lane, i) => {
 			const clips = records<TextClip>(lane.clips);
 			// Timelines saved before styles moved to the lane carried one per clip; the first
@@ -224,6 +241,10 @@ export function normalizeTextTimeline(raw: unknown): TextTimeline {
 				name: lane.name ?? `Text ${i + 1}`,
 				enabled: lane.enabled !== false,
 				z: typeof lane.z === "number" ? lane.z : TEXT_Z_BASE + i,
+				...((lane.lyrics === true ||
+					(!tagged && lane.name === LEGACY_LYRICS_NAME)) && {
+					lyrics: true as const,
+				}),
 				style: {
 					...DEFAULT_TEXT_STYLE,
 					...style,

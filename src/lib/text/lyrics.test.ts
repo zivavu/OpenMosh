@@ -10,6 +10,7 @@ import {
 import {
 	createTextLane,
 	MIN_CLIP_LENGTH,
+	normalizeTextTimeline,
 	type TextClip,
 	type TextTimeline,
 } from "./types";
@@ -18,7 +19,7 @@ import {
 function timelineWithLyrics(clips: TextClip[]): TextTimeline {
 	return {
 		enabled: true,
-		lanes: [{ ...createTextLane(LYRICS_LANE_NAME), clips }],
+		lanes: [{ ...createTextLane(LYRICS_LANE_NAME), clips, lyrics: true }],
 	};
 }
 
@@ -37,7 +38,11 @@ describe("linesInSpan", () => {
 describe("createLyricsClips", () => {
 	it("never starts a clip before zero", () => {
 		const lines = Array.from({ length: 10 }, (_, i) => `l${i}`);
-		const clips = createLyricsClips(lines, lines.map(() => 0), 0.2);
+		const clips = createLyricsClips(
+			lines,
+			lines.map(() => 0),
+			0.2,
+		);
 		expect(Math.min(...clips.map((c) => c.start))).toBeGreaterThanOrEqual(0);
 	});
 
@@ -133,6 +138,7 @@ describe("applyLyricsToTimeline", () => {
 		const lane = {
 			...createTextLane(LYRICS_LANE_NAME),
 			clips: createLyricsClips(["old"], [0], 5),
+			lyrics: true as const,
 		};
 		const t: TextTimeline = {
 			enabled: true,
@@ -142,6 +148,17 @@ describe("applyLyricsToTimeline", () => {
 		const next = applyLyricsToTimeline(t, clips);
 		expect(next.lanes).toHaveLength(2);
 		expect(next.lanes[0].clips.map((c) => c.text)).toEqual(["new"]);
+	});
+
+	it("leaves a lane the user named Lyrics alone", () => {
+		const own = {
+			...createTextLane("Lyrics"),
+			clips: createLyricsClips(["mine"], [0], 5),
+		};
+		const t: TextTimeline = { enabled: true, lanes: [own] };
+		const next = applyLyricsToTimeline(t, createLyricsClips(["sung"], [1], 5));
+		expect(next.lanes).toHaveLength(2);
+		expect(next.lanes[0].clips.map((c) => c.text)).toEqual(["mine"]);
 	});
 
 	it("enables a disabled timeline", () => {
@@ -216,5 +233,21 @@ describe("lyricsDraftFromTimeline", () => {
 			lyricsLane(applyLyricsToTimeline(t, createLyricsClips(["a"], [0], 5), 9))
 				?.z,
 		).toBe(9);
+	});
+});
+
+describe("the lyrics lane in saved timelines", () => {
+	it("is the lane named Lyrics in a save from before lanes were tagged", () => {
+		const old = { enabled: true, lanes: [createTextLane("Lyrics")] };
+		expect(lyricsLane(normalizeTextTimeline(old))).toBeDefined();
+	});
+
+	it("isn't a lane only renamed Lyrics in a tagged save", () => {
+		const saved = {
+			enabled: true,
+			lyricsTagged: true,
+			lanes: [createTextLane("Lyrics")],
+		};
+		expect(lyricsLane(normalizeTextTimeline(saved))).toBeUndefined();
 	});
 });
