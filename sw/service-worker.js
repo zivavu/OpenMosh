@@ -33,9 +33,7 @@ self.addEventListener("fetch", (event) => {
 	// Pages go to the network first, so a deploy shows up on the next load.
 	if (request.mode === "navigate") {
 		event.respondWith(
-			fetch(request).catch(() =>
-				caches.match("/index.html").then((hit) => hit ?? Response.error()),
-			),
+			fetch(request).catch(() => offlinePage(new URL(request.url).pathname)),
 		);
 		return;
 	}
@@ -43,6 +41,20 @@ self.addEventListener("fetch", (event) => {
 		caches.match(request).then((hit) => hit ?? fetchAndKeep(request)),
 	);
 });
+
+/** The precached page for a path: the app, a static page, or the 404. */
+async function offlinePage(path) {
+	const page =
+		path === "/" || path === "/index.html"
+			? "/index.html"
+			: `${path.replace(/\/$/, "")}/index.html`;
+	return (
+		(await caches.match(page)) ??
+		(await caches.match("/404.html")) ??
+		(await caches.match("/index.html")) ??
+		Response.error()
+	);
+}
 
 // Fonts aren't in PRECACHE; one is kept the first time a text clip asks for it.
 async function fetchAndKeep(request) {
