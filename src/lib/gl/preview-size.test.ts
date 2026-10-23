@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { fitPreviewSize } from "./preview-size";
+import { fitPreviewSize, fitTextureSize } from "./preview-size";
 
 describe("fitPreviewSize", () => {
 	it("fits the output into the displayed box without upscaling", () => {
@@ -28,5 +28,21 @@ describe("fitPreviewSize", () => {
 	it("has nothing to fit without an output size", () => {
 		expect(fitPreviewSize(undefined, undefined, 800, 600)).toBeNull();
 		expect(fitPreviewSize(0, 1080, 800, 600)).toBeNull();
+	});
+});
+
+describe("fitTextureSize", () => {
+	it("leaves a size under the limit alone", () => {
+		expect(fitTextureSize(4032, 3024, 8192)).toEqual({
+			width: 4032,
+			height: 3024,
+		});
+	});
+
+	it("shrinks the long side to the limit, keeping the shape", () => {
+		expect(fitTextureSize(12000, 9000, 8192)).toEqual({
+			width: 8192,
+			height: 6144,
+		});
 	});
 });

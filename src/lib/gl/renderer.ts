@@ -57,6 +57,7 @@ import {
 } from "./effect-shaders";
 import { KeyReachPass, ReachFill, setKeyPointUniforms } from "./key-pass";
 import { MeshPass } from "./mesh-pass";
+import { fitTextureSize } from "./preview-size";
 import type { Mesh } from "../mesh";
 import {
 	meshCamera,
@@ -121,6 +122,9 @@ function imageWidth(image: SourceImage): number {
 function imageHeight(image: SourceImage): number {
 	return image instanceof HTMLImageElement ? image.naturalHeight : image.height;
 }
+
+/** Copies drawn down to the texture limit, per image, so a re-upload doesn't redraw. */
+const fittedImages = new WeakMap<SourceImage, HTMLCanvasElement>();
 
 /** A layer with its chain already rendered, ready to composite. */
 interface PreparedLayer {
@@ -563,10 +567,40 @@ export class GlRenderer {
 		this.canvas = canvas;
 	}
 
+	/** The largest texture side this GPU takes. */
+	get maxTextureSize(): number {
+		return this.gl.getParameter(this.gl.MAX_TEXTURE_SIZE) as number;
+	}
+
+	/** The image as it can go on a texture: past the GPU's limit it would upload
+	 * blank, so a copy drawn down to fit goes instead. */
+	private fitImage(image: SourceImage): TexImageSource {
+		const w = imageWidth(image);
+		const h = imageHeight(image);
+		const max = this.maxTextureSize;
+		if (w <= max && h <= max) return image;
+		let fitted = fittedImages.get(image);
+		if (!fitted) {
+			const size = fitTextureSize(w, h, max);
+			fitted = document.createElement("canvas");
+			fitted.width = size.width;
+			fitted.height = size.height;
+			fitted.getContext("2d")?.drawImage(image, 0, 0, size.width, size.height);
+			fittedImages.set(image, fitted);
+		}
+		return fitted;
+	}
+
 	loadImage(image: SourceImage) {
-		if (!this.resetSource(imageWidth(image), imageHeight(image))) return;
+		const fitted = this.fitImage(image);
+		const { width, height } = fitTextureSize(
+			imageWidth(image),
+			imageHeight(image),
+			this.maxTextureSize,
+		);
+		if (!this.resetSource(width, height)) return;
 		const gl = this.gl;
-		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, fitted);
 	}
 
 	loadVideo(video: HTMLVideoElement) {
@@ -702,11 +736,15 @@ export class GlRenderer {
 		});
 	}
 
-	updateSourceImage(image: SourceImage) {
+	updateSourceImage(original: SourceImage) {
 		if (!this.sourceTexture) return;
 		const gl = this.gl;
-		const w = imageWidth(image);
-		const h = imageHeight(image);
+		const image = this.fitImage(original);
+		const { width: w, height: h } = fitTextureSize(
+			imageWidth(original),
+			imageHeight(original),
+			this.maxTextureSize,
+		);
 		gl.bindTexture(gl.TEXTURE_2D, this.sourceTexture);
 		// Same fast path as updateSourceFrame: a slideshow cutting between same-sized
 		// images reuses the allocation.
@@ -1113,8 +1151,14 @@ export class GlRenderer {
 		};
 	}
 
+	/** Sized as the image itself, whatever the texture holds: the layer's box comes from it. */
 	updateLayerImage(key: string, image: SourceImage) {
-		this.uploadLayerTexture(key, image, imageWidth(image), imageHeight(image));
+		this.uploadLayerTexture(
+			key,
+			this.fitImage(image),
+			imageWidth(image),
+			imageHeight(image),
+		);
 	}
 
 	updateLayerFrame(key: string, frame: VideoFrame) {
