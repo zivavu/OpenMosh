@@ -45,6 +45,7 @@
 	import { probeCapabilities } from "./lib/capabilities.svelte";
 	import { onLoadLosses, type LoadLosses } from "./lib/effects/load-report";
 	import { parseRoute, routeHash, type View } from "./lib/route";
+	import { recordingRunning } from "./lib/editor/recording-state.svelte";
 
 	// The editors are the bulk of the bundle and none of it is needed to paint the
 	// upload screen, so they load with the route instead of with the app.
@@ -467,6 +468,18 @@
 		const onPopState = () => {
 			const route = parseRoute(window.location.hash);
 			const from = view;
+			// Leaving would tear down the renderer the export draws with.
+			if (
+				recordingRunning() &&
+				(route.view !== from || (route.key && route.key !== openKey))
+			) {
+				history.pushState(null, "", routeHash(from, openKey));
+				showToast(
+					"Cancel or wait for the export to finish before leaving",
+					"error",
+				);
+				return;
+			}
 			view = route.view;
 			if (view === "upload") {
 				resetFiles();
