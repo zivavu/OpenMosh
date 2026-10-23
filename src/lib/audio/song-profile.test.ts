@@ -11,6 +11,7 @@ import {
 import {
 	activeSongProfile,
 	publishSongProfile,
+	songBand,
 	songRideRange,
 	stepBandHits,
 	songProfileReady,
@@ -275,5 +276,18 @@ describe("publishSongProfile", () => {
 		await songProfileReady();
 		expect(started).toEqual(["first", "third"]);
 		expect(activeSongProfile()).toBe(other);
+	});
+});
+
+describe("songBand cache", () => {
+	it("shares one band between ranges that read the same bins", () => {
+		const a = songBand(profile, 100, 200);
+		const b = songBand(profile, 100.5, 200.5);
+		expect(b).toBe(a);
+	});
+
+	it("keeps a bounded number of bands", () => {
+		for (let hz = 0; hz < 4000; hz += 50) songBand(profile, hz, hz + 400);
+		expect(profile.bands.size).toBeLessThanOrEqual(16);
 	});
 });

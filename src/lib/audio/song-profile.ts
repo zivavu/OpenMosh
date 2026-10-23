@@ -25,6 +25,8 @@ const MIN_SPAN = 0.03;
 const MAX_LEVEL_SPAN_DB = 24;
 /** Ride ranges kept per profile; each Smoothing and Punch pairing adds one. */
 const MAX_RIDES = 64;
+/** Bands kept per song, newest used last: each holds a few arrays as long as the song. */
+const MAX_BANDS = 16;
 /** How fast a bin's floor drops onto a quieter reading, and creeps back up under a
  * louder one: a kick over a held bass still rises past the bass's floor. */
 const HIT_FLOOR_FALL = 0.03;
@@ -154,9 +156,6 @@ export function songBand(
 	freqMin: number,
 	freqMax: number,
 ): BandProfile {
-	const key = `${freqMin}:${freqMax}`;
-	let band = profile.bands.get(key);
-	if (band) return band;
 	const { frames, sampleRate, fftSize } = profile;
 	const { first, last } = bandBins(
 		fftSize / 2,
@@ -165,6 +164,14 @@ export function songBand(
 		freqMin,
 		freqMax,
 	);
+	// Keyed by bins: a Freq drag steps through many ranges that read the same bins.
+	const key = `${first}:${last}`;
+	let band = profile.bands.get(key);
+	if (band) {
+		profile.bands.delete(key);
+		profile.bands.set(key, band);
+		return band;
+	}
 	const floors = new Float32Array(Math.max(0, last - first + 1)).fill(-1);
 	const levels = new Float32Array(frames.length);
 	const hitLevels = new Float32Array(frames.length);
@@ -210,6 +217,9 @@ export function songBand(
 		hitLevels,
 		loudFrames,
 	};
+	if (profile.bands.size >= MAX_BANDS) {
+		profile.bands.delete(profile.bands.keys().next().value!);
+	}
 	profile.bands.set(key, band);
 	return band;
 }
