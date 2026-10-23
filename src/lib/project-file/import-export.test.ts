@@ -180,6 +180,29 @@ describe("a project file round trip", () => {
 		expect(fakeFonts().map((f) => f.family)).toEqual(["'My Font'"]);
 	});
 
+	test("keeps a stored file that a different one shares its name, size and date with", async () => {
+		const key = "proj-clash";
+		const a = await seedMedia("a.png", 100, 1000);
+		await store.saveMediaPool(key, [a.id]);
+		await store.putTimeline(`seq:${key}`, { v: 3, length: 10 });
+		const built = await buildProjectFile(key);
+
+		// Another project's a.png: same name, size and date, other bytes.
+		const other = new File([new Uint8Array(100).fill(3)], "a.png", {
+			type: "image/png",
+			lastModified: 1000,
+		});
+		await store.putSequenceMedia([{ id: a.id, file: other }]);
+
+		const landed = await openProjectFile(built.blob);
+		const [kept] = await store.getSequenceMediaByIds([a.id]);
+		expect(new Uint8Array(await kept.blob.arrayBuffer())[0]).toBe(3);
+		const [poolId] = (await store.loadMediaPool(landed))!;
+		expect(poolId).not.toBe(a.id);
+		const [imported] = await store.getSequenceMediaByIds([poolId]);
+		expect(new Uint8Array(await imported.blob.arrayBuffer())[0]).toBe(7);
+	});
+
 	test("counts pool files whose bytes were gone", async () => {
 		const key = "proj-missing";
 		const a = await seedMedia("a.png", 100, 1000);

@@ -11,6 +11,7 @@ import {
 	trackFileName,
 } from "../audio/track-library";
 import { generateId } from "../effects/types";
+import { sameBytes } from "../utils";
 import {
 	projectKeyForSession,
 	readProjectNames,
@@ -22,6 +23,7 @@ import type { SeqEntry } from "../editor/seq-entry";
 import { readSeqEntry } from "../editor/seq-entry";
 import { listSavedSessions, newSessionKey } from "../editor/sessions";
 import {
+	getSequenceMediaByIds,
 	getSession,
 	getTimeline,
 	loadMediaPool,
@@ -136,7 +138,7 @@ function canonicalJson(value: unknown): string {
 /** The pool's files as they'd be stored, and the ids that land differently. */
 function poolMedia({ manifest, byPath }: ProjectFile) {
 	const sourceIds = new Map<string, string>();
-	const media: { id: string; file: File }[] = [];
+	const media: { id: string; file: File; from: string }[] = [];
 	for (const item of manifest.pool) {
 		const entry = byPath.get(item.path);
 		if (!entry) continue;
@@ -146,9 +148,30 @@ function poolMedia({ manifest, byPath }: ProjectFile) {
 		});
 		const id = stableSourceId(file);
 		if (id !== item.id) sourceIds.set(item.id, id);
-		media.push({ id, file });
+		media.push({ id, file, from: item.id });
 	}
 	return { sourceIds, media };
+}
+
+/** The id is name, size and date; a different file stored under the same one would be
+ * overwritten for every project using it, so the newcomer moves to a free id. */
+async function keepStoredMediaApart(
+	media: { id: string; file: File; from: string }[],
+	sourceIds: Map<string, string>,
+) {
+	for (const m of media) {
+		for (let tries = 0; tries < 100; tries++) {
+			const [stored] = await getSequenceMediaByIds([m.id]);
+			if (!stored || (await sameBytes(stored.blob, m.file))) break;
+			m.file = new File([m.file], m.file.name, {
+				type: m.file.type,
+				lastModified: m.file.lastModified + 1,
+			});
+			m.id = stableSourceId(m.file);
+			if (m.id === m.from) sourceIds.delete(m.from);
+			else sourceIds.set(m.from, m.id);
+		}
+	}
 }
 
 /** What two copies of a project share, as a string that compares equal for them. */
@@ -275,6 +298,7 @@ export async function storeProjectFile(
 		// Media first: the timeline is written last, so a failure partway leaves an
 		// unregistered project whose media the next prune cleans up.
 		const { sourceIds, media } = poolMedia(project);
+		await keepStoredMediaApart(media, sourceIds);
 		if (media.length > 0) await putSequenceMedia(media);
 
 		const trackIds = new Map<string, string>();
