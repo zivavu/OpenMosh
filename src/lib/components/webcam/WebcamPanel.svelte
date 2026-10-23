@@ -9,6 +9,7 @@
 	} from "lucide-svelte";
 	import { onDestroy, onMount } from "svelte";
 	import PanelModal from "../ui/PanelModal.svelte";
+	import { showToast } from "../ui/toast.svelte";
 	import {
 		createLiveFile,
 		listCameras,
@@ -206,6 +207,19 @@
 				.then((t) => {
 					if (!t) return;
 					take = t;
+					// Unplugged: the take would go on counting with no frames coming in.
+					stream!.getVideoTracks()[0]?.addEventListener(
+						"ended",
+						() => {
+							if (take !== t) return;
+							showToast(
+								"The camera disconnected, so the take ends there",
+								"error",
+							);
+							void stopRecording();
+						},
+						{ once: true },
+					);
 					const tick = () => {
 						elapsed = t.elapsed;
 						rafId = requestAnimationFrame(tick);
