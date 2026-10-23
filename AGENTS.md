@@ -106,6 +106,8 @@ Outside CI a run reuses whatever already serves its port, so when my dev server 
   A clip's roll or arrow step is an edit on its lane's stack, so Ctrl+Z takes it back first;
   single mode's own chain keeps ←/→ on the mosh history apart from Ctrl+Z. An undo never brings
   back an effect the user hid. Removing pool media is undoable: the stack keeps the file.
+  Edit media's crop, key and erase land on the pool's stack as one step when it closes; its own
+  undo covers the steps inside.
 - Preview and export share the "what's on screen at time t" resolvers; only sampler management
   (decoder keys, LRU cap, latch) is duplicated. Keep both sides feeding the same source times.
 - Source edits (crop, chroma key, erase) are keyed on the source's own media time, not timeline
