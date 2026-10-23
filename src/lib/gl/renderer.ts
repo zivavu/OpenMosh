@@ -280,6 +280,8 @@ const MODEL_MAX_TEXTURE = 2;
 
 export class GlRenderer {
 	private gl: WebGL2RenderingContext;
+	/** Whether half-float textures can be rendered to. */
+	private floatTargets: boolean;
 	private quadVAO: WebGLVertexArrayObject;
 	private sourceTexture: WebGLTexture | null = null;
 	private sourceFit: SourceFit = "contain";
@@ -517,7 +519,11 @@ export class GlRenderer {
 		this.keyReach = new KeyReachPass(gl);
 		this.maskReach = new ReachFill(gl, KEY_REACH_SEED_FRAG);
 		this.meshPass = new MeshPass(gl);
-		gl.getExtension("EXT_color_buffer_float");
+		// Without either, half-float targets are incomplete and the blur and glow
+		// passes would draw nothing; 8-bit keeps them working, with less headroom.
+		this.floatTargets =
+			!!gl.getExtension("EXT_color_buffer_float") ||
+			!!gl.getExtension("EXT_color_buffer_half_float");
 		this.quadVAO = this.createQuad();
 		this.passthrough = this.compile(PASSTHROUGH_FRAG);
 		this.textBlendProgram = this.compile(TEXT_BLEND_FRAG);
@@ -3607,12 +3613,12 @@ export class GlRenderer {
 		gl.texImage2D(
 			gl.TEXTURE_2D,
 			0,
-			gl.RGBA16F,
+			this.floatTargets ? gl.RGBA16F : gl.RGBA8,
 			width,
 			height,
 			0,
 			gl.RGBA,
-			gl.HALF_FLOAT,
+			this.floatTargets ? gl.HALF_FLOAT : gl.UNSIGNED_BYTE,
 			null,
 		);
 		return tex;
