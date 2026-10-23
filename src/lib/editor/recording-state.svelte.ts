@@ -10,6 +10,13 @@ function holdPage(e: BeforeUnloadEvent) {
 	e.returnValue = "";
 }
 
+/** Renders running in any editor; route changes hold off while one is. */
+let running = 0;
+
+export function recordingRunning(): boolean {
+	return running > 0;
+}
+
 /** Shared recording state machine: progress/finalizing flags + abort-aware error handling. */
 export function createRecordingState() {
 	let recording = $state(false);
@@ -27,6 +34,7 @@ export function createRecordingState() {
 		recordFinalizing = false;
 		const abort = new AbortController();
 		recordAbort = abort;
+		running++;
 		// A reload or a closed tab would throw away a render that may have run for minutes.
 		window.addEventListener("beforeunload", holdPage);
 
@@ -45,6 +53,7 @@ export function createRecordingState() {
 			}
 		} finally {
 			window.removeEventListener("beforeunload", holdPage);
+			running--;
 			recording = false;
 			recordFinalizing = false;
 			recordAbort = null;
