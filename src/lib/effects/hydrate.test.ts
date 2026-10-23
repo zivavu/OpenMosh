@@ -368,6 +368,21 @@ describe("hydrateLinks", () => {
 		expect(links?.[param.key]).toEqual({ min: param.min, max: param.max });
 	});
 
+	it("keeps a band whose ends meet, as the Freq slider allows", () => {
+		const links = hydrateLinks(def.id, {
+			[param.key]: {
+				min: param.min,
+				max: param.max,
+				freqMin: 4276,
+				freqMax: 4276,
+			},
+		});
+		expect(links?.[param.key]).toMatchObject({
+			freqMin: 4276,
+			freqMax: 4276,
+		});
+	});
+
 	it("drops a link on a param that's gone or can't take one", () => {
 		const select = findParam("select");
 		expect(

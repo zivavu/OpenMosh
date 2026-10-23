@@ -160,9 +160,10 @@ export function hydrateLinks(
 			typeof n === "number" && Number.isFinite(n) && n > 0 ? n : undefined;
 		const freqMin = hz(link.freqMin);
 		const freqMax = hz(link.freqMax);
-		// A band only with both ends sane: a broken one would make the level NaN.
+		// A band only with both ends sane: a broken one would make the level NaN. Ends
+		// that meet still read one bin, and the Freq slider lets them meet.
 		const band =
-			freqMin !== undefined && freqMax !== undefined && freqMin < freqMax
+			freqMin !== undefined && freqMax !== undefined && freqMin <= freqMax
 				? { freqMin, freqMax }
 				: {};
 		kept[param.key] = {
