@@ -12,6 +12,7 @@
 	import { isTextEntryTarget } from "../../editor/shortcut-target";
 	import {
 		createLyricsClips,
+		linesInSpan,
 		MIN_CLIP_LENGTH,
 		type TextClip,
 	} from "../../text";
@@ -208,10 +209,11 @@
 	 * `previous`, keeping per-line effect chains alive. */
 	function apply() {
 		if (!allTimed) return;
+		const inSpan = linesInSpan(lines, timings as number[], spanStart, spanEnd);
 		onApply(
 			createLyricsClips(
-				lines,
-				timings as number[],
+				inSpan.lines,
+				inSpan.timings,
 				spanEnd,
 				existing?.clips ?? [],
 			),

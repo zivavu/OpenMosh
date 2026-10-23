@@ -21,6 +21,7 @@ export {
 export {
 	applyLyricsToTimeline,
 	createLyricsClips,
+	linesInSpan,
 	lyricsDraftFromTimeline,
 } from "./lyrics";
 export { drawTextToCanvas, textSignature } from "./render-text-clip";

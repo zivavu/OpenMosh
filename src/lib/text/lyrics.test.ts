@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import {
 	applyLyricsToTimeline,
 	createLyricsClips,
+	linesInSpan,
 	LYRICS_LANE_NAME,
 	lyricsDraftFromTimeline,
 	lyricsLane,
@@ -21,7 +22,25 @@ function timelineWithLyrics(clips: TextClip[]): TextTimeline {
 	};
 }
 
+describe("linesInSpan", () => {
+	it("drops lines stamped outside a trimmed span", () => {
+		const kept = linesInSpan(["a", "b", "c", "d"], [5, 40, 90, 200], 30, 180);
+		expect(kept).toEqual({ lines: ["b", "c"], timings: [40, 90] });
+	});
+
+	it("keeps lines on the span's edges", () => {
+		const kept = linesInSpan(["a", "b"], [30, 180], 30, 180);
+		expect(kept.lines).toEqual(["a", "b"]);
+	});
+});
+
 describe("createLyricsClips", () => {
+	it("never starts a clip before zero", () => {
+		const lines = Array.from({ length: 10 }, (_, i) => `l${i}`);
+		const clips = createLyricsClips(lines, lines.map(() => 0), 0.2);
+		expect(Math.min(...clips.map((c) => c.start))).toBeGreaterThanOrEqual(0);
+	});
+
 	it("lays lines back-to-back and holds the last to the span end", () => {
 		const clips = createLyricsClips(["a", "b", "c"], [1, 3, 6], 10);
 		expect(clips.map((c) => [c.start, c.end, c.text])).toEqual([
