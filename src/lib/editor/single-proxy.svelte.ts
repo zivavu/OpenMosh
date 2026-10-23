@@ -57,6 +57,11 @@ export class SingleProxy {
 	constructor(opts: SingleProxyOptions) {
 		this.#opts = opts;
 		$effect(() => this.#run());
+		// Leaving the editor: the worker runs one job at a time, so an orphan would hold up the next.
+		$effect(() => () => {
+			this.#builds++;
+			this.#job?.cancel();
+		});
 	}
 
 	/** The proxy, if it was made for `file`. Reads `proxy` first, so an effect calling
