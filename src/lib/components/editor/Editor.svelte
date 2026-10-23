@@ -1608,6 +1608,7 @@
 			onHide();
 			// After the save: disposing empties the pool, which would then save as empty.
 			sourceRegistry.dispose();
+			mediaLayers.dispose();
 		};
 	});
 
