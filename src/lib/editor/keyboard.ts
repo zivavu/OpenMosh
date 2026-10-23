@@ -60,7 +60,8 @@ export function createKeyboardHandler(
 		if (e.key === " ") {
 			if (isTextEntryTarget(e.target)) return;
 			e.preventDefault();
-			actions.togglePlay();
+			// Held, it would flick play and pause on every repeat.
+			if (!e.repeat) actions.togglePlay();
 			return;
 		}
 
@@ -75,7 +76,8 @@ export function createKeyboardHandler(
 			actions.undoMosh();
 		} else if (key === "v" && !mod && !e.altKey) {
 			e.preventDefault();
-			actions.reInput();
+			// A full-size bake per repeat would stack frames and Undo toasts.
+			if (!e.repeat) actions.reInput();
 		} else if (key === "f" && !mod && !e.altKey && !e.shiftKey) {
 			e.preventDefault();
 			actions.toggleFullscreen();
