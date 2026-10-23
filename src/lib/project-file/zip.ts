@@ -178,7 +178,8 @@ function centralHeader(
 
 /** The end-of-central-directory records, in the zip64 form when anything overflows. */
 function endRecords(count: number, cdOffset: number, cdSize: number) {
-	const zip64 = count > U16_MAX || cdOffset >= U32_MAX || cdSize >= U32_MAX;
+	// A field at its max reads as "see zip64", so a count of exactly 0xffff needs it too.
+	const zip64 = count >= U16_MAX || cdOffset >= U32_MAX || cdSize >= U32_MAX;
 	if (!zip64) {
 		const bytes = new Uint8Array(22);
 		const view = new DataView(bytes.buffer);
