@@ -37,7 +37,7 @@ export function assess(c: Capabilities): CapabilityReport {
 			"OpenMosh is slower in Firefox than in Chrome or Edge. Playback runs at a lower frame rate and exports take longer, but everything works.";
 	if (!c.floatTargets)
 		report.notes.push(
-			"Your graphics driver can't render to float textures, so glow and bloom effects may look wrong.",
+			"Your graphics driver can't render to float textures, so glow and bloom effects look flatter here.",
 		);
 	if (c.maxTexture < 4096)
 		report.notes.push(
@@ -72,7 +72,9 @@ function probeGl(): Pick<
 	if (!gl) return { webgl2: false, floatTargets: false, maxTexture: 0 };
 	const result = {
 		webgl2: true,
-		floatTargets: !!gl.getExtension("EXT_color_buffer_float"),
+		floatTargets:
+			!!gl.getExtension("EXT_color_buffer_float") ||
+			!!gl.getExtension("EXT_color_buffer_half_float"),
 		maxTexture: gl.getParameter(gl.MAX_TEXTURE_SIZE) as number,
 	};
 	gl.getExtension("WEBGL_lose_context")?.loseContext();
