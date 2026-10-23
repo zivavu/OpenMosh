@@ -356,7 +356,10 @@
 		if (e.key === "Escape") {
 			e.preventDefault();
 			if (phase === "capturing" && mode === "record") void stopRecording();
-			else if (!busy) onClose();
+			else if (phase === "countdown") {
+				clearInterval(countdownTimer);
+				phase = "idle";
+			} else if (!busy) onClose();
 		} else if (
 			e.key === " " &&
 			// A button, a dropdown or a field takes its own Space.
