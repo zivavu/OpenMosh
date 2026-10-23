@@ -11,12 +11,30 @@ import { clearStaleExports } from "./lib/export-files";
 // falls through to the {:catch} screen.
 const RELOADED_AT = "openmosh-chunk-reload";
 window.addEventListener("vite:preloadError", (event) => {
-	const last = Number(sessionStorage.getItem(RELOADED_AT) ?? 0);
-	if (Date.now() - last < 30_000) return;
-	sessionStorage.setItem(RELOADED_AT, String(Date.now()));
+	if (Date.now() - lastReload() < 30_000) return;
+	markReload();
 	event.preventDefault();
 	location.reload();
 });
+
+// sessionStorage throws when site storage is blocked; window.name also lives as long
+// as the tab, so the one-reload guard still holds there.
+function lastReload(): number {
+	try {
+		return Number(sessionStorage.getItem(RELOADED_AT) ?? 0);
+	} catch {
+		const [key, at] = window.name.split("=");
+		return key === RELOADED_AT ? Number(at) || 0 : 0;
+	}
+}
+
+function markReload() {
+	try {
+		sessionStorage.setItem(RELOADED_AT, String(Date.now()));
+	} catch {
+		window.name = `${RELOADED_AT}=${Date.now()}`;
+	}
+}
 
 // Errors outside rendering (handlers, async work) never reach the boundary in App.
 let lastErrorToast = 0;
