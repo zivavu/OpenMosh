@@ -85,6 +85,15 @@ describe("zip64", () => {
 		expect(extra).toBeGreaterThan(-1);
 	});
 
+	it("reads back an archive of exactly 65,535 entries", async () => {
+		const entries = Array.from({ length: 0xffff }, (_, i) => ({
+			name: `f/${i}`,
+			blob: new Blob(["x"]),
+		}));
+		const read = await readZip(await writeZip(entries));
+		expect(read.length).toBe(0xffff);
+	});
+
 	it("stays on the plain format for small entries", async () => {
 		const zip = await writeZip([
 			{ name: "a.txt", blob: new Blob([bytes("a")]) },
