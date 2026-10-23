@@ -315,7 +315,10 @@ float imageCoverage(vec2 uv) {
   if (any(lessThan(iu, vec2(0.0))) || any(greaterThan(iu, vec2(1.0)))) return 0.0;
   vec4 t = texture(u_brush, iu);
   float v = u_channel > 0.5 ? t.a : t.r;
-  return clamp((v - u_black) / max(u_white - u_black, 0.001), 0.0, 1.0);
+  // White under Black flips the ramp, as levels do; points that meet make a hard cut.
+  float span = u_white - u_black;
+  if (abs(span) < 0.001) return step(u_black, v);
+  return clamp((v - u_black) / span, 0.0, 1.0);
 }
 
 // The painting, blurred by the brush's Feather: a spiral of taps from a mip level about
