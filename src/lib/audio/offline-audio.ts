@@ -28,7 +28,8 @@ export function trimAudioBuffer(
 	const sampleRate = buffer.sampleRate;
 	const startSample = Math.max(0, Math.floor(start * sampleRate));
 	const endSample = Math.min(buffer.length, Math.ceil(end * sampleRate));
-	const length = Math.max(0, endSample - startSample);
+	// An AudioBuffer can't be empty; a span that holds no samples keeps one silent one.
+	const length = Math.max(1, endSample - startSample);
 
 	const trimmed = new AudioBuffer({
 		numberOfChannels: buffer.numberOfChannels,

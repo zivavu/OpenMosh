@@ -173,16 +173,22 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 	const videoFile = isVideo ? file : null;
 	const useVideoSourceAudio = !!videoFile && !hasExplicitAudio && videoHasAudio;
 
+	// A span dragged shut plays as no span at all, so the song exports whole too.
+	const songSpanShut = hasExplicitAudio && !(spanEnd - spanStart > 0);
 	const audioStart = projectSpan
 		? projectSpan.start
 		: hasExplicitAudio
-			? spanStart
+			? songSpanShut
+				? 0
+				: spanStart
 			: isVideo
 				? videoSpanStart
 				: 0;
 	// When explicit audio is present, audioEnd is always spanEnd (the full selected span)
 	const audioEnd = hasExplicitAudio
-		? spanEnd
+		? songSpanShut
+			? trackDuration
+			: spanEnd
 		: isVideo
 			? videoSpanEnd
 			: exportDuration;
