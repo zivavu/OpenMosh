@@ -3843,7 +3843,14 @@
 		audio.spanEnd;
 		// Loading a different song re-keys the session, so it has to re-save.
 		currentTrackId;
-		if (!singleSessionKept) return;
+		if (!singleSessionKept) {
+			// An undo back to nothing kept: a save scheduled a moment ago has nothing to write.
+			if (sessionSavePending && !sessionStored) {
+				sessionSavePending = false;
+				untrack(() => saves.drop("session"));
+			}
+			return;
+		}
 		clearTimeout(sessionSaveTimer);
 		untrack(() => saves.schedule("session"));
 		sessionSavePending = true;
