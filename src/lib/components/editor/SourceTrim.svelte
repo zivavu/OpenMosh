@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { X } from "lucide-svelte";
+	import { onDestroy } from "svelte";
 	import { clampSpan, SPAN_MIN, type SourceSpan } from "../../media";
 
 	interface Props {
@@ -55,6 +56,10 @@
 		return next ?? { start: 0, end: duration };
 	}
 
+	/** Ends the drag in progress; the dialog closing mid-drag (Esc) must too. */
+	let endDrag: (() => void) | null = null;
+	onDestroy(() => endDrag?.());
+
 	/** A handle drag: the edge follows the pointer, and the picture follows the edge. */
 	function onHandleDown(e: PointerEvent, edge: "start" | "end") {
 		if (e.button !== 0) return;
@@ -68,10 +73,12 @@
 		};
 		const up = () => {
 			dragging = null;
+			endDrag = null;
 			window.removeEventListener("pointermove", move);
 			window.removeEventListener("pointerup", up);
 			window.removeEventListener("pointercancel", up);
 		};
+		endDrag = up;
 		window.addEventListener("pointermove", move);
 		window.addEventListener("pointerup", up);
 		window.addEventListener("pointercancel", up);
