@@ -28,3 +28,20 @@ export function downloadFile(blob: Blob, name: string) {
 	// answered, and a big file takes a while; a revoked URL fails the download.
 	setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
+
+/** Whether two blobs hold the same bytes; read a slice at a time, since a pool video
+ * can run to gigabytes. */
+export async function sameBytes(a: Blob, b: Blob): Promise<boolean> {
+	if (a.size !== b.size) return false;
+	const CHUNK = 8 * 1024 * 1024;
+	for (let at = 0; at < a.size; at += CHUNK) {
+		const [x, y] = await Promise.all([
+			a.slice(at, at + CHUNK).arrayBuffer(),
+			b.slice(at, at + CHUNK).arrayBuffer(),
+		]);
+		const ua = new Uint8Array(x);
+		const ub = new Uint8Array(y);
+		for (let i = 0; i < ua.length; i++) if (ua[i] !== ub[i]) return false;
+	}
+	return true;
+}

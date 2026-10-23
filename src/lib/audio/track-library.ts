@@ -1,5 +1,6 @@
 import { generateId } from "../effects/types";
 import { request, simpleStore } from "../idb";
+import { sameBytes } from "../utils";
 
 export interface StoredTrack {
 	id: string;
@@ -46,13 +47,32 @@ export async function getTrack(id: string): Promise<StoredTrack | null> {
  * inside the write transaction on purpose: two callers can save the same song at
  * once, and a lookup before it misses a write still in flight, storing it twice.
  */
-export function addTrack(file: File): Promise<StoredTrack> {
+export async function addTrack(file: File): Promise<StoredTrack> {
+	const different = new Set<string>();
+	for (;;) {
+		const { track, isNew } = await findOrSave(file, different);
+		if (isNew) return track;
+		// Name and size can match a different song. Its bytes are read out here, since an
+		// await on anything but the store would end the write transaction.
+		if (await sameBytes(track.blob, file)) return track;
+		different.add(track.id);
+	}
+}
+
+/** The stored song matching by name and size (`different` aside), else the file saved. */
+function findOrSave(
+	file: File,
+	different: Set<string>,
+): Promise<{ track: StoredTrack; isNew: boolean }> {
 	return db.run("readwrite", async (store) => {
 		const existing = await request(store.getAll() as IDBRequest<StoredTrack[]>);
 		const found = existing.find(
-			(t) => trackFileName(t) === file.name && t.blob.size === file.size,
+			(t) =>
+				trackFileName(t) === file.name &&
+				t.blob.size === file.size &&
+				!different.has(t.id),
 		);
-		if (found) return found;
+		if (found) return { track: found, isNew: false };
 		const track: StoredTrack = {
 			id: generateId(),
 			name: file.name,
@@ -60,7 +80,7 @@ export function addTrack(file: File): Promise<StoredTrack> {
 			addedAt: Date.now(),
 		};
 		store.put(track);
-		return track;
+		return { track, isNew: true };
 	});
 }
 
