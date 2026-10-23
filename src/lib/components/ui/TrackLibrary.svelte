@@ -242,7 +242,10 @@
 				const db = measureLoudness(buffer);
 				const gain = computeNormalizeGain(db);
 				gainCache.set(track.id, gain);
-				if (track.id === activeTrackId) onNormalizeChange?.(gain);
+				// Turned off again while it was measured: keep it off.
+				if (track.id === activeTrackId && normalizedIds.has(track.id)) {
+					onNormalizeChange?.(gain);
+				}
 			})
 			.catch((e) => {
 				console.error("Failed to measure track loudness:", e);
