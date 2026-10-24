@@ -59,26 +59,18 @@
 	import { isModalKeyboardOpen } from "../../modal-keyboard";
 	import { isInteractiveTarget } from "../../editor/shortcut-target";
 	import {
-		listSavedSequences,
-		readCachedSavedSequences,
-		type SavedSequence,
-	} from "../../editor/saved-sequences";
-	import {
-		listSavedSessions,
-		readCachedSessions,
-		type SavedSession,
-	} from "../../editor/sessions";
+		listRecentEdits,
+		readCachedRecentEdits,
+		recentEditName,
+		type RecentEdit,
+	} from "../../editor/recent-edits";
 	import type { SessionMode } from "../../editor/sequence-media-store";
 	import {
 		PROJECT_EXTENSIONS,
 		projectFileModeOf,
 		type ProjectFileMode,
 	} from "../../project-file/manifest";
-	import {
-		projectKeyForSession,
-		readProjectNames,
-		setProjectName,
-	} from "../../editor/project-names";
+	import { readProjectNames, setProjectName } from "../../editor/project-names";
 	import RenameInput from "./RenameInput.svelte";
 	import { deleteRecentEdit } from "../../editor/storage-inventory";
 	import {
@@ -103,16 +95,20 @@
 
 	// Work already done, offered as a way back in that skips picking media: painted
 	// from cache first, then reconciled against IndexedDB.
-	let savedSequences = $state<SavedSequence[]>(readCachedSavedSequences());
-	let savedSingle = $state<SavedSession[]>(readCachedSessions("single"));
-	let savedSlideshow = $state<SavedSession[]>(readCachedSessions("slideshow"));
+	let saved = $state<Record<UploadMode, RecentEdit[]>>({
+		sequence: readCachedRecentEdits("sequence"),
+		single: readCachedRecentEdits("single"),
+		slideshow: readCachedRecentEdits("slideshow"),
+	});
 	// The user's own names, over the song's; re-read whenever the lists are.
 	let projectNames = $state(readProjectNames());
 	function refreshSaved() {
 		projectNames = readProjectNames();
-		void listSavedSequences().then((list) => (savedSequences = list));
-		void listSavedSessions("single").then((list) => (savedSingle = list));
-		void listSavedSessions("slideshow").then((list) => (savedSlideshow = list));
+		for (const mode of ["sequence", "single", "slideshow"] as const) {
+			void listRecentEdits(mode).then((list) => {
+				saved[mode] = list;
+			});
+		}
 	}
 	$effect(refreshSaved);
 
@@ -196,65 +192,32 @@
 		if (n >= 1 && n <= MODES.length) setMode(MODES[n - 1].value);
 	}
 
-	/** The session list backing whichever mode is showing. */
-	let savedForMode = $derived<SavedSession[]>(
-		selectedMode === "single"
-			? savedSingle
-			: selectedMode === "slideshow"
-				? savedSlideshow
-				: [],
-	);
-
-	/** One shape for the list, whichever store the mode reads from. */
-	interface RecentRow {
-		key: string;
-		/** What a rename is stored under: the song, or the session itself. */
-		projectKey: string;
-		mode: SessionMode | "sequence";
-		label: string;
-		sourceCount: number | null;
-		updatedAt: number;
+	interface RecentRow extends RecentEdit {
+		name: string;
 		title: string;
 		open: () => void;
 		/** Save it to a project file. */
 		download: () => void;
 	}
 	let recentRows = $derived<RecentRow[]>(
-		selectedMode === "sequence"
-			? savedSequences.map((seq) => ({
-					key: seq.trackId,
-					projectKey: seq.trackId,
-					mode: "sequence" as const,
-					label: projectNames[seq.trackId] ?? seq.trackName,
-					sourceCount: seq.sourceCount,
-					updatedAt: seq.updatedAt,
-					title: `Reopen "${projectNames[seq.trackId] ?? seq.trackName}" with its ${seq.sourceCount} source${seq.sourceCount === 1 ? "" : "s"}`,
-					open: () => {
-						// Reopening a song is entering the editor too; the stored value stays "sequence".
-						updateSettings({ lastMode: "sequence" });
-						onSequenceFromSong(seq.trackId);
-					},
-					download: () => downloadProject(seq.trackId, "sequence"),
-				}))
-			: savedForMode.map((session) => {
-					const projectKey = projectKeyForSession(session.key);
-					const label = projectNames[projectKey] ?? session.label;
-					return {
-						key: session.key,
-						projectKey,
-						mode: session.mode,
-						label,
-						sourceCount:
-							session.mode === "slideshow" ? session.sourceCount : null,
-						updatedAt: session.updatedAt,
-						title: `Reopen "${label}" with the work already done on it`,
-						open: () => {
-							updateSettings({ lastMode: selectedMode });
-							onSessionOpen(session.mode, session.key);
-						},
-						download: () => downloadProject(session.key, session.mode),
-					};
-				}),
+		saved[selectedMode].map((edit) => {
+			const name = recentEditName(edit, projectNames);
+			return {
+				...edit,
+				name,
+				title:
+					edit.mode === "sequence"
+						? `Reopen "${name}" with its ${edit.sourceCount} source${edit.sourceCount === 1 ? "" : "s"}`
+						: `Reopen "${name}" with the work already done on it`,
+				open: () => {
+					// Reopening a song is entering the editor too; the stored value stays "sequence".
+					updateSettings({ lastMode: edit.mode });
+					if (edit.mode === "sequence") onSequenceFromSong(edit.key);
+					else onSessionOpen(edit.mode, edit.key);
+				},
+				download: () => downloadProject(edit.key, edit.mode),
+			};
+		}),
 	);
 
 	// Deleting from here is the storage manager's deletion, reached without opening it.
@@ -269,8 +232,8 @@
 
 	function askDeleteRow(row: RecentRow) {
 		pendingDelete = {
-			title: row.mode === "sequence" ? "Delete project" : "Delete edit",
-			message: `Removes the saved work on "${row.label}" and any media only it uses. Your songs and other projects stay. This can't be undone.`,
+			title: "Delete project",
+			message: `Removes the saved work on "${row.name}" and any media only it uses. Your songs and other projects stay. This can't be undone.`,
 			run: () => deleteRecentEdit(row.mode, row.key),
 		};
 	}
@@ -1000,7 +963,7 @@
 									<ListVideo size={13} />
 								{/if}
 								<RenameInput
-									value={row.label}
+									value={row.name}
 									label="Project name"
 									class="saved-name"
 									onRename={(name) => renameRow(row, name)}
@@ -1014,8 +977,8 @@
 								{:else}
 									<ListVideo size={13} />
 								{/if}
-								<span class="saved-name">{row.label}</span>
-								{#if row.sourceCount !== null}
+								<span class="saved-name">{row.name}</span>
+								{#if row.mode !== "single"}
 									<span class="saved-count"
 										>{row.sourceCount} src{row.sourceCount === 1
 											? ""
@@ -1027,7 +990,7 @@
 							<button
 								class="saved-action"
 								title="Save to a project file"
-								aria-label={`Save ${row.label} to a file`}
+								aria-label={`Save ${row.name} to a file`}
 								onclick={row.download}
 							>
 								<Download size={12} />
@@ -1035,7 +998,7 @@
 							<button
 								class="saved-action"
 								title="Rename"
-								aria-label={`Rename ${row.label}`}
+								aria-label={`Rename ${row.name}`}
 								onclick={() => (renamingKey = row.key)}
 							>
 								<Pencil size={12} />
@@ -1043,7 +1006,7 @@
 							<button
 								class="saved-action danger"
 								title="Delete"
-								aria-label={`Delete ${row.label}`}
+								aria-label={`Delete ${row.name}`}
 								disabled={deleting}
 								onclick={() => askDeleteRow(row)}
 							>
