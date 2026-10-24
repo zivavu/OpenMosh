@@ -993,7 +993,9 @@
 		color: var(--live-dim);
 	}
 
+	/* The body is a column, where the field's `flex: 1` sizes height, not width. */
 	.project :global(.project-name-input) {
+		width: 100%;
 		font-size: 0.7rem;
 		font-weight: 500;
 	}
