@@ -69,6 +69,7 @@
 	import RecordOverlay from "../editor/RecordOverlay.svelte";
 	import AudioTimeline from "../ui/AudioTimeline.svelte";
 	import TimelineStack from "../ui/TimelineStack.svelte";
+	import NumberField from "../ui/NumberField.svelte";
 	import type { TimelineStackState } from "../../editor/timeline-stack.svelte";
 	import TimelineSegments from "./TimelineSegments.svelte";
 	import EffectsPanel from "../ui/EffectsPanel.svelte";
@@ -738,18 +739,7 @@
 
 	let currentTrackId = $state<string | null>(null);
 
-	/** A slideshow is kept under its song: without one there is nothing to key it by. */
-	let sessionKept = $derived(slides.length > 0 && !!currentTrackId);
-
-	let notSaved = $derived(
-		slides.length > 0 && !currentTrackId
-			? {
-					reason:
-						"A slideshow is saved under its song. Add a song to keep this one; without it a reload starts over.",
-					warn: true,
-				}
-			: null,
-	);
+	let sessionKept = $derived(slides.length > 0);
 
 	/** A slideshow's work on one song. */
 	interface SegmentsEntry {
@@ -788,6 +778,14 @@
 
 	/** This slideshow's work on each song it has played, so switching back finds it. */
 	const songEdits = new Map<string, SegmentsEntry>();
+	/** Where `songEdits` keeps the cuts made with no song loaded. */
+	const NO_SONG = "";
+
+	/** Keep the work on whatever plays now, song or none, before another takes over. */
+	function stashCurrentEdit() {
+		if (currentTrackId) stashSongEdit(currentTrackId);
+		else if (!audio.trackFile) stashSongEdit(NO_SONG);
+	}
 
 	function stashSongEdit(trackId: string) {
 		const span = spanForSave();
@@ -1034,15 +1032,21 @@
 
 	function clearTrack() {
 		// Unloading is a song change too, so its work is kept like a switch keeps it.
-		if (currentTrackId) stashSongEdit(currentTrackId);
+		stashCurrentEdit();
 		audio.clearTrack();
 		currentTrackId = null;
-		config = { ...config, segments: [], span: undefined };
+		const edit = songEdits.get(NO_SONG);
+		config = {
+			...config,
+			segments: edit?.segments ?? [],
+			...(edit?.bpm !== undefined ? { bpm: edit.bpm } : {}),
+			span: undefined,
+		};
 	}
 
 	function onLibraryLoadTrack(file: File, trackId: string, autoplay = false) {
 		stopPreview();
-		if (currentTrackId) stashSongEdit(currentTrackId);
+		stashCurrentEdit();
 		// Partial reset: trackDuration and trackFile are left, so AudioTimeline doesn't flash.
 		audio.resetPlayback();
 		currentTrackId = null;
@@ -1373,15 +1377,9 @@
 				stopPreview();
 				return;
 			} else {
-				const fallbackInterval =
-					config.subdivision === 0 ? 1 : (60 / config.bpm) * config.subdivision;
-				const cycle = slides.length * fallbackInterval;
-				// Signed modulo, so positions before the anchor still wrap forward.
+				// No song: a wall clock going round the slideshow's own length.
 				const elapsed = performance.now() / 1000 - noTrackWallStart;
-				t =
-					((((elapsed + noTrackAnchor - config.beatOffset) % cycle) + cycle) %
-						cycle) +
-					config.beatOffset;
+				t = (noTrackAnchor + elapsed) % recordDuration;
 			}
 
 			// The video-frame upload is unawaited: the render loop must not stall on the decoder.
@@ -1509,7 +1507,14 @@
 	);
 
 	let recordFps = $state(60);
-	let recordDuration = $state(10);
+	/** The export's length, and the slideshow's own while it has no song. */
+	let recordDuration = $state(30);
+	const MAX_LENGTH = 3600;
+
+	function setLength(length: number) {
+		recordDuration = length;
+		if (textTime > length) seekMaster(0);
+	}
 
 	/** This slideshow's export settings. One saved before they were its own reads
 	 * what its song kept. */
@@ -1779,10 +1784,6 @@
 	/** Save the slideshow as a `.openmosh` file: its slides, song, settings and fonts,
 	 * as they are on screen. */
 	async function saveProjectFile() {
-		if (!currentTrackId) {
-			showToast("A slideshow saves with its song, so add one first.", "info");
-			return;
-		}
 		await downloadProjectFile(ownSessionKey, {
 			live: {
 				mode: "slideshow",
@@ -1942,19 +1943,12 @@
 			onExit={onExit ? handleExit : undefined}
 		>
 			{#snippet status()}
-				<SaveIndicator
-					state={saves.state}
-					lastSavedAt={saves.lastSavedAt}
-					{notSaved}
-				>
+				<SaveIndicator state={saves.state} lastSavedAt={saves.lastSavedAt}>
 					{#snippet action()}
 						<button
 							class="save-file-btn"
-							title={currentTrackId
-								? `Save the slideshow as a file you can keep or share (${modKey}+Shift+S)`
-								: "A slideshow saves with its song, so add one first."}
+							title={`Save the slideshow as a file you can keep or share (${modKey}+Shift+S)`}
 							aria-label="Save project file"
-							disabled={!currentTrackId}
 							onclick={saveProjectFile}
 						>
 							<FolderDown size={14} />
@@ -2040,7 +2034,6 @@
 			fullscreen={previewFullscreen}
 			onToggleFullscreen={toggleFullscreen}
 			onRecordFpsChange={(fps) => (recordFps = fps)}
-			onRecordDurationChange={(d) => (recordDuration = d)}
 		/>
 
 		<RecordOverlay
@@ -2062,6 +2055,27 @@
 			onToggleLoop={audio.trackFile ? toggleLoop : null}
 		>
 			{#snippet toolbar()}
+				{#if !audio.trackFile}
+					<div class="tl-tool-sep"></div>
+					<span
+						class="tl-tool-label"
+						title="How long the slideshow runs. Add a song and the song sets it."
+						>Length</span
+					>
+					<NumberField
+						value={recordDuration}
+						min={1}
+						max={MAX_LENGTH}
+						step={1}
+						fineStep={0.1}
+						allowEmpty={false}
+						unit="duration"
+						upTitle="Longer (shift for a tenth of a second)"
+						downTitle="Shorter (shift for a tenth of a second)"
+						commitOnBlur
+						onChange={setLength}
+					/>
+				{/if}
 				{#if textTimeline.enabled}
 					<div class="tl-tool-sep"></div>
 					<span class="tl-tool-label">Text</span>
@@ -2101,7 +2115,7 @@
 					/>
 				{/if}
 			</div>
-			{#if audio.trackFile && audio.trackDuration > 0}
+			{#if !audio.trackFile || audio.trackDuration > 0}
 				<!-- Each song's cuts keep their own undo stack. -->
 				{#key currentTrackId}
 					<TimelineSegments
@@ -2110,7 +2124,8 @@
 						bind:selectedSegmentId
 						bind:undoSource={segmentUndo}
 						onSeek={seekMaster}
-						durationKnown={audio.durationFile === audio.trackFile}
+						durationKnown={!audio.trackFile ||
+							audio.durationFile === audio.trackFile}
 					/>
 				{/key}
 			{/if}

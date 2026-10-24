@@ -113,6 +113,10 @@ Outside CI a run reuses whatever already serves its port, so when my dev server 
 - Source edits (crop, chroma key, erase) are keyed on the source's own media time, not timeline
   time, and are sampled inside `GlRenderer`. An erase key holds a complete shape, like
   rotoscoping, and doesn't add to earlier keys. I chose that over cumulative erasing.
+- A slideshow doesn't need a song. Without one it runs on its export duration (render
+  settings) as its length and a hand-set BPM; its cuts are kept apart from each song's.
+- Every mode's library drawer lists that mode's saved projects only (`lib/editor/recent-edits.ts`,
+  shared with the upload screen's Recent list).
 - Editor sound goes through the `lib/mix/` mixer; single mode and slideshow stay on
   `AudioManager`.
 - Anything that reads a media layer's texture goes through `mediaLayerSides()`: transitions give
