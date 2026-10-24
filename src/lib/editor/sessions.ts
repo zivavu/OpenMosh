@@ -21,6 +21,7 @@ import {
 	stableSourceId,
 	storedMediaToFile,
 	withMediaWrites,
+	isLegacySonglessSlideshow,
 	type SessionMode,
 	type StoredSession,
 } from "./sequence-media-store";
@@ -91,8 +92,7 @@ function sameIds(a: string[], b: string[]): boolean {
 	return a.length === b.length && a.every((id, i) => id === b[i]);
 }
 
-/** Store the media and editor state under this session's key. False when the edit has
- * no key to be kept under (a slideshow without a song), so nothing was written.
+/** Store the media and editor state under this session's key.
  * A session this tab already saved with the same media writes before any lookup,
  * so a save started as the page closes still lands. */
 export async function saveSession(
@@ -102,7 +102,6 @@ export async function saveSession(
 	state: unknown,
 	trackId?: string | null,
 ): Promise<boolean> {
-	if (mode === "slideshow" && !trackId) return false;
 	const save = ++saves;
 	latestSave.set(key, save);
 	const entries = files.map((file) => ({ id: stableSourceId(file), file }));
@@ -214,8 +213,7 @@ export async function listSavedSessions(
 	const trackName = new Map(tracks.map((t) => [t.id, t.name]));
 	const out = sessions
 		.filter((s) => s.mode === mode)
-		// Song-less slideshow entries predate the track requirement; the next prune deletes them.
-		.filter((s) => s.mode !== "slideshow" || !!s.trackId)
+		.filter((s) => !isLegacySonglessSlideshow(s))
 		.map((s) => ({
 			key: s.key,
 			mode: s.mode,

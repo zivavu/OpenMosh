@@ -520,7 +520,7 @@ describe("single and slideshow edits", () => {
 		expect(loadRenderSettings(`slideshow:${song.id}`)).toBeNull();
 	});
 
-	test("a slideshow whose song is gone is refused, not stored to vanish", async () => {
+	test("a slideshow whose song is gone opens without one", async () => {
 		const key = "slideshow:p:songless";
 		const a = await seedMedia("one.png", 100, 1000);
 		await store.putSession({
@@ -535,9 +535,10 @@ describe("single and slideshow edits", () => {
 		await store.clearAllSequenceStores();
 		localData.clear();
 
-		const read = await readProjectFile(built.blob);
-		await expect(storeProjectFile(read)).rejects.toThrow(/no song/);
-		expect(await store.getAllSessions()).toEqual([]);
+		const landed = await storeProjectFile(await readProjectFile(built.blob));
+		const session = await store.getSession(landed.key);
+		expect(session?.sourceIds).toHaveLength(1);
+		expect(session?.trackId).toBeUndefined();
 	});
 
 	test("an unchanged single edit is found as a copy, and an edited one isn't", async () => {

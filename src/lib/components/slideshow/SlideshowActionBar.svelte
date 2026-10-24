@@ -39,7 +39,6 @@
 		onTogglePreview: () => void;
 		onStartRecording: () => void;
 		onRecordFpsChange: (fps: number) => void;
-		onRecordDurationChange: (d: number) => void;
 	}
 
 	let {
@@ -62,7 +61,6 @@
 		onTogglePreview,
 		onStartRecording,
 		onRecordFpsChange,
-		onRecordDurationChange,
 	}: Props = $props();
 
 	const isMobile = window.matchMedia("(pointer: coarse)").matches;
@@ -196,29 +194,10 @@
 			bind:showSettings={showRecordSettings}
 		>
 			{#snippet settingsContent()}
-				{#if trackFile}
-					<div class="setting-row">
-						<span class="setting-label">Duration</span>
-						<span class="setting-val">{recordDuration.toFixed(1)}s</span>
-					</div>
-				{:else}
-					<div class="setting-row">
-						<label for="ss-rec-duration">Duration</label>
-						<input
-							id="ss-rec-duration"
-							type="range"
-							min="1"
-							max="60"
-							step="1"
-							value={recordDuration}
-							oninput={(e) =>
-								onRecordDurationChange(
-									+(e.currentTarget as HTMLInputElement).value,
-								)}
-						/>
-						<span class="setting-val">{recordDuration.toFixed(0)}s</span>
-					</div>
-				{/if}
+				<div class="setting-row">
+					<span class="setting-label">Duration</span>
+					<span class="setting-val">{recordDuration.toFixed(1)}s</span>
+				</div>
 				<div class="setting-row">
 					<label for="ss-rec-fps">FPS</label>
 					<select
@@ -314,34 +293,6 @@
 		font-family: var(--font-mono);
 		font-size: 0.66rem;
 		font-variant-numeric: tabular-nums;
-	}
-
-	.setting-row input[type="range"] {
-		flex: 1;
-		height: 3px;
-		appearance: none;
-		background: rgba(255, 255, 255, 0.07);
-		border-radius: 2px;
-		outline: none;
-		cursor: pointer;
-	}
-
-	.setting-row input[type="range"]::-webkit-slider-thumb {
-		appearance: none;
-		width: 9px;
-		height: 13px;
-		border-radius: 1px;
-		background: var(--text-2);
-		cursor: pointer;
-	}
-
-	.setting-row input[type="range"]::-moz-range-thumb {
-		width: 9px;
-		height: 13px;
-		border-radius: 1px;
-		background: var(--text-2);
-		border: none;
-		cursor: pointer;
 	}
 
 	.start-btn {

@@ -140,12 +140,8 @@
 	function setMode(mode: UploadMode) {
 		selectedMode = mode;
 		updateSettings({ lastMode: mode });
-		// Staged media belongs to the mode it was dropped on, so clear it across a switch.
-		stagedMedia = null;
 	}
 	let isMultiMode = $derived(selectedMode !== "single");
-	/** The slideshow cuts to the beat; the editor plays fine with no song. */
-	let songRequired = $derived(selectedMode === "slideshow");
 
 	const MODES = [
 		{ value: "single", label: "Single" },
@@ -159,7 +155,7 @@
 		sequence:
 			"Your song on a timeline. The media goes on lanes, cut into clips with their own effects. 3D models (OBJ, STL, GLB, FBX, PLY) work here too.",
 		slideshow:
-			"A pile of media and a track. It finds the BPM and cuts on the beat.",
+			"A pile of media, cut on the beat. Add a track and it finds the BPM, or set the tempo and length yourself.",
 	};
 	const DROP_HINTS: Record<UploadMode, string> = {
 		single:
@@ -457,20 +453,8 @@
 				"info",
 			);
 		}
-		// The slideshow cuts media to a track, so hold the files until a song arrives.
-		if (!pendingAudio && songRequired) {
-			const staged = [...(stagedMedia ?? []), ...accepted];
-			stagedMedia = staged;
-			showToast(
-				`${staged.length} file${staged.length === 1 ? "" : "s"} ready — add a song to start`,
-				"info",
-			);
-			return;
-		}
 		launchMultiMode(accepted);
 	}
-
-	let stagedMedia = $state<File[] | null>(null);
 
 	// Procedural images come back as ordinary files, so they take the same road in as a drop.
 	const loadGeneratePanel = lazy(
@@ -514,7 +498,6 @@
 	const hasCamera = !!navigator.mediaDevices?.getUserMedia;
 
 	function launchMultiMode(files: File[]) {
-		stagedMedia = null;
 		if (selectedMode === "sequence") onSequence(files);
 		else onSlideshow(files);
 	}
@@ -627,8 +610,6 @@
 		}
 		pendingAudio = file;
 		onaudio?.(file);
-		// The song was the only thing missing, so go rather than re-dropping media.
-		if (stagedMedia && songRequired) launchMultiMode(stagedMedia);
 	}
 
 	function openAudioPicker() {
@@ -820,14 +801,8 @@
 
 			<div class="hint-stack">
 				{#each hintModes as mode (mode)}
-					<p
-						class="drop-hint"
-						class:shown={mode === selectedMode}
-						class:staged={stagedMedia && mode === selectedMode}
-					>
-						{stagedMedia && mode === selectedMode
-							? `${stagedMedia.length} file${stagedMedia.length === 1 ? "" : "s"} ready. Add a song to start.`
-							: DROP_HINTS[mode]}
+					<p class="drop-hint" class:shown={mode === selectedMode}>
+						{DROP_HINTS[mode]}
 					</p>
 				{/each}
 			</div>
@@ -840,12 +815,10 @@
 				>
 					Open a project file
 				</button>
-				{#if !stagedMedia}
-					<span class="link-sep" aria-hidden="true">·</span>
-					<button class="link-btn" onclick={trySample} disabled={sampling}>
-						{sampling ? "Making a sample…" : "No file handy? Try a sample"}
-					</button>
-				{/if}
+				<span class="link-sep" aria-hidden="true">·</span>
+				<button class="link-btn" onclick={trySample} disabled={sampling}>
+					{sampling ? "Making a sample…" : "No file handy? Try a sample"}
+				</button>
 			</div>
 		</div>
 
@@ -890,12 +863,8 @@
 			>
 				<Music size={14} />
 				<span>Add a song</span>
-				<span class="song-tag" class:required={songRequired}>
-					{songRequired
-						? "required"
-						: selectedMode === "sequence"
-							? "recommended"
-							: "optional"}
+				<span class="song-tag">
+					{selectedMode === "single" ? "optional" : "recommended"}
 				</span>
 			</button>
 		{/if}
@@ -1798,11 +1767,6 @@
 		cursor: progress;
 	}
 
-	/* Media is picked and waiting on the song: a live state, in the mosh colour. */
-	.drop-hint.staged {
-		color: var(--mosh);
-	}
-
 	/* ── Song strip ───────────────────────────────────────────────────────── */
 	.song-strip {
 		display: flex;
@@ -1846,11 +1810,6 @@
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
 		color: var(--text-4);
-	}
-
-	/* The one thing standing between staged media and the editor. */
-	.song-tag.required {
-		color: var(--mosh);
 	}
 
 	.song-name {

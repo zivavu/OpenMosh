@@ -488,10 +488,7 @@ async function pruneNow(): Promise<void> {
 	const pools = await getAllMediaPools();
 
 	const allSessions = await getAllSessions();
-	// Slideshow sessions keyed by media predate the track requirement; they can't be recreated.
-	const orphaned = allSessions.filter(
-		(s) => s.mode === "slideshow" && !s.trackId,
-	);
+	const orphaned = allSessions.filter(isLegacySonglessSlideshow);
 	for (const stale of orphaned) {
 		await deleteSession(stale.key);
 	}
@@ -531,6 +528,16 @@ async function pruneNow(): Promise<void> {
 	for (const entry of staleProxies) {
 		await deleteSequenceProxy(entry.id);
 	}
+}
+
+/** A song-less slideshow keyed by its media, from before a slideshow carried its own
+ * key. Nothing opens one, so a prune deletes it. */
+export function isLegacySonglessSlideshow(session: StoredSession): boolean {
+	return (
+		session.mode === "slideshow" &&
+		!session.trackId &&
+		!isOwnSessionKey(session.key)
+	);
 }
 
 /** An edit keyed by its own id (`single:p:…`), not by the song or file it began with. */

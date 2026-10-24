@@ -120,6 +120,20 @@ describe("the same song used twice", () => {
 	});
 });
 
+describe("a slideshow without a song", () => {
+	test("saves, lists and survives a prune", async () => {
+		const key = sessions.newSessionKey("slideshow");
+		expect(
+			await sessions.saveSession(key, "slideshow", [image()], { n: 1 }),
+		).toBe(true);
+		await store.pruneSequenceMedia();
+
+		const list = await sessions.listSavedSessions("slideshow");
+		expect(list.map((s) => s.key)).toEqual([key]);
+		expect((await sessions.openSession(key))?.state).toEqual({ n: 1 });
+	});
+});
+
 describe("autosaving an edit", () => {
 	test("stores its media once, not again on every save", async () => {
 		const key = sessions.newSessionKey("single");
