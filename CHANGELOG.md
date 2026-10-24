@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.9.26](https://github.com/zivavu/OpenMosh/compare/v0.9.25...v0.9.26) (2026-10-24)
+
+A slideshow no longer needs a song: without one it runs for its export length at a BPM you set. In Single and Slideshow modes the library drawer lists your other projects and opens them, and in the editor Ctrl+Z now takes back crop, key and erase edits. The rest is fixes. Blur, Glow and Ghosting draw on graphics cards without float render targets, photos bigger than the card's texture limit show up, long webcam takes save to disk, and a very long video loads without its sound instead of running the tab out of memory.
+
+Saved projects open as before. A slideshow file without its song now opens instead of being turned down. A project file whose song or media shares a name with one you already have keeps its own and leaves yours alone. Two fixes can change how a saved project looks: a Mask with White set below Black now inverts its ramp, and a frequency band narrowed to one point stays that narrow after a reload instead of widening to the full range.
+
+
+### Added
+
+* Make a slideshow without a song, at your own BPM and length ([72df6ea](https://github.com/zivavu/OpenMosh/commit/72df6eaeb1be5b2f7ffac3adc1a199949cb83a34))
+* Open other Single and Slideshow projects from the library drawer ([f350320](https://github.com/zivavu/OpenMosh/commit/f3503202f7138e1522084f6f816a3356f77a0416))
+* Undo crop, key and erase edits with Ctrl+Z ([a0c2d84](https://github.com/zivavu/OpenMosh/commit/a0c2d8425dc1251bb30beb845744351f5f3c0e74))
+
+
+### Fixed
+
+* Draw Blur, Glow and Ghosting without float render targets, and show photos bigger than the graphics card's texture limit ([136c7a8](https://github.com/zivavu/OpenMosh/commit/136c7a8d9d2946f14099e1bad777d173583904d5), [11cd3a5](https://github.com/zivavu/OpenMosh/commit/11cd3a58ddfd915e066eb4718882d8cb3bad9a73))
+* Save long webcam takes to disk, say when the camera disconnects during a take, and let Escape cancel the countdown ([58f694e](https://github.com/zivavu/OpenMosh/commit/58f694e055db0b98dddd7399aa8e80e9e92fd925), [0026462](https://github.com/zivavu/OpenMosh/commit/00264624ec4b8f399df842fa249605180721864a), [0e36d7d](https://github.com/zivavu/OpenMosh/commit/0e36d7d8a9936c8529a451ea1509e0ac45ade130))
+* Leave out a very long video's sound so the tab doesn't run out of memory, free a project's video decoders when you leave it, and stop building a preview copy after you leave Single mode ([a0b3fd8](https://github.com/zivavu/OpenMosh/commit/a0b3fd8e720230f569110124309e64d6ff8bc512), [d8289c6](https://github.com/zivavu/OpenMosh/commit/d8289c6b6e19cac9d8a4ea6a4e4d839691c10d51), [8eabf89](https://github.com/zivavu/OpenMosh/commit/8eabf89fdd5b498037593c273b38996b8290ee3d))
+* Keep a project's own song and media when another file has the same name, and read back a backup with exactly 65,535 files ([d8899c6](https://github.com/zivavu/OpenMosh/commit/d8899c62eceacc84dd6cc0374cf3d03c22d8e91b), [03c3f4f](https://github.com/zivavu/OpenMosh/commit/03c3f4f97c70669d2bd0b391e9a3448b24b4898e), [d231110](https://github.com/zivavu/OpenMosh/commit/d231110a4461b8d3be83406226f42ec56fbf0079))
+* Keep pasted LRC lyrics inside the song's span, and keep a lane you named Lyrics out of the lyrics sync ([7a08665](https://github.com/zivavu/OpenMosh/commit/7a08665a20d3b9db42f6efcf4500a824faa3ad04), [902ea3a](https://github.com/zivavu/OpenMosh/commit/902ea3ae6f6dd0ac72c71ebfbc131c64115f9674))
+* Keep a narrow frequency band after a reload and normalize off when you turn it off mid-measure, and say when a song has no beat to find ([e747b18](https://github.com/zivavu/OpenMosh/commit/e747b1848da6cae16306e5e46002b6ea253614fd), [38bf9ea](https://github.com/zivavu/OpenMosh/commit/38bf9ea6d127f957d8e7d7e8fb2f6d5aa5d0373a), [c5cdd90](https://github.com/zivavu/OpenMosh/commit/c5cdd90e95079468163215a40ea1a6058f0ddf3f))
+* Export a Single edit whose song span was dragged shut, leave an unreadable slide blank in the video, and keep an export running when the browser goes back ([e7e1641](https://github.com/zivavu/OpenMosh/commit/e7e1641815e82d7f0517d564e29540bafc12a14f), [f750816](https://github.com/zivavu/OpenMosh/commit/f750816dda0b4d7768181d812014608c725d0d97), [e653156](https://github.com/zivavu/OpenMosh/commit/e65315639c1ea53efb6fc8d418c636782e24609f))
+* Invert a Mask's ramp when White sits below Black ([2062f76](https://github.com/zivavu/OpenMosh/commit/2062f76264081cc13c708f2f2f3f1a65dfe6db7e))
+* Stay on the start screen when you go back while a project opens, skip the start-screen demo quietly when it can't draw, open the About page offline, and reload after a deploy even when site storage is blocked ([a2b164f](https://github.com/zivavu/OpenMosh/commit/a2b164f4473dfbe6a819b9c4d85aa7020b86ff17), [e78774d](https://github.com/zivavu/OpenMosh/commit/e78774db40eab884803e30e7b5c363e156aec4fc), [aba7fcc](https://github.com/zivavu/OpenMosh/commit/aba7fcc559dec5e80c883a0d8748317f529091ba), [9d696c7](https://github.com/zivavu/OpenMosh/commit/9d696c7464407ddff1ee9b9f04c37f4bbe2a980c))
+* Smaller fixes to baking with V, trim drags when Edit media closes, "Saving…" after a quick undo, and a project's name as you type it in the drawer ([769ac44](https://github.com/zivavu/OpenMosh/commit/769ac446edde1a5059748cb1bcb13d30cde9ea46), [31d4e5f](https://github.com/zivavu/OpenMosh/commit/31d4e5f3178e744f2b138a5f36ef7ad5338229d3), [aa2073b](https://github.com/zivavu/OpenMosh/commit/aa2073bc678062531409ad2fc581d6750949c794), [f3c8650](https://github.com/zivavu/OpenMosh/commit/f3c86508d98ce7844bdbe89cac179723677c6486))
+
+
+### Faster
+
+* Stop a frequency range drag from stuttering and piling up memory ([c685fe7](https://github.com/zivavu/OpenMosh/commit/c685fe7e2b2bc2da402d659d13896a916c50ffc8))
+
 ## [0.9.25](https://github.com/zivavu/OpenMosh/compare/v0.9.24...v0.9.25) (2026-10-22)
 
 Saving a backup spins its button while it packs, then names the file it wrote; loading one says what came back: how many projects, media files, songs and fonts. Pasting lyrics that carry LRC timestamps times them for you. Beat-synced effects and Snap line up with the song's first beat, and pixel-sized effects such as Pixelate and Halftone keep the same look from preview to export. Portrait videos from phones open upright, crop, erase and trim drags work with a finger, and a click in Edit media no longer shifts the crop. Ctrl+Z takes one colour drag or two quick clip drags back as a single step each, and can undo a BPM typed over none.
