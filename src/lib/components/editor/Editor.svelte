@@ -354,7 +354,7 @@
 		warmCanvas?: HTMLCanvasElement | null;
 		warmRenderer?: import("../../gl/renderer").GlRenderer | null;
 		onExit?: () => void;
-		/** Sequence mode: open another saved project in place of this one. */
+		/** Open another saved project of this mode in place of this one. */
 		onOpenProject?: (key: string) => void;
 		/** The edit now saves under this key. */
 		onProjectReady?: (key: string) => void;
@@ -4872,13 +4872,12 @@
 		pendingTrack={audio.trackFile}
 		onNormalizeChange={(gain) => audio.setNormalizeGain(gain)}
 		onAutoAdded={adoptLibraryTrack}
-		activeProjectKey={projectKey}
+		projectMode={isSequenceMode ? "sequence" : "single"}
+		activeProjectKey={isSequenceMode ? projectKey : singleSessionKey}
 		tracksDraggable={isSequenceMode}
 		songOnLanes={isSequenceMode}
 		openKey={isSequenceMode ? seqStoreKey : singleSessionKey}
-		onOpenProject={isSequenceMode && onOpenProject
-			? openOtherProject
-			: undefined}
+		onOpenProject={onOpenProject ? openOtherProject : undefined}
 	/>
 	<div
 		class="main-area"

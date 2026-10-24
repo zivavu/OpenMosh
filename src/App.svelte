@@ -541,6 +541,11 @@
 					{warmRenderer}
 					onExit={exitToUpload}
 					onProjectReady={(key: string) => linkOpenEdit("slideshow", key)}
+					onOpenProject={async (key: string) => {
+						if (!(await openSessionByKey("slideshow", key, true))) {
+							showToast("That project is no longer stored", "error");
+						}
+					}}
 				/>
 			{/key}
 		{:catch err}
@@ -591,6 +596,11 @@
 					{warmRenderer}
 					onExit={exitToUpload}
 					onProjectReady={(key: string) => linkOpenEdit("single", key)}
+					onOpenProject={async (key: string) => {
+						if (!(await openSessionByKey("single", key, true))) {
+							showToast("That project is no longer stored", "error");
+						}
+					}}
 				/>
 			{/key}
 		{:catch err}

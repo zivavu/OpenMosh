@@ -10,7 +10,7 @@
 		Trash2,
 		X,
 	} from "lucide-svelte";
-	import { onMount } from "svelte";
+	import { onMount, untrack } from "svelte";
 	import { readRaw, writeRaw } from "../../storage";
 	import { getDecodedAudioBuffer } from "../../audio/audio-buffer-cache";
 	import { computeNormalizeGain, measureLoudness } from "../../audio/loudness";
@@ -28,10 +28,11 @@
 		type StoredTrack,
 	} from "../../audio/track-library";
 	import {
-		listSavedSequences,
-		readCachedSavedSequences,
-		type SavedSequence,
-	} from "../../editor/saved-sequences";
+		listRecentEdits,
+		readCachedRecentEdits,
+		recentEditName,
+		type RecentEdit,
+	} from "../../editor/recent-edits";
 	import { readProjectNames, setProjectName } from "../../editor/project-names";
 	import {
 		beginTrackDrag,
@@ -41,6 +42,7 @@
 	import {
 		countTrackUsers,
 		deleteRecentEdit,
+		type ProjectMode,
 	} from "../../editor/storage-inventory";
 	import { showToast } from "./toast.svelte";
 	import { fmtAgo } from "../../utils";
@@ -63,9 +65,10 @@
 		onNormalizeChange?: (gain: number) => void;
 		/** Fired when a manually loaded track is auto-saved, so the editor can adopt it. */
 		onAutoAdded?: (trackId: string) => void;
-		/** Editor only: the drawer leads with the saved projects, and this opens one,
-		 * media, timeline and song together. */
+		/** The drawer leads with this mode's saved projects, and this opens one,
+		 * media and song together. */
 		onOpenProject?: (key: string) => void;
+		projectMode?: ProjectMode;
 		/** The project open now, marked in the list. */
 		activeProjectKey?: string | null;
 		/** Editor only: songs drag out onto the audio lanes. */
@@ -91,6 +94,7 @@
 		onNormalizeChange,
 		onAutoAdded,
 		onOpenProject,
+		projectMode = "sequence",
 		activeProjectKey = null,
 		tracksDraggable = false,
 		songOnLanes = false,
@@ -103,10 +107,12 @@
 	$effect(() => {
 		if (open) tab = "projects";
 	});
-	/** Single and slideshow have no projects tab: the drawer is their song library. */
+	/** Without a way to open one, the drawer is only the song library. */
 	const showing = $derived(hasProjects ? tab : "songs");
 
-	let projects = $state<SavedSequence[]>(readCachedSavedSequences());
+	let projects = $state<RecentEdit[]>(
+		untrack(() => readCachedRecentEdits(projectMode)),
+	);
 	let projectNames = $state(readProjectNames());
 
 	// Re-read on every open: the list moves as projects save, rename and go.
@@ -117,7 +123,7 @@
 	});
 
 	function refreshProjects() {
-		void listSavedSequences().then((list) => (projects = list));
+		void listRecentEdits(projectMode).then((list) => (projects = list));
 	}
 
 	function openProject(key: string) {
@@ -128,8 +134,8 @@
 
 	let renamingProject = $state<string | null>(null);
 
-	function renameProject(key: string, name: string) {
-		setProjectName(key, name);
+	function renameProject(project: RecentEdit, name: string) {
+		setProjectName(project.projectKey, name);
 		projectNames = readProjectNames();
 	}
 
@@ -141,9 +147,9 @@
 
 	async function deleteProject({ key }: ProjectDelete) {
 		pendingProjectDelete = null;
-		projects = projects.filter((p) => p.trackId !== key);
+		projects = projects.filter((p) => p.key !== key);
 		try {
-			await deleteRecentEdit("sequence", key);
+			await deleteRecentEdit(projectMode, key);
 		} catch (e) {
 			console.error("Failed to delete project:", e);
 			showToast(
@@ -515,41 +521,43 @@
 				</div>
 			{:else}
 				<ul class="track-list">
-					{#each projects as project (project.trackId)}
-						{@const name = projectNames[project.trackId] ?? project.trackName}
-						{@const isOpen = project.trackId === activeProjectKey}
+					{#each projects as project (project.key)}
+						{@const name = recentEditName(project, projectNames)}
+						{@const isOpen = project.key === activeProjectKey}
 						<li class="project" class:open-now={isOpen}>
-							{#if renamingProject === project.trackId}
+							{#if renamingProject === project.key}
 								<div class="project-body">
 									<RenameInput
 										value={name}
 										label="Project name"
 										class="project-name-input"
-										onRename={(next) => renameProject(project.trackId, next)}
+										onRename={(next) => renameProject(project, next)}
 										onDone={() => (renamingProject = null)}
 									/>
 								</div>
 							{:else}
 								<button
 									class="project-body"
-									onclick={() => openProject(project.trackId)}
+									onclick={() => openProject(project.key)}
 									title={isOpen ? "Open now" : `Open "${name}"`}
 									aria-current={isOpen || undefined}
 								>
 									<span class="project-name">{name}</span>
 									<span class="project-meta">
-										<span
-											>{project.sourceCount} source{project.sourceCount === 1
-												? ""
-												: "s"}</span
-										>
+										{#if project.mode !== "single"}
+											<span
+												>{project.sourceCount} source{project.sourceCount === 1
+													? ""
+													: "s"}</span
+											>
+										{/if}
 										<span>{fmtAgo(project.updatedAt)}</span>
 									</span>
 								</button>
 								<div class="project-actions">
 									<button
 										class="project-action"
-										onclick={() => (renamingProject = project.trackId)}
+										onclick={() => (renamingProject = project.key)}
 										title="Rename"
 										aria-label="Rename {name}"
 									>
@@ -559,7 +567,7 @@
 										<button
 											class="project-action danger"
 											onclick={() =>
-												(pendingProjectDelete = { key: project.trackId, name })}
+												(pendingProjectDelete = { key: project.key, name })}
 											title="Delete"
 											aria-label="Delete {name}"
 										>

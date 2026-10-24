@@ -141,6 +141,8 @@
 		warmCanvas?: HTMLCanvasElement | null;
 		warmRenderer?: import("../../gl/renderer").GlRenderer | null;
 		onExit?: () => void;
+		/** Open another saved slideshow in place of this one. */
+		onOpenProject?: (key: string) => void;
 		/** The slideshow now saves under this key. */
 		onProjectReady?: (key: string) => void;
 	}
@@ -154,6 +156,7 @@
 		warmCanvas = null,
 		warmRenderer = null,
 		onExit,
+		onOpenProject,
 		onProjectReady,
 	}: Props = $props();
 
@@ -615,6 +618,20 @@
 		clearTimeout(sessionSaveTimer);
 		saveSlideshowSession();
 		onExit();
+	}
+
+	/** Leaving for another slideshow saves this one on the way out, as exiting does. */
+	function openOtherProject(key: string) {
+		if (!onOpenProject) return;
+		if (recordingState.recording) {
+			showToast(
+				"Cancel or wait for the recording to finish before switching projects",
+				"error",
+			);
+			return;
+		}
+		flushSlideshowSave();
+		onOpenProject(key);
 	}
 
 	// svelte-ignore state_referenced_locally
@@ -1905,6 +1922,9 @@
 		onNormalizeChange={(gain) => audio.setNormalizeGain(gain)}
 		onAutoAdded={adoptLibraryTrack}
 		openKey={ownSessionKey}
+		projectMode="slideshow"
+		activeProjectKey={ownSessionKey}
+		onOpenProject={onOpenProject ? openOtherProject : undefined}
 	/>
 	<div class="main-area">
 		<SlideshowTopBar
