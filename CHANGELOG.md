@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.9.27](https://github.com/zivavu/OpenMosh/compare/v0.9.26...v0.9.27) (2026-10-25)
+
+Edit media opens again. Since 0.9.26, opening it from a clip's panel or the Media rail froze the editor. Video clips on the timeline also show the video's own frames along their length now, following its trim, speed, loops and bounces, where they used to repeat its first frame.
+
+Saved projects open as before, and nothing they store has changed.
+
+
+### Added
+
+* Show a video's frames along its timeline clips ([46b448a](https://github.com/zivavu/OpenMosh/commit/46b448af4c4c085590b16d9599a7e7fca02780ec))
+
+
+### Fixed
+
+* Stop the editor freezing when Edit media opens ([a0af3d0](https://github.com/zivavu/OpenMosh/commit/a0af3d008acdd55e8dbfb1d3cf2fed5e9841bfcb))
+
 ## [0.9.26](https://github.com/zivavu/OpenMosh/compare/v0.9.25...v0.9.26) (2026-10-24)
 
 A slideshow no longer needs a song: without one it runs for its export length at a BPM you set. In Single and Slideshow modes the library drawer lists your other projects and opens them, and in the editor Ctrl+Z now takes back crop, key and erase edits. The rest is fixes. Blur, Glow and Ghosting draw on graphics cards without float render targets, photos bigger than the card's texture limit show up, long webcam takes save to disk, and a very long video loads without its sound instead of running the tab out of memory.
