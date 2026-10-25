@@ -35,7 +35,7 @@
 	import TransitionRows from "./TransitionRows.svelte";
 	import LayerCompositeRows from "../timeline/LayerCompositeRows.svelte";
 	import { lazy } from "../../lazy";
-	import { setContext } from "svelte";
+	import { onDestroy, setContext } from "svelte";
 	import { MASK_LANE_CONTEXT } from "../../effects/mask-paint.svelte";
 
 	// Same chunk the source rail opens; only fetched when an edit starts.
@@ -125,6 +125,7 @@
 
 	// Report the modal's state up, so the editor can stop the preview behind it.
 	$effect(() => onEditingChange?.(editingSource));
+	onDestroy(() => onEditingChange?.(false));
 
 	/** Whether the media this clip draws is not what its file holds. */
 	let sourceEdited = $derived.by(() => {

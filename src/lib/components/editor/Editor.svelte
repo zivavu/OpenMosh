@@ -328,6 +328,7 @@
 	} from "../../generators";
 	import { isSvgFile, rasterizeSvg } from "../../media/svg";
 	import { withMediaType } from "../../media/file-type";
+	import { SourceEditSession } from "../../editor/source-edit-session";
 
 	const loadShortcutsModal = lazy(() => import("../ui/ShortcutsModal.svelte"));
 	const loadGeneratePanel = lazy(
@@ -3342,24 +3343,31 @@
 		sourceRegistry.setEdit(id, edit);
 	}
 
-	function onSourceEditingChange(open: boolean) {
-		if (open && !sourceEditOpen) {
+	const sourceEditSession = new SourceEditSession<"rail" | "clip">({
+		onOpen: () => {
 			poolBeforeSourceEdit = poolNow().map((e) => ({
 				...e,
 				edit: e.edit && ($state.snapshot(e.edit) as SourceEdit),
 			}));
-		} else if (!open && sourceEditOpen && poolBeforeSourceEdit) {
+			sourceEditOpen = true;
+			pauseTrack();
+		},
+		onClose: () => {
 			const before = poolBeforeSourceEdit;
 			poolBeforeSourceEdit = null;
-			const changed = before.some(
+			sourceEditOpen = false;
+			const changed = before?.some(
 				(e) =>
 					JSON.stringify(e.edit ?? null) !==
 					JSON.stringify(sourceRegistry.edits[e.id] ?? null),
 			);
-			if (changed) poolHistory.push(before);
-		}
-		sourceEditOpen = open;
-		if (open) pauseTrack();
+			if (before && changed) poolHistory.push(before);
+		},
+	});
+
+	/** Called from the reporters' effects: untracked, or they'd re-run on what this reads. */
+	function onSourceEditingChange(reporter: "rail" | "clip", open: boolean) {
+		untrack(() => sourceEditSession.report(reporter, open));
 	}
 
 	function seekTo(t: number) {
@@ -5428,7 +5436,7 @@
 				onReorder={(from, to) => sourceRegistry.reorder(from, to)}
 				edits={sourceRegistry.edits}
 				onEditChange={editSource}
-				onEditingChange={onSourceEditingChange}
+				onEditingChange={(open) => onSourceEditingChange("rail", open)}
 				onProxyAction={sourceProxyAction}
 			/>
 		{/if}
@@ -5898,7 +5906,7 @@
 					: audioResponse}
 				edits={sourceRegistry.edits}
 				onEditChange={editSource}
-				onEditingChange={onSourceEditingChange}
+				onEditingChange={(open) => onSourceEditingChange("clip", open)}
 				{section}
 				chainNote={mediaChainNote}
 				selectionNote={mediaSelectionNote}

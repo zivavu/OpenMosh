@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onDestroy } from "svelte";
 	import LoadFailed from "../ui/LoadFailed.svelte";
 	import {
 		Box,
@@ -88,6 +89,7 @@
 
 	// Report the modal's state up, so the editor can stop the preview behind it.
 	$effect(() => onEditingChange?.(!!editingSource));
+	onDestroy(() => onEditingChange?.(false));
 
 	/** Any of the three tools having been used, not just the key. */
 	function isEdited(src: SequenceSource): boolean {
