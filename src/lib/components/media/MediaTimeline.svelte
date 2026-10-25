@@ -4,6 +4,7 @@
 	import { DEFAULT_LANE_AUDIO } from "../../mix/types";
 	import LaneWaveform from "../timeline/LaneWaveform.svelte";
 	import ClipRepeats from "../timeline/ClipRepeats.svelte";
+	import ClipFilmstrip from "./ClipFilmstrip.svelte";
 	import {
 		repeatNote,
 		videoClipRepeats,
@@ -672,7 +673,18 @@
 								onpointerdown={(e) =>
 									ctrl.onClipPointerDown(e, lane.id, clip.id, "start")}
 							></span>
-							{#if src?.thumbUrl}
+							{#if src?.kind === "video"}
+								<ClipFilmstrip
+									{clip}
+									{src}
+									{edits}
+									durations={sourceDurations}
+									pxPerSec={ctrl.clipPx({ start: 0, end: 1 })}
+									viewStart={vp.viewStart}
+									viewEnd={vp.viewEnd}
+									tilePx={LANE_HEIGHT}
+								/>
+							{:else if src?.thumbUrl}
 								<span
 									class="clip-thumb"
 									style="background-image: url({src.thumbUrl})"

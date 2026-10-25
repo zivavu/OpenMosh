@@ -42,7 +42,8 @@ export async function probeSlideVideo(
 	};
 }
 
-async function drawThumb(
+/** Cover-cropped square JPEG of a frame. */
+export async function drawThumb(
 	frame: VideoFrame,
 	size: number,
 ): Promise<Blob | null> {
