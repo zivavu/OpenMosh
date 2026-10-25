@@ -200,7 +200,7 @@ export function createMediaChainSource(
 }
 
 /** Where the clip is in its media at timeline `time`, and which way a bouncing one walks. */
-function clipSourceTime(
+export function clipSourceTime(
 	clip: MediaClip,
 	sourceId: string,
 	time: number,

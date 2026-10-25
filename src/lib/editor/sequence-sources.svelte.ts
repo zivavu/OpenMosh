@@ -16,6 +16,7 @@ import {
 } from "../mesh";
 import { renderMeshThumb } from "../mesh/thumb";
 import { probeSlideVideo, SlideVideoSampler } from "../slideshow/video-sampler";
+import { decodeFilmstrip, filmstripFrameCount } from "../video/filmstrip";
 import { needsProxy, startProxyJob, type ProxyJob } from "../video/proxy";
 import { isProxyDisabled, setProxyDisabled } from "../video/proxy-preference";
 import {
@@ -50,6 +51,9 @@ export interface SequenceSource {
 	thumbUrl: string | null;
 	/** Whether a thumbnail is still coming; a null `thumbUrl` alone can't say. */
 	thumbPending: boolean;
+	/** Videos only: frames spread evenly across it (see video/filmstrip.ts), each null
+	 * until decoded. */
+	filmstrip?: (string | null)[];
 	/** Videos only, from the add-time probe. */
 	width?: number;
 	height?: number;
@@ -279,6 +283,7 @@ export class SequenceSourceRegistry {
 				// the source by id.
 				for (const s of batch) {
 					if (s.proxyPending) void this.#makeProxy(s.id, s.file);
+					void this.#makeFilmstrip(s);
 				}
 			}
 		} finally {
@@ -545,7 +550,24 @@ export class SequenceSourceRegistry {
 		}
 	}
 
+	async #makeFilmstrip(src: SequenceSource) {
+		const isLive = () => !this.#disposed && this.get(src.id)?.file === src.file;
+		await decodeFilmstrip(
+			src.file,
+			src.duration,
+			(index, frame) => {
+				const live = this.get(src.id)!;
+				live.filmstrip ??= new Array(filmstripFrameCount(src.duration)).fill(
+					null,
+				);
+				live.filmstrip[index] = URL.createObjectURL(frame);
+			},
+			isLive,
+		);
+	}
+
 	#revoke(src: SequenceSource) {
+		for (const url of src.filmstrip ?? []) if (url) URL.revokeObjectURL(url);
 		URL.revokeObjectURL(src.objectUrl);
 		if (src.thumbUrl && src.thumbUrl !== src.objectUrl) {
 			URL.revokeObjectURL(src.thumbUrl);
