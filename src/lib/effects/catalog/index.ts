@@ -63,6 +63,7 @@ import * as ringWarp from "./ring-warp";
 import * as shockwave from "./shockwave";
 import * as ghosting from "./ghosting";
 import * as fastMosh from "./fast-mosh";
+import * as datamosh from "./datamosh";
 import * as resizeGlitch from "./resize-glitch";
 import * as stylizeGlitch from "./stylize-glitch";
 import * as motionMask from "./motion-mask";
@@ -143,6 +144,7 @@ export const CATALOG: CatalogEffect[] = [
 	shockwave,
 	ghosting,
 	fastMosh,
+	datamosh,
 	resizeGlitch,
 	stylizeGlitch,
 	motionMask,

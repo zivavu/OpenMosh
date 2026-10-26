@@ -307,6 +307,8 @@ test("leaves no effect rendering flat black at every moment", async ({
 
 /** Only limits the effects above it; alone in a chain there is nothing to limit. */
 const LIMITS_OTHERS = new Set(["mask"]);
+/** Drags the picture along the footage's own motion, and this still has none. */
+const NEEDS_MOTION = new Set(["datamosh"]);
 
 test("every effect changes the frame once it's turned up", async ({
 	report,
@@ -315,7 +317,7 @@ test("every effect changes the frame once it's turned up", async ({
 	// indistinguishable from a working one until someone turns it on.
 	const inert = report.effects
 		.filter((e) => !e.changedTurnedUp && !e.changedAtDefaults)
-		.filter((e) => !LIMITS_OTHERS.has(e.id))
+		.filter((e) => !LIMITS_OTHERS.has(e.id) && !NEEDS_MOTION.has(e.id))
 		.map((e) => e.id);
 	expect(inert).toEqual([]);
 });
