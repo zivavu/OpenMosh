@@ -95,6 +95,7 @@ export const CURATION: Record<string, Curation> = {
 
 	feedback: c("time", "time"),
 	"fast-mosh": c("time", "time"),
+	datamosh: c("time", "time", "amount"),
 	"optical-flow": c("time", "time", "amount"),
 	smear: c("time", "time", "amount"),
 	melt: c("time", "time", "amount"),
