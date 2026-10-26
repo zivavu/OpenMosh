@@ -10,6 +10,6 @@
 		"skipLibCheck": true,
 		"noUncheckedIndexedAccess": false
 	},
-	"include": ["*.ts", "generators/**/*.ts"],
-	"exclude": ["check.ts"]
+	"include": ["*.ts", "generators/**/*.ts", "verify/**/*.ts"],
+	"exclude": ["check.ts", "verify/run.ts"]
 }

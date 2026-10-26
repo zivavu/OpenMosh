@@ -37,6 +37,10 @@ function groupFor(path: string): string {
 	if (path.includes("/keijiro/")) return "Keijiro · Japan (Unlicense)";
 	if (path.includes("/gl-transitions/")) return "gl-transitions (MIT)";
 	if (path.includes("/pixi/")) return "PixiJS filters (MIT)";
+	if (path.includes("/glfx/")) return "glfx.js (MIT)";
+	if (path.includes("/pmndrs/")) return "pmndrs postprocessing (Zlib)";
+	if (path.includes("/libretro/")) return "libretro shaders (public domain)";
+	if (path.includes("/originals/")) return "OpenMosh originals";
 	return "Unsorted";
 }
 

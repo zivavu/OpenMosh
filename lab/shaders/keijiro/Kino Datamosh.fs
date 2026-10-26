@@ -13,7 +13,7 @@
 		{ "NAME": "diffusion", "LABEL": "Diffusion", "TYPE": "float", "MIN": 0, "MAX": 8, "DEFAULT": 1 }
 	],
 	"PASSES": [
-		{ "TARGET": "disp", "PERSISTENT": true, "FLOAT": true },
+		{ "TARGET": "disp", "PERSISTENT": true, "FLOAT": true, "WIDTH": "max(1.0, floor($WIDTH / 16.0))", "HEIGHT": "max(1.0, floor($HEIGHT / 16.0))", "FILTER": "NEAREST" },
 		{ "TARGET": "prev", "PERSISTENT": true },
 		{ "TARGET": "work", "PERSISTENT": true },
 		{ }
@@ -28,7 +28,8 @@ float UVRandom(vec2 uv) {
 
 void main() {
 	vec2 uv = isf_FragNormCoord;
-	vec2 px = 1.0 / RENDERSIZE;
+	// Motion is measured at full resolution; disp itself is one texel per macroblock.
+	vec2 px = 1.0 / IMG_SIZE(inputImage);
 
 	if (PASSINDEX == 0) {
 		// Displacement buffer update (frag_update). Motion comes from a
@@ -56,6 +57,11 @@ void main() {
 	} else if (PASSINDEX == 2) {
 		// Moshing (frag_mosh): the work buffer holds the previous output.
 		vec4 src = IMG_NORM_PIXEL(inputImage, uv);
+		// frag_init: the glitch starts from a clean copy of the source.
+		if (FRAMEINDEX < 2) {
+			gl_FragColor = vec4(src.rgb, 1.0);
+			return;
+		}
 		vec4 d = IMG_NORM_PIXEL(disp, uv);
 		vec3 w = IMG_NORM_PIXEL(work, uv - d.xy * 0.98).rgb;
 		vec4 rand = fract(vec4(1.0, 17.37135, 841.4272, 3305.121) * d.z);

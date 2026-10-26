@@ -19,7 +19,7 @@ vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
 vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
 vec4 permute(vec4 x) { return mod289(((x * 34.0) + 1.0) * x); }
 vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
-vec3 fade(vec3 t) { return t * t * t * (t * (t * 6.0 - 15.0) + 10.0); }
+vec3 fadeCurve(vec3 t) { return t * t * t * (t * (t * 6.0 - 15.0) + 10.0); }
 
 float pnoise(vec3 P, vec3 rep) {
 	vec3 Pi0 = mod(floor(P), rep);
@@ -75,7 +75,7 @@ float pnoise(vec3 P, vec3 rep) {
 	float n101 = dot(g101, vec3(Pf1.x, Pf0.y, Pf1.z));
 	float n011 = dot(g011, vec3(Pf0.x, Pf1.yz));
 	float n111 = dot(g111, Pf1);
-	vec3 fade_xyz = fade(Pf0);
+	vec3 fade_xyz = fadeCurve(Pf0);
 	vec4 n_z = mix(vec4(n000, n100, n010, n110), vec4(n001, n101, n011, n111), fade_xyz.z);
 	vec2 n_yz = mix(n_z.xy, n_z.zw, fade_xyz.y);
 	return 2.2 * mix(n_yz.x, n_yz.y, fade_xyz.x);

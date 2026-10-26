@@ -27,9 +27,33 @@ transitions as `endImage`). Pick a shader on the left, tweak on the right, hold
   [gl-transitions](https://github.com/gl-transitions/gl-transitions) (MIT),
   wrapped as ISF with `startImage`/`endImage` and a `progress` slider.
 - `shaders/pixi/` — ports from [pixi-filters](https://github.com/pixijs/filters)
-  (MIT): Godray, Reflection.
+  (MIT): Godray, Reflection, Old Film, Tilt Shift, Motion Blur.
+- `shaders/glfx/` — ports from [glfx.js](https://github.com/evanw/glfx.js) (MIT):
+  Ink, Lens Blur.
+- `shaders/pmndrs/` — from [postprocessing](https://github.com/pmndrs/postprocessing)
+  (Zlib): Lens Distortion.
+- `shaders/libretro/` — Timothy Lottes' public-domain CRT, from
+  [libretro/glsl-shaders](https://github.com/libretro/glsl-shaders).
+- `shaders/originals/` — written for OpenMosh (MIT), not ports.
 
-Every header carries `CREDIT`, `LICENSE` and `SOURCE`.
+Every header carries `CREDIT`, `LICENSE` and `SOURCE` (originals have no `SOURCE`).
+
+## Verify
+
+`bun lab/verify/run.ts [filter] [--big]` serves the repo on 5183 (`E2E_PORT`
+overrides it), runs every shader over a second of animated test footage in
+headless Chromium and prints one line each. A shader fails if it doesn't compile,
+or if its output at default settings is flat, black, or no different from the
+source. Contact sheets go to `/tmp/lab-verify`. The filter is comma-separated
+path substrings (`originals,keijiro`); `--big` lays the sheets out at full size.
+For time-based shaders, `--motion` pans the test scene like a handheld camera,
+`--cut` hard-cuts to a second scene halfway, `--strip` keeps three frames per
+shader, and `--set=hold:1,gain:2` overrides params by name.
+`--app=<effectId>` runs one of the app's own effects through the real renderer
+instead, at 120 BPM, and prints its difference from the source frame by frame
+(a keyframe shows as a drop to about 0); `--before=shake,zoom` runs other app
+effects ahead of it, and `--still` freezes the footage.
+Timings come from SwiftShader, so they only compare shaders against each other.
 
 # Generator Lab
 
