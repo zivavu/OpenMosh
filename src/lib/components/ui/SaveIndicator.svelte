@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from "svelte";
-	import { CircleDashed, TriangleAlert } from "lucide-svelte";
+	import { CircleDashed, CirclePause, TriangleAlert } from "lucide-svelte";
 	import { fade } from "svelte/transition";
 	import type { SaveState } from "../../editor/save-status.svelte";
 	import SaveGlyph from "./SaveGlyph.svelte";
@@ -51,6 +51,14 @@
 				title: "Saving to this browser",
 			};
 		}
+		if (state === "held") {
+			return {
+				kind: "held",
+				label: "Saves on pause",
+				title:
+					"Your latest change saves to this browser when you pause playback.",
+			};
+		}
 		if (state === "saved") {
 			return {
 				kind: "quiet",
@@ -73,6 +81,8 @@
 	>
 		{#if view.kind === "failed" || view.kind === "warn"}
 			<TriangleAlert size={12} />
+		{:else if view.kind === "held"}
+			<CirclePause size={12} />
 		{:else if notSaved}
 			<CircleDashed size={12} />
 		{:else}
