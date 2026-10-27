@@ -1,7 +1,7 @@
 /** What the top bar says about saving: every autosave path reports here by name, and
  * the bar shows the worst of them. */
 
-export type SaveState = "idle" | "saving" | "saved" | "failed";
+export type SaveState = "idle" | "saving" | "held" | "saved" | "failed";
 
 type ChannelState = "pending" | "saving" | "ok" | "failed";
 
@@ -9,6 +9,8 @@ export class SaveTracker {
 	#channels = $state<Record<string, ChannelState>>({});
 	/** When a write last landed, for the tooltip. */
 	lastSavedAt = $state<number | null>(null);
+	/** Autosaves wait out playback, so a queued one is held, not saving. */
+	playing = $state(false);
 
 	/** A debounced save is queued: the edit isn't on disk yet. */
 	schedule(channel: string): void {
@@ -49,9 +51,8 @@ export class SaveTracker {
 	get state(): SaveState {
 		const states = Object.values(this.#channels);
 		if (states.includes("failed")) return "failed";
-		if (states.includes("pending") || states.includes("saving")) {
-			return "saving";
-		}
+		if (states.includes("saving")) return "saving";
+		if (states.includes("pending")) return this.playing ? "held" : "saving";
 		return states.includes("ok") ? "saved" : "idle";
 	}
 }

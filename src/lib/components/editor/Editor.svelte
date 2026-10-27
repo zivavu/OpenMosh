@@ -1462,6 +1462,9 @@
 
 	/** Every autosave below reports here, for the top bar's saved/saving/failed word. */
 	const saves = new SaveTracker();
+	$effect(() => {
+		saves.playing = audio.audioPlaying || videoIsPlaying || mixer.playing;
+	});
 
 	// Persist the sequence timeline per library track (deep snapshot read).
 	// Skipped while playing: the volume-link tick mutates the chains each frame.
