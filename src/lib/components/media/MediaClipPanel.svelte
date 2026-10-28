@@ -74,6 +74,8 @@
 		onDetachAudio?: () => void;
 		/** Bring the sound back from the audio lanes into the clip. */
 		onAttachAudio?: () => void;
+		/** Freeze a slideshow source again from the slideshow as it is now. */
+		onRefreshSlideshow?: (sourceId: string) => void;
 	}
 
 	let {
@@ -98,6 +100,7 @@
 		sourceHasAudio = true,
 		onDetachAudio,
 		onAttachAudio,
+		onRefreshSlideshow,
 	}: Props = $props();
 
 	// This chain runs on the lane's media, so a Mask paints over its box.
@@ -295,7 +298,7 @@
 							<option value={s.id}>{s.name}</option>
 						{/each}
 					</select>
-					{#if source && onEditChange && source.kind !== "model"}
+					{#if source && onEditChange && (source.kind === "image" || source.kind === "video")}
 						<!-- The other way in is a small button on a rail thumb, nowhere near this decision. -->
 						<button
 							class="src-edit"
@@ -307,6 +310,19 @@
 							<SlidersHorizontal size={11} />
 						</button>
 					{/if}
+				</div>
+			{/if}
+
+			{#if source?.kind === "cuts" && onRefreshSlideshow}
+				<div class="row">
+					<span class="label-spacer"></span>
+					<button
+						class="detach"
+						title="Brings in the changes made to the slideshow since you added it. Clips keep their place and effects."
+						onclick={() => onRefreshSlideshow(source.id)}
+					>
+						Update from slideshow
+					</button>
 				</div>
 			{/if}
 

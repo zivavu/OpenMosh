@@ -84,6 +84,7 @@ export {
 	newClipSpan,
 	replaceMediaClip,
 	resolveMediaLayersAt,
+	retargetMediaSource,
 	setMediaClipSources,
 	updateMediaLane,
 } from "./resolve";

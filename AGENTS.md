@@ -115,6 +115,10 @@ Outside CI a run reuses whatever already serves its port, so when my dev server 
   rotoscoping, and doesn't add to earlier keys. I chose that over cumulative erasing.
 - A slideshow doesn't need a song. Without one it runs on its export duration (render
   settings) as its length and a hand-set BPM; its cuts are kept apart from each song's.
+- A saved slideshow enters the editor frozen into a cut list (`media/cut-list.ts`): a pool
+  file holding its beat times and slide ids, with the slides pooled but hidden. The editor
+  never runs slideshow code while playing, and a slideshow clip's auto mosh rolls on the
+  slideshow's own cuts, never on the editor's BPM. Update from slideshow freezes it again.
 - Every mode's library drawer lists that mode's saved projects only (`lib/editor/recent-edits.ts`,
   shared with the upload screen's Recent list).
 - Editor sound goes through the `lib/mix/` mixer; single mode and slideshow stay on

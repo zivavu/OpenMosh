@@ -1,13 +1,15 @@
 <script lang="ts">
-	import { Camera, Plus, Palette } from "lucide-svelte";
+	import { Camera, GalleryHorizontal, Plus, Palette } from "lucide-svelte";
 
-	/** The three dashed cards that close a media grid: add, generate, webcam. */
+	/** The dashed cards that close a media grid: add, generate, webcam, and in the
+	 * editor a saved slideshow. */
 	interface Props {
 		addTitle?: string;
 		recordTitle?: string;
 		onAdd: () => void;
 		onGenerate: () => void;
 		onRecord: () => void;
+		onSlideshow?: () => void;
 	}
 
 	let {
@@ -16,6 +18,7 @@
 		onAdd,
 		onGenerate,
 		onRecord,
+		onSlideshow,
 	}: Props = $props();
 </script>
 
@@ -32,6 +35,15 @@
 <button class="add-card generate" title={recordTitle} onclick={onRecord}>
 	<Camera size={18} />
 </button>
+{#if onSlideshow}
+	<button
+		class="add-card generate"
+		title="Add one of your slideshows to the pool"
+		onclick={onSlideshow}
+	>
+		<GalleryHorizontal size={18} />
+	</button>
+{/if}
 
 <style>
 	.add-card {

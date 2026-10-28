@@ -405,6 +405,24 @@ export function updateMediaLane(
 	return { ...timeline, lanes: updateLaneIn(timeline.lanes, laneId, fn) };
 }
 
+/** Lanes and clips showing `from` show `to` instead. */
+export function retargetMediaSource(
+	timeline: MediaTimeline,
+	from: string,
+	to: string,
+): MediaTimeline {
+	return {
+		...timeline,
+		lanes: timeline.lanes.map((l) => ({
+			...l,
+			sourceId: l.sourceId === from ? to : l.sourceId,
+			clips: l.clips.map((c) =>
+				c.sourceId === from ? { ...c, sourceId: to } : c,
+			),
+		})),
+	};
+}
+
 /** Drop a removed source from every lane and clip that pointed at it. A clip loses
  * its override rather than gaining a null one. */
 export function detachMediaSource(

@@ -244,6 +244,7 @@
 		resolveMediaLayersAt,
 		restoreMediaClipMosh,
 		rollMediaClips,
+		retargetMediaSource,
 		setMediaClipsMode,
 		setMediaClipSources,
 		syncMediaClipsToPreset,
@@ -254,7 +255,15 @@
 		type SourceEdit,
 		createSourceEdit,
 	} from "../../media";
-	import { chainClipMoshSnapshot } from "../../editor/chain-clip";
+	import {
+		chainClipMoshSnapshot,
+		withChainMode,
+	} from "../../editor/chain-clip";
+	import {
+		freezeSavedSlideshow,
+		hiddenSlides,
+		slidesLeftBehind,
+	} from "../../editor/slideshow-source";
 	import {
 		loadMediaPool,
 		pruneSequenceMediaThrottled,
@@ -652,6 +661,9 @@
 	// The take lands at the second it started, on the selected lane or a new one.
 	const loadWebcamPanel = lazy(() => import("../webcam/WebcamPanel.svelte"));
 	let webcamOpen = $state(false);
+
+	const loadSlideshowPicker = lazy(() => import("./SlideshowPicker.svelte"));
+	let slideshowPickerOpen = $state(false);
 	let takeStart = 0;
 
 	function takeTransport(playing: boolean) {
@@ -696,6 +708,108 @@
 			`Take on ${next.lanes.find((l) => l.id === laneId)?.name}`,
 			"info",
 		);
+	}
+
+	/** A saved slideshow on a lane of its own on top, from the playhead, with its song
+	 * under it. The project grows to fit it. */
+	async function addSlideshow(sessionKey: string, name: string) {
+		const frozen = await freezeSavedSlideshow(sessionKey, name).catch(
+			() => null,
+		);
+		if (!frozen) {
+			showToast("That slideshow couldn't be opened", "error");
+			return;
+		}
+		if (mediaTimeline.lanes.length >= MAX_MEDIA_LANES) {
+			showToast("No room for the slideshow: every lane is full", "error");
+			return;
+		}
+		const cuts = await addSlideshowSource(frozen.slides, frozen.cutFile);
+		if (!cuts) return;
+		slideshowPickerOpen = false;
+
+		const start = timelineAxis?.staticTime ?? 0;
+		const end = start + frozen.cutList.duration;
+		const songId = frozen.trackId ? trackSourceId(frozen.trackId) : null;
+		const audioLanes = mediaTimeline.audioLanes ?? [];
+		const withSong = songId && audioLanes.length < MAX_AUDIO_LANES;
+		if (withSong) await audioBank.settle([songId]);
+		const isSong = !!withSong && !audio.trackFile;
+
+		asOneEdit(() => {
+			if (end > mixer.duration) growProjectTo(end);
+			let next = appendMediaLane(
+				mediaTimeline,
+				cuts.id,
+				nextLayerZ(layerOrder),
+			);
+			const lane = next.lanes[next.lanes.length - 1]!;
+			const clip = createMediaClip(start, end);
+			next = updateMediaLaneIn(next, lane.id, (l) => ({
+				...l,
+				name,
+				clips: [frozen.rolls ? withChainMode(clip, "interval") : clip],
+			}));
+			if (withSong) {
+				const songLane = createAudioLane(nextAudioLaneName(audioLanes), isSong);
+				songLane.clips = [
+					createAudioClip(start, end, songId, frozen.cutList.songStart),
+				];
+				next = {
+					...next,
+					audioLanes: isSong
+						? [songLane, ...audioLanes]
+						: [...audioLanes, songLane],
+				};
+			}
+			pushMediaHistory();
+			setMediaTimeline(next);
+			selectedMediaClipId = next.lanes[next.lanes.length - 1]!.clips[0].id;
+			selectedMediaClipIds = [selectedMediaClipId];
+			void revealLaneRow(lane.id);
+		});
+		if (isSong) await loadSong(frozen.trackId);
+	}
+
+	/** Slides first, so the slideshow's thumbnail finds them. */
+	async function addSlideshowSource(
+		slides: File[],
+		cutFile: File,
+	): Promise<SequenceSource | null> {
+		await sourceRegistry.add(slides);
+		const missing = slides.filter(
+			(f) => !sourceRegistry.get(stableSourceId(f)),
+		);
+		if (missing.length === slides.length) {
+			showToast("None of that slideshow's slides could be read", "error");
+			return null;
+		}
+		const [cuts] = await sourceRegistry.add([cutFile]);
+		return cuts ?? null;
+	}
+
+	/** Freeze a slideshow source again: its clips show the new cuts, keeping their
+	 * place and effects, and slides it dropped leave the pool. */
+	async function refreshSlideshow(sourceId: string) {
+		const old = sourceRegistry.get(sourceId)?.cutList;
+		if (!old) return;
+		const frozen = await freezeSavedSlideshow(old.sessionKey, old.name).catch(
+			() => null,
+		);
+		if (!frozen) {
+			showToast("Couldn't find that slideshow to update from", "error");
+			return;
+		}
+		const before = poolNow();
+		const cuts = await addSlideshowSource(frozen.slides, frozen.cutFile);
+		if (!cuts) return;
+		asOneEdit(() => {
+			poolHistory.push(before);
+			pushMediaHistory();
+		});
+		setMediaTimeline(retargetMediaSource(mediaTimeline, sourceId, cuts.id));
+		dropFromPool(sourceId);
+		showToast(`Updated “${old.name}”`, "info");
 	}
 
 	/** A pool thumb dropped on the picture: a lane of its own on top, centred where it
@@ -1908,6 +2022,13 @@
 	});
 
 	let sequenceSources = $derived(sourceRegistry.sources);
+	/** The pool as its views list it: a slideshow's slides stay behind it. */
+	let poolSources = $derived.by(() => {
+		const hidden = hiddenSlides(sequenceSources, mediaTimeline);
+		return hidden.size === 0
+			? sequenceSources
+			: sequenceSources.filter((s) => !hidden.has(s.id));
+	});
 	/** The pool is empty until the opening file lands, so the placeholder waits for that. */
 	let poolFilled = $state(false);
 	let noSequenceMedia = $derived(
@@ -2043,9 +2164,10 @@
 	// A restored timeline references sources by id; pull missing ones back out of IndexedDB.
 	$effect(() => {
 		if (!isSequenceMode) return;
-		const missing = mediaTimelineSourceIds(mediaTimeline).filter(
-			(id) => !sourceRegistry.get(id) && !restoreAttempted.has(id),
-		);
+		const missing = [
+			...mediaTimelineSourceIds(mediaTimeline),
+			...sequenceSources.flatMap((s) => s.cutList?.slides ?? []),
+		].filter((id) => !sourceRegistry.get(id) && !restoreAttempted.has(id));
 		if (missing.length === 0) return;
 		for (const id of missing) restoreAttempted.add(id);
 		void sourceRegistry.restore(missing).catch(() => {});
@@ -2233,8 +2355,16 @@
 			poolHistory.push(poolNow());
 			pushMediaHistory();
 		});
-		sourceRegistry.remove(id);
-		setMediaTimeline(detachMediaSource(mediaTimeline, id));
+		dropFromPool(id);
+	}
+
+	/** A slideshow takes the slides only it played with it. */
+	function dropFromPool(id: string) {
+		const slides = slidesLeftBehind(sequenceSources, id, mediaTimeline);
+		for (const gone of [id, ...slides]) {
+			sourceRegistry.remove(gone);
+			setMediaTimeline(detachMediaSource(mediaTimeline, gone));
+		}
 	}
 
 	/** Grid replaces the preview while the pool is arranged; the timeline stays under it. */
@@ -4314,7 +4444,7 @@
 
 	/** What a new lane starts on: the first thing in the pool. */
 	function defaultLayerSourceId(): string | null {
-		return sequenceSources[0]?.id ?? null;
+		return poolSources[0]?.id ?? null;
 	}
 
 	function addMediaLane() {
@@ -4583,7 +4713,7 @@
 
 	/** Deal the pool across the selected layer clips, or every layer clip. */
 	function dealMediaSources() {
-		const pool = sequenceSources.map((s) => s.id);
+		const pool = poolSources.map((s) => s.id);
 		if (pool.length < 2) return;
 		const ids =
 			selectedMediaClipIds.length > 0
@@ -4930,7 +5060,7 @@
 				</div>
 				<!-- Scoped by the selection: with layer clips picked it deals across those. -->
 				<MediaPoolActions
-					count={sequenceSources.length}
+					count={poolSources.length}
 					shuffleScope={selectedMediaClipIds.length}
 					shuffleTitle={selectedMediaClipIds.length > 0
 						? "Deal the pool at random across the selected media clips"
@@ -4940,6 +5070,9 @@
 					onAdd={() => sourceInput?.click()}
 					onGenerate={() => (generateOpen = true)}
 					onRecord={() => (webcamOpen = true)}
+					onSlideshow={isSequenceMode
+						? () => (slideshowPickerOpen = true)
+						: undefined}
 					onClear={() => (showClearSourcesConfirm = true)}
 				/>
 			{:else}
@@ -5076,7 +5209,8 @@
 
 		{#if sequenceGridOpen}
 			<SequenceGridView
-				sources={sequenceSources}
+				sources={poolSources}
+				onSlideshow={() => (slideshowPickerOpen = true)}
 				selectedCount={selectedMediaClipIds.length}
 				selectedSourceId={railSourceId}
 				pendingCount={sourceRegistry.loadingTotal - sourceRegistry.loadingDone}
@@ -5433,7 +5567,7 @@
 		{#if showSourceRail}
 			<!-- The pool, on hand while the preview is up. -->
 			<SourceRail
-				sources={sequenceSources}
+				sources={poolSources}
 				selectedCount={railTargetCount}
 				selectedSourceId={railSourceId}
 				onAssign={assignMediaClipSource}
@@ -5899,7 +6033,7 @@
 			<MediaClipPanel
 				lane={selectedMediaLane}
 				clip={selectedMediaClip}
-				sources={sequenceSources}
+				sources={poolSources}
 				onLaneChange={updateMediaLane}
 				onClipChange={updateMediaClip}
 				onBeforeEdit={beforeMediaClipEdit}
@@ -5925,6 +6059,7 @@
 				onAttachAudio={isSequenceMode && selectedMediaClip
 					? () => reattachClipsAudio(selectedMediaClipIds)
 					: undefined}
+				onRefreshSlideshow={(id) => void refreshSlideshow(id)}
 			/>
 		{:else if selectedTextClip}
 			<TextClipPanel
@@ -6015,6 +6150,17 @@
 					: "Drop image/video to replace · Drop audio to set track"}</span
 			>
 		</div>
+	{/if}
+
+	{#if slideshowPickerOpen}
+		{#await loadSlideshowPicker() then SlideshowPicker}
+			<SlideshowPicker
+				onPick={addSlideshow}
+				onClose={() => (slideshowPickerOpen = false)}
+			/>
+		{:catch}
+			<LoadFailed onclose={() => (slideshowPickerOpen = false)} />
+		{/await}
 	{/if}
 
 	{#if webcamOpen}
