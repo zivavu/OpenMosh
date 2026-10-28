@@ -1,0 +1,8 @@
+# The e2e specs CI runs on its fourth runner; see ci-part-1.txt.
+project-files.spec.ts
+duplicate-uploads.spec.ts
+editor.spec.ts
+project-drawer.spec.ts
+gif.spec.ts
+paste.spec.ts
+storage-blocked.spec.ts

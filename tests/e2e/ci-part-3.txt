@@ -1,0 +1,7 @@
+# The e2e specs CI runs on its third runner; see ci-part-1.txt.
+backup.spec.ts
+mobile.spec.ts
+source-editor.spec.ts
+models.spec.ts
+slideshow-fullscreen.spec.ts
+transitions.spec.ts

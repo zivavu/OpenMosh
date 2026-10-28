@@ -35,7 +35,7 @@ jobs:
       - run: bun run build
 
   # Separate job: it needs a browser download and takes minutes, and a failure
-  # here means something different from a failing unit test. Split across three
+  # here means something different from a failing unit test. Split across five
   # runners, since one runner's CPU can't take a second worker; by file rather
   # than --shard, which balances test counts, not time.
   e2e-part:
@@ -44,8 +44,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        part: [1, 2, 3]
-    name: e2e (${{ matrix.part }}/3)
+        part: [1, 2, 3, 4, 5]
+    name: e2e (${{ matrix.part }}/5)
     steps:
       - uses: actions/checkout@v4
 
@@ -75,12 +75,14 @@ jobs:
 
       - run: bunx playwright install chromium
 
-      - if: matrix.part != 3
-        run: bun run test:e2e --test-list tests/e2e/ci-part-${{ matrix.part }}.txt
+      # Only the last part runs preview.spec.ts; naming the project spares the
+      # others the production build it serves.
+      - if: matrix.part != 5
+        run: bun run test:e2e --project=chromium --test-list tests/e2e/ci-part-${{ matrix.part }}.txt
 
-      - if: matrix.part == 3
+      - if: matrix.part == 5
         run: |
-          cat tests/e2e/ci-part-1.txt tests/e2e/ci-part-2.txt > "$RUNNER_TEMP/ci-parts.txt"
+          cat tests/e2e/ci-part-{1,2,3,4}.txt > "$RUNNER_TEMP/ci-parts.txt"
           bun run test:e2e --test-list-invert "$RUNNER_TEMP/ci-parts.txt"
 
       - uses: actions/upload-artifact@v4

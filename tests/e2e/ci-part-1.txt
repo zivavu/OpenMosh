@@ -1,9 +1,11 @@
-# The e2e specs CI runs on its first runner; ci-part-2.txt is the second, and
-# the third runs everything in neither (--test-list-invert), so a new spec
-# can't fall between them. Picked by time, not count: the renderer specs are
-# many tests but take seconds.
-capabilities.spec.ts
-editor-export.spec.ts
-editor-no-song.spec.ts
-editor-persistence.spec.ts
+# The e2e specs CI runs on its first runner; ci-part-2.txt to ci-part-4.txt are
+# the next three, and the fifth runs everything in none of them
+# (--test-list-invert), so a new spec can't fall between them. Balanced by each
+# spec's time in CI, about 200s per part, not by test count: the renderer specs
+# are many tests but take seconds.
 storage-manager.spec.ts
+slideshow-in-editor.spec.ts
+editor-no-song.spec.ts
+editor-export.spec.ts
+effect-scale.spec.ts
+capabilities.spec.ts
