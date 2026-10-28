@@ -1,5 +1,12 @@
 <script lang="ts">
-	import { Camera, Plus, Shuffle, Palette, Trash2 } from "lucide-svelte";
+	import {
+		Camera,
+		GalleryHorizontal,
+		Plus,
+		Shuffle,
+		Palette,
+		Trash2,
+	} from "lucide-svelte";
 
 	/** The pool's toolbar: shuffle, the three ways in, clear, and a count.
 	 * Shared by the editor's source pool and the slideshow's image pool. */
@@ -17,6 +24,8 @@
 		onAdd: () => void;
 		onGenerate: () => void;
 		onRecord: () => void;
+		/** Bring in a saved slideshow; the editor's pool only. */
+		onSlideshow?: () => void;
 		onClear: () => void;
 	}
 
@@ -31,6 +40,7 @@
 		onAdd,
 		onGenerate,
 		onRecord,
+		onSlideshow,
 		onClear,
 	}: Props = $props();
 </script>
@@ -68,6 +78,16 @@
 			<Camera size={12} />
 			<span class="btn-label">{recordLabel}</span>
 		</button>
+		{#if onSlideshow}
+			<button
+				class="pool-btn"
+				title="Add one of your slideshows to the pool"
+				onclick={onSlideshow}
+			>
+				<GalleryHorizontal size={12} />
+				<span class="btn-label">Slideshow</span>
+			</button>
+		{/if}
 		<button
 			class="pool-btn danger"
 			title="Remove every {noun} from the pool"

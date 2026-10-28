@@ -28,6 +28,8 @@
 		children?: Snippet;
 		/** The lane kind's own controls, after the clip's name. */
 		leading?: Snippet;
+		/** Every selected clip plays a slideshow, whose auto mosh rolls on its cuts. */
+		rollsOnCuts?: boolean;
 	}
 
 	let {
@@ -41,6 +43,7 @@
 		onModeChange,
 		children,
 		leading,
+		rollsOnCuts = false,
 	}: Props = $props();
 
 	let ids = $derived(selectedClips.map((c) => c.id));
@@ -173,7 +176,12 @@
 			</button>
 		</div>
 		{@render children?.()}
-		{#if commonMode === "interval"}
+		{#if commonMode === "interval" && rollsOnCuts}
+			<span
+				class="tl-tool-label"
+				title="Slideshow clips re-roll their mosh on each cut">each cut</span
+			>
+		{:else if commonMode === "interval"}
 			<select
 				class="chain-select"
 				value={intervalValue}

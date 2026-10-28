@@ -5,6 +5,7 @@
 		Box,
 		ChevronDown,
 		ChevronUp,
+		GalleryHorizontal,
 		ImageOff,
 		Play,
 		Plus,
@@ -244,6 +245,10 @@
 							>
 						{:else if src.kind === "model"}
 							<span class="rail-kind" title="3D model"><Box size={7} /></span>
+						{:else if src.kind === "cuts"}
+							<span class="rail-kind" title="Slideshow"
+								><GalleryHorizontal size={7} /></span
+							>
 						{/if}
 						<span class="rail-name">{shortSourceName(src.name, 10)}</span>
 					</button>
@@ -257,8 +262,8 @@
 								: undefined}
 						/>
 					{/if}
-					<!-- Crop, key and erase work on pixels a model doesn't have yet. -->
-					{#if onEditChange && src.kind !== "model"}
+					<!-- Crop, key and erase work on pixels a model or a slideshow doesn't have of its own. -->
+					{#if onEditChange && (src.kind === "image" || src.kind === "video")}
 						<button
 							class="rail-edit"
 							class:on={isEdited(src)}

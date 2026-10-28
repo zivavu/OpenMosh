@@ -239,6 +239,17 @@
 	// Rendered in the stack's shared selection bar, like the fx lanes'.
 	let selectedClips = $derived(ctrl.selectedClips);
 
+	let rollsOnCuts = $derived(
+		selectedClipIds.length > 0 &&
+			timeline.lanes.every((lane) =>
+				lane.clips.every(
+					(c) =>
+						!selectedClipIds.includes(c.id) ||
+						clipSource(lane, c)?.kind === "cuts",
+				),
+			),
+	);
+
 	/** Selected clips playing their video's own sound, which the bar's volume sets. */
 	let soundClips = $derived(
 		timeline.lanes.flatMap((lane) =>
@@ -790,6 +801,7 @@
 		{onRoll}
 		{onClear}
 		{onModeChange}
+		{rollsOnCuts}
 	>
 		{#snippet leading()}
 			{#if soundClips.length > 0}

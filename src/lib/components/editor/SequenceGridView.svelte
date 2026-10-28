@@ -1,6 +1,14 @@
 <script lang="ts">
 	import LoadFailed from "../ui/LoadFailed.svelte";
-	import { Box, Play, Plus, Camera, Palette, X } from "lucide-svelte";
+	import {
+		Box,
+		Camera,
+		GalleryHorizontal,
+		Palette,
+		Play,
+		Plus,
+		X,
+	} from "lucide-svelte";
 	import {
 		SOURCE_DND_TYPE,
 		shortSourceName,
@@ -36,6 +44,7 @@
 		onAddFiles: (files: File[]) => void;
 		/** Open the image generator, which adds what it makes to the pool. */
 		onGenerate: () => void;
+		onSlideshow?: () => void;
 		onRecord: () => void;
 		onRemove: (id: string) => void;
 		onReorder: (from: number, to: number) => void;
@@ -51,6 +60,7 @@
 		pendingCount = 0,
 		onAddFiles,
 		onGenerate,
+		onSlideshow,
 		onRecord,
 		onRemove,
 		onReorder,
@@ -152,6 +162,11 @@
 				<button class="add-btn" onclick={onRecord}>
 					<Camera size={14} /> RECORD
 				</button>
+				{#if onSlideshow}
+					<button class="add-btn" onclick={onSlideshow}>
+						<GalleryHorizontal size={14} /> SLIDESHOW
+					</button>
+				{/if}
 			</div>
 		</div>
 	{:else}
@@ -204,6 +219,10 @@
 						<span class="card-kind" title="3D model">
 							<Box size={9} />
 						</span>
+					{:else if src.kind === "cuts"}
+						<span class="card-kind" title="Slideshow">
+							<GalleryHorizontal size={9} />
+						</span>
 					{/if}
 					<span class="card-name">{shortSourceName(src.name, 20)}</span>
 					<button
@@ -231,6 +250,7 @@
 				onAdd={() => fileInput?.click()}
 				{onGenerate}
 				{onRecord}
+				{onSlideshow}
 			/>
 		</div>
 	{/if}
