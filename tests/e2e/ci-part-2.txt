@@ -1,4 +1,7 @@
 # The e2e specs CI runs on its second runner; see ci-part-1.txt.
-backup.spec.ts
-duplicate-uploads.spec.ts
 media-drop.spec.ts
+links.spec.ts
+rotated-video.spec.ts
+effect-groups.spec.ts
+upload-screen.spec.ts
+chains.spec.ts
