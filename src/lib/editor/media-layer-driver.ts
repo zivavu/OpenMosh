@@ -1,5 +1,6 @@
 import type { GlRenderer } from "../gl/renderer";
 import { mediaLayerSides, type ResolvedMediaLayer } from "../media";
+import { throughCuts, type CutList } from "../media/cut-list";
 import { SlideVideoSampler } from "../slideshow/video-sampler";
 import type { SequenceSourceRegistry } from "./sequence-sources.svelte";
 
@@ -25,6 +26,8 @@ export class MediaLayerDriver {
 	#creating = new Set<string>();
 	/** Sampler keys the latest frame asked for: never evicted. */
 	#active = new Set<string>();
+	/** Each lane's extra decoders: one per video slide of the cut list it shows. */
+	#extraSamplers = new Map<string, number>();
 	#disposed = false;
 
 	constructor(opts: MediaLayerDriverOptions) {
@@ -39,7 +42,16 @@ export class MediaLayerDriver {
 		const sides = mediaLayerSides(layers);
 		this.#active = new Set();
 		for (const layer of sides) {
-			const src = this.#registry.get(layer.sourceId);
+			const shown = this.#registry.get(layer.sourceId);
+			if (shown?.cutList) {
+				this.#extraSamplers.set(layer.key, this.#videoSlides(shown.cutList));
+			} else this.#extraSamplers.delete(layer.key);
+			const { src, sourceTime, bounce } = throughCuts(
+				shown,
+				layer.sourceTime,
+				layer.bounce,
+				(id) => this.#registry.get(id),
+			);
 			if (!src) {
 				this.#release(layer.key);
 				continue;
@@ -91,21 +103,22 @@ export class MediaLayerDriver {
 			// the frame as shown.
 			const lost = !renderer?.hasLayerTexture(key);
 			// Non-blocking: a lane whose decoder has nothing new keeps its current frame.
-			void sampler
-				.at(layer.sourceTime, false, lost, layer.bounce)
-				.then((frame) => {
-					if (!frame) return;
-					// A request that outlived the clip it was made for.
-					if (!this.#disposed && this.#uploaded.get(key) === wanted) {
-						this.#getRenderer()?.updateLayerFrame(key, frame);
-						this.#onUpload?.();
-					}
-					frame.close();
-				});
+			void sampler.at(sourceTime, false, lost, bounce).then((frame) => {
+				if (!frame) return;
+				// A request that outlived the clip it was made for.
+				if (!this.#disposed && this.#uploaded.get(key) === wanted) {
+					this.#getRenderer()?.updateLayerFrame(key, frame);
+					this.#onUpload?.();
+				}
+				frame.close();
+			});
 		}
 		// Lanes that stopped asking for frames drop theirs; decoders are kept for a later clip.
 		for (const key of this.#uploaded.keys()) {
 			if (!sides.some((l) => l.key === key)) this.#uploaded.delete(key);
+		}
+		for (const key of this.#extraSamplers.keys()) {
+			if (!sides.some((l) => l.key === key)) this.#extraSamplers.delete(key);
 		}
 	}
 
@@ -147,15 +160,29 @@ export class MediaLayerDriver {
 		return undefined;
 	}
 
+	/** A slideshow cycles through its video slides, so each keeps its decoder. */
+	#videoSlides(list: CutList): number {
+		const known = videoSlideCounts.get(list);
+		if (known !== undefined) return known;
+		const ids = new Set(list.slides);
+		const pooled = this.#registry.sources.filter((s) => ids.has(s.id));
+		const count = pooled.filter((s) => s.kind === "video").length;
+		if (pooled.length === ids.size) videoSlideCounts.set(list, count);
+		return count;
+	}
+
 	/** Retire the coldest decoders: this lane's past its cap, then any lane's past the
 	 * total, which is what frees a deleted lane's. Ones the latest frame uses stay. */
 	#evict(key: string) {
 		const mine = [...this.#samplers.keys()].filter((k) => laneOfKey(k) === key);
-		const over = Math.max(0, mine.length - MAX_LANE_SAMPLERS);
+		const laneCap = MAX_LANE_SAMPLERS + (this.#extraSamplers.get(key) ?? 0);
+		const over = Math.max(0, mine.length - laneCap);
 		for (const id of mine.slice(0, over)) {
 			this.#drop(id);
 		}
-		let excess = this.#samplers.size - MAX_SAMPLERS;
+		let extra = 0;
+		for (const n of this.#extraSamplers.values()) extra += n;
+		let excess = this.#samplers.size - MAX_SAMPLERS - extra;
 		for (const id of [...this.#samplers.keys()]) {
 			if (excess <= 0) break;
 			if (this.#active.has(id)) continue;
@@ -190,6 +217,9 @@ export class MediaLayerDriver {
 		this.#samplers.clear();
 	}
 }
+
+/** Counted once a cut list's slides are pooled; the list itself never changes. */
+const videoSlideCounts = new WeakMap<CutList, number>();
 
 /** A backward pass holds a chunk of frames at once; the preview keeps them this size. */
 const PREVIEW_REVERSE_MAX_SIDE = 1280;

@@ -1,5 +1,6 @@
 import { describe, expect, it, mock } from "bun:test";
 import type { ResolvedMediaLayer } from "../media";
+import type { CutList } from "../media/cut-list";
 
 /** Every sampler the driver opened, and whether it was let go. */
 const opened: { file: File; disposed: boolean }[] = [];
@@ -32,10 +33,10 @@ const video = (id: string) => ({
 const layer = (lane: string, sourceId: string) =>
 	({ key: lane, sourceId, sourceTime: 0 }) as unknown as ResolvedMediaLayer;
 
-function driver(sources: ReturnType<typeof video>[]) {
+function driver(sources: { id: string; kind: string; cutList?: CutList }[]) {
 	const byId = new Map(sources.map((s) => [s.id, s]));
 	return new MediaLayerDriver({
-		registry: { get: (id: string) => byId.get(id) } as never,
+		registry: { sources, get: (id: string) => byId.get(id) } as never,
 		getRenderer: () => null,
 	});
 }
@@ -96,6 +97,28 @@ describe("MediaLayerDriver", () => {
 			}
 		}
 		expect(opened).toHaveLength(3);
+		expect(opened.every((o) => !o.disposed)).toBe(true);
+	});
+
+	it("keeps a decoder for each video slide a slideshow cycles through", async () => {
+		opened.length = 0;
+		const slides = Array.from({ length: 6 }, (_, i) => video(`v${i}`));
+		const cutList = {
+			duration: 6,
+			songStart: 0,
+			slides: slides.map((s) => s.id),
+			cuts: slides.map((_, i) => [i, i]),
+		} as unknown as CutList;
+		const d = driver([...slides, { id: "show", kind: "cuts", cutList }]);
+		const at = (t: number) =>
+			({ key: "lane", sourceId: "show", sourceTime: t }) as ResolvedMediaLayer;
+		for (let pass = 0; pass < 2; pass++) {
+			for (let t = 0; t < 6; t++) {
+				d.advance([at(t + 0.5)]);
+				await settle();
+			}
+		}
+		expect(opened).toHaveLength(6);
 		expect(opened.every((o) => !o.disposed)).toBe(true);
 	});
 });

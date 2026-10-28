@@ -1,6 +1,7 @@
 import type { GlRenderer } from "../gl/renderer";
 import { parseMesh, type Mesh } from "../mesh";
 import { mediaLayerSides, type ResolvedMediaLayer } from "../media";
+import { throughCuts } from "../media/cut-list";
 import { SlideVideoSampler } from "../slideshow/video-sampler";
 import type { SequenceSource } from "./sequence-sources.svelte";
 
@@ -22,6 +23,12 @@ export async function createMediaExportLayers(
 ): Promise<MediaExportLayers> {
 	const byId = new Map(sources.map((s) => [s.id, s]));
 
+	const slidesOf = (id: string): string[] => {
+		const list = byId.get(id)?.cutList;
+		if (!list) return [id];
+		return list.slides.filter((s) => byId.get(s)?.kind !== "video");
+	};
+
 	const images = new Map<string, HTMLImageElement>();
 	const meshes = new Map<string, Mesh>();
 	/** One decoder per (lane, video source); a sampler decodes from its own position. */
@@ -30,9 +37,10 @@ export async function createMediaExportLayers(
 	const uploaded = new Map<string, string>();
 
 	// Opened up front: creating a decoder mid-export would stall the frame it happens on.
+	// A cut list opens its slides; its video slides open on their first cut.
 	await Promise.all(
 		[...laneSources].flatMap(([laneId, sourceIds]) =>
-			sourceIds.map(async (sourceId) => {
+			sourceIds.flatMap(slidesOf).map(async (sourceId) => {
 				const src = byId.get(sourceId);
 				if (!src) return;
 				if (src.kind === "video") {
@@ -70,7 +78,12 @@ export async function createMediaExportLayers(
 			// Run the lanes together rather than in series: each holds its own decoder and texture.
 			await Promise.all(
 				mediaLayerSides(layers).map(async (layer) => {
-					const src = byId.get(layer.sourceId);
+					const { src, sourceTime, bounce } = throughCuts(
+						byId.get(layer.sourceId),
+						layer.sourceTime,
+						layer.bounce,
+						(id) => byId.get(id),
+					);
 					if (!src) return;
 
 					if (src.kind === "model") {
@@ -105,12 +118,7 @@ export async function createMediaExportLayers(
 					const sampler = await samplerFor(layer.key, src.file, src.id);
 					if (!sampler) return;
 					uploaded.set(layer.key, src.id);
-					const frame = await sampler.at(
-						layer.sourceTime,
-						true,
-						false,
-						layer.bounce,
-					);
+					const frame = await sampler.at(sourceTime, true, false, bounce);
 					if (frame) {
 						renderer.updateLayerFrame(layer.key, frame);
 						frame.close();

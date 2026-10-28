@@ -133,6 +133,12 @@
 		Object.fromEntries(sources.map((s) => [s.id, s.duration])),
 	);
 
+	/** Media that plays out over time and wraps: a video, or a slideshow's cuts. */
+	const isTimed = (src: SequenceSource) =>
+		src.kind === "video" || src.kind === "cuts";
+	const slideThumb = (id: string) =>
+		sources.find((s) => s.id === id)?.thumbUrl ?? null;
+
 	// Selection, drags, scrubbing, split/add/delete and the keyboard: the gestures
 	// every clip lane shares.
 	const ctrl = new ClipLaneController<MediaClip, MediaLane>(
@@ -166,7 +172,13 @@
 				);
 			},
 			splitClipAt: (lane, at) =>
-				splitMediaClipAt(lane, at, edits, sourceDurations),
+				splitMediaClipAt(
+					lane,
+					at,
+					edits,
+					sourceDurations,
+					(id) => sources.find((s) => s.id === id)?.kind === "cuts",
+				),
 			clipSpanAt: (lane, time) =>
 				clipSpanAt(lane, time, newClipSourceId(lane, time)),
 			// A clip keeps showing what it showed: one that inherited its old lane's source
@@ -183,7 +195,7 @@
 			onJoinClick: (ids, anchor) => (joinPopover = { ids, anchor }),
 			sourceEnds: (clip, lane, until) => {
 				const src = clipSource(lane, clip);
-				return src?.kind === "video"
+				return src && isTimed(src)
 					? videoSourceEnds(edits[src.id], src.duration, clip, until)
 					: [];
 			},
@@ -640,7 +652,7 @@
 					{const edge = $derived(ctrl.edgeWidth(clip))}
 					{const src = $derived(clipSource(lane, clip))}
 					{const repeats = $derived(
-						src?.kind === "video"
+						src && isTimed(src)
 							? videoClipRepeats(edits[src.id], src.duration, clip)
 							: [],
 					)}
@@ -673,10 +685,11 @@
 								onpointerdown={(e) =>
 									ctrl.onClipPointerDown(e, lane.id, clip.id, "start")}
 							></span>
-							{#if src?.kind === "video"}
+							{#if src && isTimed(src)}
 								<ClipFilmstrip
 									{clip}
 									{src}
+									{slideThumb}
 									{edits}
 									durations={sourceDurations}
 									pxPerSec={ctrl.clipPx({ start: 0, end: 1 })}
