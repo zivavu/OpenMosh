@@ -34,7 +34,7 @@ export interface BeatInfo {
 	fraction: number;
 }
 
-function getSubdivisionAt(
+export function getSubdivisionAt(
 	t: number,
 	segments: TimelineSegment[],
 	fallback: BeatSubdivision,
