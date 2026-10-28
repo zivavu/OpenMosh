@@ -349,12 +349,16 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 		const modelIds = new Set(
 			(layerSources ?? []).filter((s) => s.kind === "model").map((s) => s.id),
 		);
+		const cutLists = new Map(
+			layerSources.flatMap((s) => (s.cutList ? [[s.id, s.cutList]] : [])),
+		);
 		// Same resolver the preview builds, so interval rolls reproduce exactly.
 		const mediaChains =
 			mediaTimeline && moshOptions
 				? createMediaChainSource(() => moshOptions, {
 						clone: true,
 						isModel: (id) => modelIds.has(id),
+						cutList: (id) => cutLists.get(id),
 					})
 				: null;
 		const textChains =

@@ -1,14 +1,18 @@
 <script lang="ts">
 	import type { SequenceSource } from "../../editor/sequence-sources.svelte";
 	import type { SourceEdit } from "../../media";
+	import { cutAt } from "../../media/cut-list";
 	import { clipSourceTime } from "../../media/resolve";
 	import type { MediaClip } from "../../media/types";
 	import { filmstripIndexAt } from "../../video/filmstrip";
 
-	/** A video clip's frames, each tile showing what plays at its spot on the timeline. */
+	/** A video clip's frames, each tile showing what plays at its spot on the timeline.
+	 * A slideshow's tiles show the slide on screen there. */
 	interface Props {
 		clip: MediaClip;
 		src: SequenceSource;
+		/** A slide's thumbnail, for a slideshow clip. */
+		slideThumb?: (id: string) => string | null;
 		edits: Record<string, SourceEdit>;
 		durations: Record<string, number>;
 		/** The timeline's scale, and the stretch of it on screen. */
@@ -21,6 +25,7 @@
 	let {
 		clip,
 		src,
+		slideThumb,
 		edits,
 		durations,
 		pxPerSec,
@@ -51,6 +56,11 @@
 				edits,
 				durations,
 			);
+			if (src.cutList) {
+				const slide = cutAt(src.cutList, sourceTime).slideId;
+				out.push({ k, url: slideThumb?.(slide) ?? src.thumbUrl });
+				continue;
+			}
 			const frame =
 				frames?.[filmstripIndexAt(sourceTime, frames.length, src.duration)];
 			out.push({ k, url: frame ?? src.thumbUrl });

@@ -15,6 +15,7 @@ import {
 	type MeshAnimation,
 } from "../mesh";
 import { renderMeshThumb } from "../mesh/thumb";
+import { isCutListFile, readCutList, type CutList } from "../media/cut-list";
 import { probeSlideVideo, SlideVideoSampler } from "../slideshow/video-sampler";
 import { decodeFilmstrip, filmstripFrameCount } from "../video/filmstrip";
 import { needsProxy, startProxyJob, type ProxyJob } from "../video/proxy";
@@ -45,7 +46,7 @@ export interface SequenceSource {
 	id: string;
 	file: File;
 	name: string;
-	kind: "image" | "video" | "model";
+	kind: "image" | "video" | "model" | "cuts";
 	objectUrl: string;
 	/** Grid thumbnail; images fill theirs in after the chip is on screen. */
 	thumbUrl: string | null;
@@ -61,6 +62,8 @@ export interface SequenceSource {
 	duration: number;
 	/** Models only: the animations a clip can pick from, in the file's order. */
 	animations?: MeshAnimation[];
+	/** Cut lists only: the slideshow it froze, whose slides are pool sources too. */
+	cutList?: CutList;
 	/** <=1080p stand-in the preview decodes; exports still read `file`. */
 	proxyFile?: File;
 	/** Proxy size: target while transcoding, finished size after; absent means still looking. */
@@ -83,7 +86,7 @@ export function lightboxItem(src: SequenceSource): {
 	objectUrl: string;
 	editable: boolean;
 } {
-	if (src.kind !== "model") {
+	if (src.kind === "image" || src.kind === "video") {
 		return {
 			name: src.name,
 			kind: src.kind,
@@ -91,7 +94,7 @@ export function lightboxItem(src: SequenceSource): {
 			editable: true,
 		};
 	}
-	// The media editor has no tools for a model.
+	// The media editor has no tools for a model or a slideshow.
 	return {
 		name: src.name,
 		kind: "image",
@@ -201,8 +204,10 @@ export class SequenceSourceRegistry {
 			this.loadingTotal -= files.length - fresh.length;
 
 			const models = fresh.filter(isMeshFile);
+			const cutLists = fresh.filter(isCutListFile);
 			const images = fresh.filter(
-				(f) => !f.type.startsWith("video/") && !isMeshFile(f),
+				(f) =>
+					!f.type.startsWith("video/") && !isMeshFile(f) && !isCutListFile(f),
 			);
 			const videos = fresh.filter((f) => f.type.startsWith("video/"));
 
@@ -285,6 +290,18 @@ export class SequenceSourceRegistry {
 					if (s.proxyPending) void this.#makeProxy(s.id, s.file);
 					void this.#makeFilmstrip(s);
 				}
+			}
+
+			// Last, so the slides they show are pooled for their thumbnails.
+			if (cutLists.length > 0) {
+				const built = await Promise.all(
+					cutLists.map((f) => this.#buildCuts(f)),
+				);
+				const batch = this.#accept(built);
+				this.loadingDone += cutLists.length;
+				if (this.#disposed) return [];
+				ok.push(...batch);
+				for (const s of batch) void this.#makeCutsThumb(s);
 			}
 		} finally {
 			// Released after the appends, so a waiting call sees the sources rather than
@@ -612,6 +629,43 @@ export class SequenceSourceRegistry {
 				? mesh.skin.animations
 				: undefined,
 		};
+	}
+
+	async #buildCuts(file: File): Promise<SequenceSource | null> {
+		const cutList = await readCutList(file);
+		if (!cutList) return null;
+		return {
+			id: stableSourceId(file),
+			file,
+			name: cutList.name,
+			objectUrl: URL.createObjectURL(file),
+			kind: "cuts",
+			thumbUrl: null,
+			thumbPending: true,
+			duration: cutList.duration,
+			cutList,
+		};
+	}
+
+	/** The first slide's picture, copied so the cut list owns its URL. */
+	async #makeCutsThumb(src: SequenceSource) {
+		const first = this.get(src.cutList?.slides[0]);
+		let thumb: string | null = null;
+		if (first?.kind === "image") {
+			thumb = (await makeThumbUrl(first.file))?.url ?? null;
+		} else if (first?.thumbUrl) {
+			const blob = await fetch(first.thumbUrl)
+				.then((r) => r.blob())
+				.catch(() => null);
+			if (blob) thumb = URL.createObjectURL(blob);
+		}
+		const live = this.#disposed ? undefined : this.get(src.id);
+		if (!live) {
+			if (thumb) URL.revokeObjectURL(thumb);
+			return;
+		}
+		live.thumbUrl = thumb;
+		live.thumbPending = false;
 	}
 
 	async #buildVideo(file: File): Promise<SequenceSource | null> {

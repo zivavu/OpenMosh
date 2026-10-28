@@ -121,3 +121,18 @@ export function cutAt(list: CutList, sourceTime: number): CutPosition {
 		slideTime: local + list.songStart,
 	};
 }
+
+/** Where a layer is in its media once a cut list hands over to the slide on screen.
+ * Anything else passes through. A slide never bounces. */
+export function throughCuts<S extends { kind: string; cutList?: CutList }, B>(
+	src: S | undefined,
+	sourceTime: number,
+	bounce: B | undefined,
+	get: (id: string) => S | undefined,
+): { src: S | undefined; sourceTime: number; bounce: B | undefined } {
+	if (src?.kind !== "cuts" || !src.cutList) {
+		return { src, sourceTime, bounce };
+	}
+	const at = cutAt(src.cutList, sourceTime);
+	return { src: get(at.slideId), sourceTime: at.slideTime, bounce: undefined };
+}

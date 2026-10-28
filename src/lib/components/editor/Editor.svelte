@@ -2277,8 +2277,10 @@
 			return;
 		}
 		if (seqBaseSize) return;
-		// A model has no pixel size of its own to lend the project.
-		const first = sequenceSources.find((s) => s.kind !== "model");
+		// A model or a slideshow has no pixel size of its own to lend the project.
+		const first = sequenceSources.find(
+			(s) => s.kind === "image" || s.kind === "video",
+		);
 		if (!first) {
 			seqBaseSize = { width: 1920, height: 1080 };
 			return;
@@ -4452,6 +4454,7 @@
 		sourceRegistry.get(id)?.kind === "model";
 	const previewMediaChains = createMediaChainSource(getMoshOptions, {
 		isModel: isModelSource,
+		cutList: (id) => sourceRegistry.get(id)?.cutList,
 	});
 
 	const mediaMoshes = new ClipMoshes<MediaClip>({
