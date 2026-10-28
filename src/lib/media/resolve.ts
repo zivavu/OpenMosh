@@ -1,5 +1,6 @@
 import type { AudioResponse } from "../audio/auto-range";
 import { chainClipEffectsAt, laneMoshOptions } from "../editor/chain-clip";
+import { cutAt, type CutList } from "./cut-list";
 import type { MoshOptions } from "../editor/mosh";
 import type { EffectInstance } from "../effects/types";
 import {
@@ -166,6 +167,7 @@ export type MediaChainSource = (
 	lane: MediaLane,
 	clip: MediaClip,
 	time: number,
+	sourceTime: number,
 ) => EffectInstance[];
 
 /** The options a media clip rolls under: its lane's, flagged when it shows a model. */
@@ -189,14 +191,29 @@ export function createMediaChainSource(
 	{
 		clone = false,
 		isModel,
-	}: { clone?: boolean; isModel?: (sourceId: string) => boolean } = {},
+		cutList,
+	}: {
+		clone?: boolean;
+		isModel?: (sourceId: string) => boolean;
+		cutList?: (sourceId: string) => CutList | undefined;
+	} = {},
 ): MediaChainSource {
 	const cache = new Map<string, EffectInstance[]>();
 	// Each lane rolls under its own settings, so an auto clip never borrows another's.
-	return (lane, clip, time) =>
-		chainClipEffectsAt(clip, time, cache, clone, () =>
-			clipMoshOptions(lane, clip, getMoshOptions(), isModel),
+	return (lane, clip, time, sourceTime) => {
+		const sourceId = clipSourceId(lane, clip);
+		const list = sourceId ? cutList?.(sourceId) : undefined;
+		// A slideshow rolls on its own beats, whatever the editor's BPM.
+		const tick = list ? cutAt(list, sourceTime).tick : undefined;
+		return chainClipEffectsAt(
+			clip,
+			time,
+			cache,
+			clone,
+			() => clipMoshOptions(lane, clip, getMoshOptions(), isModel),
+			tick,
 		);
+	};
 }
 
 /** Where the clip is in its media at timeline `time`, and which way a bouncing one walks. */
@@ -252,16 +269,22 @@ export function resolveMediaLayersAt(
 			const prev = blendsFrom(lane, index) ? lane.clips[index - 1] : null;
 			const prevSource = prev && clipSourceId(lane, prev);
 			if (concrete) {
+				const prevAt =
+					prev && prevSource
+						? clipSourceTime(prev, prevSource, time, edits, durations)
+						: null;
 				transition = {
 					from:
-						prev && prevSource
+						prev && prevSource && prevAt
 							? {
 									key: laneClipKey(lane, index - 1),
 									clipId: prev.id,
 									sourceId: prevSource,
-									...clipSourceTime(prev, prevSource, time, edits, durations),
+									...prevAt,
 									animation: prev.animation,
-									effects: chains ? chains(lane, prev, time) : prev.effects,
+									effects: chains
+										? chains(lane, prev, time, prevAt.sourceTime)
+										: prev.effects,
 								}
 							: null,
 					concrete,
@@ -270,17 +293,18 @@ export function resolveMediaLayersAt(
 				};
 			}
 		}
+		const at = clipSourceTime(clip, sourceId, time, edits, durations);
 		layers.push({
 			key: laneClipKey(lane, index),
 			laneId: lane.id,
 			clipId: clip.id,
 			z: lane.z,
 			sourceId,
-			...clipSourceTime(clip, sourceId, time, edits, durations),
+			...at,
 			animation: clip.animation,
 			style: lane.style,
 			opacity: lane.style.opacity * mediaClipWeight(clip, time),
-			effects: chains ? chains(lane, clip, time) : clip.effects,
+			effects: chains ? chains(lane, clip, time, at.sourceTime) : clip.effects,
 			response: lane.settings?.audioResponse,
 			transition,
 		});

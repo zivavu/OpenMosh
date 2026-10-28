@@ -1,6 +1,9 @@
 import { describe, expect, it } from "bun:test";
+import { withChainMode } from "../editor/chain-clip";
+import type { CutList } from "./cut-list";
 import {
 	clipMoshOptions,
+	createMediaChainSource,
 	clipSourceId,
 	detachMediaSource,
 	laneSourceIds,
@@ -517,5 +520,69 @@ describe("bouncing clips", () => {
 			[true, undefined],
 			[true, true],
 		]);
+	});
+});
+
+describe("slideshow clips", () => {
+	const options = {
+		moshMin: 1,
+		moshMax: 3,
+		randomizeOrder: true,
+		moshAudioLink: false,
+		moshAudioLinkStrength: 0,
+		hasAudio: false,
+	};
+	const list: CutList = {
+		version: 1,
+		name: "Show",
+		sessionKey: "slideshow:p:1",
+		duration: 4,
+		songStart: 0,
+		bpm: 120,
+		beatOffset: 0,
+		slides: ["a", "b"],
+		cuts: [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5].map((t, i) => [t, i % 2]),
+	};
+	const auto = (lane: MediaLane): MediaLane => ({
+		...lane,
+		sourceId: "show",
+		clips: lane.clips.map((c) => ({
+			...withChainMode(c, "interval", 0.1),
+			seed: 7,
+		})),
+	});
+	const chains = () =>
+		createMediaChainSource(() => options, {
+			cutList: (id) => (id === "show" ? list : undefined),
+		});
+	const effectsAt = (t: MediaTimeline, time: number) =>
+		resolveMediaLayersAt(t, time, undefined, chains())[0].effects;
+
+	it("roll on each cut, not on the clip's interval", () => {
+		const t = timelineOf([auto(laneWith([[0, 4]]))]);
+		const ids = (time: number) => effectsAt(t, time).map((e) => e.defId);
+		expect(ids(0.05)).toEqual(ids(0.45));
+		const rolls = new Set(
+			[0.2, 0.7, 1.2, 1.7, 2.2].map((time) => ids(time).join()),
+		);
+		expect(rolls.size).toBeGreaterThan(1);
+	});
+
+	it("roll the same moshes after a split", () => {
+		const lane = auto(laneWith([[0, 4]]));
+		const split = splitMediaClipAt(
+			lane,
+			1.3,
+			undefined,
+			undefined,
+			(id) => id === "show",
+		);
+		const before = timelineOf([lane]);
+		const after = timelineOf([split]);
+		for (const time of [0.2, 1.2, 1.4, 2.7]) {
+			const want = effectsAt(before, time).map((e) => [e.defId, e.values]);
+			const got = effectsAt(after, time).map((e) => [e.defId, e.values]);
+			expect(got).toEqual(want);
+		}
 	});
 });
