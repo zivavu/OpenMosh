@@ -247,19 +247,20 @@ function ownChain(
 }
 
 /** The chain a clip contributes at `time`. A static clip hands back its own chain; an
- * auto clip rolls a mosh per tick and runs its own chain after it. */
+ * auto clip rolls a mosh per tick and runs its own chain after it. A clip whose source
+ * has beats of its own passes the `tick` it is on. */
 export function chainClipEffectsAt(
 	clip: ChainClip,
 	time: number,
 	cache: Map<string, EffectInstance[]>,
 	clone: boolean,
 	getMoshOptions: () => MoshOptions,
+	tick = chainClipTick(clip, time),
 ): EffectInstance[] {
 	const own = ownChain(clip, cache, clone);
 	if (clip.mode !== "interval") return own;
 
 	const options = getMoshOptions();
-	const tick = chainClipTick(clip, time);
 	const seed = tickSeed(clip, tick);
 	const rollKey = `${clip.id}:${seed}:${options.moshMin}:${options.moshMax}:${options.moshStyle ?? "random"}:${options.randomizeOrder}:${options.moshAudioLink}:${options.moshAudioLinkStrength}:${options.moshLinkBand}:${options.hasAudio}:${options.model}`;
 	let rolled = cache.get(rollKey);

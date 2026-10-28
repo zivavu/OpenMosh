@@ -197,6 +197,8 @@ export function splitMediaClipAt(
 	at: number,
 	edits?: Record<string, SourceEdit>,
 	durations?: Record<string, number>,
+	/** A source whose own beats tick its clips' rolls: both halves keep the seed. */
+	hasBeats?: (sourceId: string) => boolean,
 ): MediaLane {
 	return splitChainClipAt(
 		lane,
@@ -215,6 +217,7 @@ export function splitMediaClipAt(
 				sourceStart: reached.time,
 				bounceBack: reached.back || undefined,
 				transition: undefined,
+				...(hasBeats?.(sourceId) ? { seed: clip.seed } : {}),
 			};
 		},
 	);
