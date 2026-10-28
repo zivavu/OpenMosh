@@ -84,4 +84,18 @@ describe("MediaLayerDriver", () => {
 		expect(opened).toHaveLength(1);
 		expect(opened[0].disposed).toBe(false);
 	});
+
+	it("keeps every decoder of a lane under its cap", async () => {
+		opened.length = 0;
+		const sources = ["a", "b", "c"].map(video);
+		const d = driver(sources);
+		for (let pass = 0; pass < 2; pass++) {
+			for (const s of sources) {
+				d.advance([layer("lane", s.id)]);
+				await settle();
+			}
+		}
+		expect(opened).toHaveLength(3);
+		expect(opened.every((o) => !o.disposed)).toBe(true);
+	});
 });

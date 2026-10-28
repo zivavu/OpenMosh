@@ -151,7 +151,8 @@ export class MediaLayerDriver {
 	 * total, which is what frees a deleted lane's. Ones the latest frame uses stay. */
 	#evict(key: string) {
 		const mine = [...this.#samplers.keys()].filter((k) => laneOfKey(k) === key);
-		for (const id of mine.slice(0, mine.length - MAX_LANE_SAMPLERS)) {
+		const over = Math.max(0, mine.length - MAX_LANE_SAMPLERS);
+		for (const id of mine.slice(0, over)) {
 			this.#drop(id);
 		}
 		let excess = this.#samplers.size - MAX_SAMPLERS;
