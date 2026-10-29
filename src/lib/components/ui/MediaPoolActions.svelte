@@ -1,7 +1,7 @@
 <script lang="ts">
 	import {
 		Camera,
-		GalleryHorizontal,
+		FolderOpen,
 		Plus,
 		Shuffle,
 		Palette,
@@ -24,8 +24,8 @@
 		onAdd: () => void;
 		onGenerate: () => void;
 		onRecord: () => void;
-		/** Bring in a saved slideshow; the editor's pool only. */
-		onSlideshow?: () => void;
+		/** Bring in a saved slideshow or single edit; the editor's pool only. */
+		onProjects?: () => void;
 		onClear: () => void;
 	}
 
@@ -40,7 +40,7 @@
 		onAdd,
 		onGenerate,
 		onRecord,
-		onSlideshow,
+		onProjects,
 		onClear,
 	}: Props = $props();
 </script>
@@ -78,14 +78,14 @@
 			<Camera size={12} />
 			<span class="btn-label">{recordLabel}</span>
 		</button>
-		{#if onSlideshow}
+		{#if onProjects}
 			<button
 				class="pool-btn"
-				title="Add one of your slideshows to the pool"
-				onclick={onSlideshow}
+				title="Add one of your slideshows or single edits to the pool"
+				onclick={onProjects}
 			>
-				<GalleryHorizontal size={12} />
-				<span class="btn-label">Slideshow</span>
+				<FolderOpen size={12} />
+				<span class="btn-label">Projects</span>
 			</button>
 		{/if}
 		<button

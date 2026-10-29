@@ -92,6 +92,20 @@ export interface MediaClip extends ChainClip {
 	bounce?: boolean;
 	/** A bouncing clip starts on a backward pass: the right half of a split made there. */
 	bounceBack?: boolean;
+	/** Added from a saved single edit, which "Update from single edit" reads again. */
+	single?: SingleLink;
+}
+
+export interface SingleLink {
+	sessionKey: string;
+	name: string;
+}
+
+function normalizeSingleLink(raw: unknown): SingleLink | undefined {
+	const link = raw as Partial<SingleLink> | null | undefined;
+	return typeof link?.sessionKey === "string"
+		? { sessionKey: link.sessionKey, name: String(link.name ?? "") }
+		: undefined;
 }
 
 /** How a clip walks its media: bouncing once its length is known, else wrapping. */
@@ -326,6 +340,7 @@ export function normalizeMediaTimeline(raw: unknown): MediaTimeline {
 					transition: normalizeClipTransition(clip.transition),
 					bounce: clip.bounce || undefined,
 					bounceBack: (clip.bounce && clip.bounceBack) || undefined,
+					single: normalizeSingleLink(clip.single),
 					...normalizeChainFields(clip, effects),
 				};
 			}),

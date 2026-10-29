@@ -77,6 +77,8 @@
 		onAttachAudio?: () => void;
 		/** Freeze a slideshow source again from the slideshow as it is now. */
 		onRefreshSlideshow?: (sourceId: string) => void;
+		/** Read the single edit this clip came from again. */
+		onRefreshSingle?: (sessionKey: string) => void;
 	}
 
 	let {
@@ -102,6 +104,7 @@
 		onDetachAudio,
 		onAttachAudio,
 		onRefreshSlideshow,
+		onRefreshSingle,
 	}: Props = $props();
 
 	// This chain runs on the lane's media, so a Mask paints over its box.
@@ -326,6 +329,20 @@
 						onclick={() => onRefreshSlideshow(source.id)}
 					>
 						Update from slideshow
+					</button>
+				</div>
+			{/if}
+
+			{#if clip.single && onRefreshSingle}
+				{@const link = clip.single}
+				<div class="row">
+					<span class="label-spacer"></span>
+					<button
+						class="detach"
+						title="Brings in what changed in “{link.name}” since you added it, its effects and media. Clips keep their place and any effects you locked."
+						onclick={() => onRefreshSingle(link.sessionKey)}
+					>
+						Update from single edit
 					</button>
 				</div>
 			{/if}

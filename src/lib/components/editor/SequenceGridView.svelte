@@ -3,6 +3,7 @@
 	import {
 		Box,
 		Camera,
+		FolderOpen,
 		GalleryHorizontal,
 		Palette,
 		Play,
@@ -44,7 +45,7 @@
 		onAddFiles: (files: File[]) => void;
 		/** Open the image generator, which adds what it makes to the pool. */
 		onGenerate: () => void;
-		onSlideshow?: () => void;
+		onProjects?: () => void;
 		onRecord: () => void;
 		onRemove: (id: string) => void;
 		onReorder: (from: number, to: number) => void;
@@ -60,7 +61,7 @@
 		pendingCount = 0,
 		onAddFiles,
 		onGenerate,
-		onSlideshow,
+		onProjects,
 		onRecord,
 		onRemove,
 		onReorder,
@@ -162,9 +163,9 @@
 				<button class="add-btn" onclick={onRecord}>
 					<Camera size={14} /> RECORD
 				</button>
-				{#if onSlideshow}
-					<button class="add-btn" onclick={onSlideshow}>
-						<GalleryHorizontal size={14} /> SLIDESHOW
+				{#if onProjects}
+					<button class="add-btn" onclick={onProjects}>
+						<FolderOpen size={14} /> PROJECTS
 					</button>
 				{/if}
 			</div>
@@ -250,7 +251,7 @@
 				onAdd={() => fileInput?.click()}
 				{onGenerate}
 				{onRecord}
-				{onSlideshow}
+				{onProjects}
 			/>
 		</div>
 	{/if}
