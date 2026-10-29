@@ -47,6 +47,7 @@ export interface ResolvedMediaLayer {
 	animation?: number;
 	/** Set on a bouncing clip; see `SideBounce`. */
 	bounce?: SideBounce;
+	slideFrame?: boolean;
 	style: MediaStyle;
 	/** What the composite draws this layer at: the lane's opacity scaled by the clip's
 	 * fade. Separate from `style.opacity` so the per-frame value needn't clone. */
@@ -67,6 +68,8 @@ export interface MediaLayerSide {
 	animation?: number;
 	bounce?: SideBounce;
 	effects: EffectInstance[];
+	/** A slideshow draws its slides in its own frame; see `MediaStyle.slideFrame`. */
+	slideFrame?: boolean;
 }
 
 /** Which way a bouncing clip walks its media now, and the source time it turns at
@@ -282,6 +285,7 @@ export function resolveMediaLayersAt(
 									sourceId: prevSource,
 									...prevAt,
 									animation: prev.animation,
+									slideFrame: lane.style.slideFrame,
 									effects: chains
 										? chains(lane, prev, time, prevAt.sourceTime)
 										: prev.effects,
@@ -302,6 +306,7 @@ export function resolveMediaLayersAt(
 			sourceId,
 			...at,
 			animation: clip.animation,
+			slideFrame: lane.style.slideFrame,
 			style: lane.style,
 			opacity: lane.style.opacity * mediaClipWeight(clip, time),
 			effects: chains ? chains(lane, clip, time, at.sourceTime) : clip.effects,

@@ -1,4 +1,4 @@
-import type { Cut, CutList } from "../media/cut-list";
+import type { Cut, CutList, SlideFrame } from "../media/cut-list";
 import { beatAtTime, getSubdivisionAt } from "./beat-clock";
 import type { SlideshowConfig } from "./types";
 
@@ -13,6 +13,7 @@ export interface FreezeOptions {
 	slideIds: string[];
 	/** Seconds on the song (or the songless clock) the slideshow plays. */
 	span: { start: number; end: number };
+	frame?: SlideFrame;
 }
 
 /** The slideshow as the editor plays it: every beat its frame driver would cut on. */
@@ -28,6 +29,7 @@ export function freezeSlideshow(opts: FreezeOptions): CutList {
 		beatOffset: beatOffsetFrom(config, span.start),
 		slides: opts.slideIds,
 		cuts: freezeCuts(config, opts.slideIds.length, span),
+		...(opts.frame ? { frame: opts.frame } : {}),
 	};
 }
 

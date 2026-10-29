@@ -1,6 +1,6 @@
 import type { GlRenderer } from "../gl/renderer";
 import { mediaLayerSides, type ResolvedMediaLayer } from "../media";
-import { throughCuts, type CutList } from "../media/cut-list";
+import { shownAs, throughCuts, type CutList } from "../media/cut-list";
 import { SlideVideoSampler } from "../slideshow/video-sampler";
 import type { SequenceSourceRegistry } from "./sequence-sources.svelte";
 
@@ -46,11 +46,12 @@ export class MediaLayerDriver {
 			if (shown?.cutList) {
 				this.#extraSamplers.set(layer.key, this.#videoSlides(shown.cutList));
 			} else this.#extraSamplers.delete(layer.key);
-			const { src, sourceTime, bounce } = throughCuts(
+			const { src, sourceTime, bounce, frame } = throughCuts(
 				shown,
 				layer.sourceTime,
 				layer.bounce,
 				(id) => this.#registry.get(id),
+				layer.slideFrame,
 			);
 			if (!src) {
 				this.#release(layer.key);
@@ -75,16 +76,17 @@ export class MediaLayerDriver {
 
 			if (src.kind === "image") {
 				// Still media only re-uploads when the lane's source changes.
+				const wanted = shownAs(src.id, frame);
 				if (
-					this.#uploaded.get(layer.key) === src.id &&
+					this.#uploaded.get(layer.key) === wanted &&
 					renderer?.hasLayerTexture(layer.key)
 				) {
 					continue;
 				}
 				const img = this.#registry.image(src.id);
 				if (img?.complete) {
-					this.#getRenderer()?.updateLayerImage(layer.key, img);
-					this.#uploaded.set(layer.key, src.id);
+					this.#getRenderer()?.updateLayerImage(layer.key, img, frame);
+					this.#uploaded.set(layer.key, wanted);
 				}
 				continue;
 			}
@@ -97,20 +99,20 @@ export class MediaLayerDriver {
 			);
 			if (!sampler) continue;
 			const { key } = layer;
-			const wanted = src.id;
+			const wanted = shownAs(src.id, frame);
 			this.#uploaded.set(key, wanted);
 			// A render that skips a lane frees its texture, though its decoder still counts
 			// the frame as shown.
 			const lost = !renderer?.hasLayerTexture(key);
 			// Non-blocking: a lane whose decoder has nothing new keeps its current frame.
-			void sampler.at(sourceTime, false, lost, bounce).then((frame) => {
-				if (!frame) return;
+			void sampler.at(sourceTime, false, lost, bounce).then((videoFrame) => {
+				if (!videoFrame) return;
 				// A request that outlived the clip it was made for.
 				if (!this.#disposed && this.#uploaded.get(key) === wanted) {
-					this.#getRenderer()?.updateLayerFrame(key, frame);
+					this.#getRenderer()?.updateLayerFrame(key, videoFrame, frame);
 					this.#onUpload?.();
 				}
-				frame.close();
+				videoFrame.close();
 			});
 		}
 		// Lanes that stopped asking for frames drop theirs; decoders are kept for a later clip.

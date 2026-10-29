@@ -1,13 +1,24 @@
 /** A slideshow frozen into a pool source: its slides and the beat each one cuts in on.
  * The editor plays it like a video whose frames are other pool media. */
 
+import type { MediaFit } from "./types";
+
 export const CUT_LIST_TYPE = "application/vnd.openmosh.cuts+json";
 const CUT_LIST_SUFFIX = ".cuts.json";
 /** Far past a long song cut on the finest subdivision. */
 const MAX_CUT_LIST_BYTES = 16 * 1024 * 1024;
+/** Past any output size the slideshow offers. */
+const MAX_FRAME_SIDE = 16384;
 
 /** When a beat starts, in seconds from the cut list's start, and its index into `slides`. */
 export type Cut = [t: number, slide: number];
+
+/** The slideshow's output size and how it fit each slide into it. */
+export interface SlideFrame {
+	width: number;
+	height: number;
+	fit: MediaFit;
+}
 
 export interface CutList {
 	version: 1;
@@ -27,6 +38,8 @@ export interface CutList {
 	slides: string[];
 	/** Ascending, the first at 0. */
 	cuts: Cut[];
+	/** Absent when the slideshow never had a size of its own. */
+	frame?: SlideFrame;
 }
 
 export function isCutListFile(file: File): boolean {
@@ -82,6 +95,7 @@ export function parseCutList(text: string): CutList | null {
 		last = t;
 	}
 	if (cuts[0][0] !== 0) return null;
+	const frame = parseFrame(list.frame);
 	return {
 		version: 1,
 		name: list.name,
@@ -92,7 +106,26 @@ export function parseCutList(text: string): CutList | null {
 		beatOffset: list.beatOffset,
 		slides,
 		cuts,
+		...(frame ? { frame } : {}),
 	};
+}
+
+const isSide = (v: unknown): v is number =>
+	Number.isInteger(v) && (v as number) > 0 && (v as number) <= MAX_FRAME_SIDE;
+
+/** A bad frame only costs the frame, not the cut list. */
+function parseFrame(raw: unknown): SlideFrame | null {
+	const frame = raw as Partial<SlideFrame> | null;
+	if (!frame || typeof frame !== "object") return null;
+	if (!isSide(frame.width) || !isSide(frame.height)) return null;
+	if (
+		frame.fit !== "contain" &&
+		frame.fit !== "cover" &&
+		frame.fit !== "stretch"
+	) {
+		return null;
+	}
+	return { width: frame.width, height: frame.height, fit: frame.fit };
 }
 
 export interface CutPosition {
@@ -122,17 +155,40 @@ export function cutAt(list: CutList, sourceTime: number): CutPosition {
 	};
 }
 
-/** Where a layer is in its media once a cut list hands over to the slide on screen.
- * Anything else passes through. A slide never bounces. */
+/** Where a layer is in its media once a cut list hands over to the slide on screen,
+ * and the frame the slide draws in when the lane keeps it. Anything else passes
+ * through. A slide never bounces. */
 export function throughCuts<S extends { kind: string; cutList?: CutList }, B>(
 	src: S | undefined,
 	sourceTime: number,
 	bounce: B | undefined,
 	get: (id: string) => S | undefined,
-): { src: S | undefined; sourceTime: number; bounce: B | undefined } {
+	slideFrame = true,
+): {
+	src: S | undefined;
+	sourceTime: number;
+	bounce: B | undefined;
+	frame?: SlideFrame;
+} {
 	if (src?.kind !== "cuts" || !src.cutList) {
 		return { src, sourceTime, bounce };
 	}
 	const at = cutAt(src.cutList, sourceTime);
-	return { src: get(at.slideId), sourceTime: at.slideTime, bounce: undefined };
+	return {
+		src: get(at.slideId),
+		sourceTime: at.slideTime,
+		bounce: undefined,
+		frame: slideFrame ? src.cutList.frame : undefined,
+	};
+}
+
+/** What a lane's texture holds: a slide in a frame is a different picture from the
+ * same slide on its own. */
+export function shownAs(
+	sourceId: string,
+	frame: SlideFrame | undefined,
+): string {
+	return frame
+		? `${sourceId}@${frame.width}x${frame.height}:${frame.fit}`
+		: sourceId;
 }

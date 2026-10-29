@@ -34,6 +34,7 @@ import type {
 	ResolvedMediaLayer,
 	SourceEdit,
 } from "../media";
+import type { SlideFrame } from "../media/cut-list";
 import {
 	CAPTION_EFFECT_ID,
 	captionSignature,
@@ -423,6 +424,10 @@ export class GlRenderer {
 		null;
 	/** Uploaded (pre-effect) media per media lane, keyed by lane id. */
 	private mediaLayerTextures = new Map<string, OverlayTexture>();
+	/** Targets onto the lanes drawing slides in a slideshow's frame, by lane key. */
+	private framedLayerFBOs = new Map<string, WebGLFramebuffer>();
+	/** A framed slide's raw upload, drawn into its lane's frame straight away. */
+	private frameStage: { tex: WebGLTexture; w: number; h: number } | null = null;
 	/** Lanes showing a 3D model, and which one; their texture is redrawn every frame. */
 	private modelLayers = new Map<string, string>();
 	/** A model lane's box in frame pixels, before the lane's scale; set as it draws. */
@@ -1151,23 +1156,21 @@ export class GlRenderer {
 		};
 	}
 
-	/** Sized as the image itself, whatever the texture holds: the layer's box comes from it. */
-	updateLayerImage(key: string, image: SourceImage) {
-		this.uploadLayerTexture(
-			key,
-			this.fitImage(image),
-			imageWidth(image),
-			imageHeight(image),
-		);
+	/** Sized as the image itself, whatever the texture holds: the layer's box comes from
+	 * it. In a slideshow's frame, the box is the frame's. */
+	updateLayerImage(key: string, image: SourceImage, slideFrame?: SlideFrame) {
+		const source = this.fitImage(image);
+		const w = imageWidth(image);
+		const h = imageHeight(image);
+		if (slideFrame) this.uploadFramedLayer(key, source, w, h, slideFrame);
+		else this.uploadLayerTexture(key, source, w, h);
 	}
 
-	updateLayerFrame(key: string, frame: VideoFrame) {
-		this.uploadLayerTexture(
-			key,
-			frame,
-			frame.displayWidth,
-			frame.displayHeight,
-		);
+	updateLayerFrame(key: string, frame: VideoFrame, slideFrame?: SlideFrame) {
+		const w = frame.displayWidth;
+		const h = frame.displayHeight;
+		if (slideFrame) this.uploadFramedLayer(key, frame, w, h, slideFrame);
+		else this.uploadLayerTexture(key, frame, w, h);
 	}
 
 	/** Show a 3D model on this lane; the mesh uploads once per source. */
@@ -1176,25 +1179,17 @@ export class GlRenderer {
 		this.modelLayers.set(key, sourceId);
 		if (prev && prev !== sourceId) this.releaseMesh(prev);
 		this.meshPass.upload(sourceId, mesh);
-		if (this.mediaLayerTextures.has(key)) return;
-		const gl = this.gl;
-		const tex = gl.createTexture()!;
-		gl.bindTexture(gl.TEXTURE_2D, tex);
-		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 		// Sized on first draw, to the frame.
-		this.mediaLayerTextures.set(key, { tex, w: 0, h: 0, sig: "" });
+		this.layerEntry(key);
 	}
 
 	/** Release a lane's frame: its source was cleared, or the lane is gone. */
 	dropLayerTexture(key: string) {
-		const model = this.modelLayers.get(key);
-		if (model) {
-			this.modelLayers.delete(key);
-			this.modelBoxes.delete(key);
-			this.releaseMesh(model);
+		this.leaveModel(key);
+		const fbo = this.framedLayerFBOs.get(key);
+		if (fbo) {
+			this.gl.deleteFramebuffer(fbo);
+			this.framedLayerFBOs.delete(key);
 		}
 		const entry = this.mediaLayerTextures.get(key);
 		if (!entry) return;
@@ -1208,41 +1203,49 @@ export class GlRenderer {
 		this.meshPass.drop(sourceId);
 	}
 
-	private uploadLayerTexture(
-		key: string,
+	/** The lane moved on from a model to a picture. */
+	private leaveModel(key: string) {
+		const model = this.modelLayers.get(key);
+		if (!model) return;
+		this.modelLayers.delete(key);
+		this.modelBoxes.delete(key);
+		this.releaseMesh(model);
+	}
+
+	/** LINEAR and clamped, unlike the chain's buffers: the placement pass samples it at
+	 * an arbitrary scale, where NEAREST would alias a shrunk photo. */
+	private createLayerTexture(): WebGLTexture {
+		const gl = this.gl;
+		const tex = gl.createTexture()!;
+		gl.bindTexture(gl.TEXTURE_2D, tex);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+		return tex;
+	}
+
+	private layerEntry(key: string): OverlayTexture {
+		let entry = this.mediaLayerTextures.get(key);
+		if (!entry) {
+			entry = { tex: this.createLayerTexture(), w: 0, h: 0, sig: "" };
+			this.mediaLayerTextures.set(key, entry);
+		}
+		return entry;
+	}
+
+	/** Upload `source` into `target`, keeping its storage when the size holds: a
+	 * playing video keeps its allocation instead of revalidating it every frame. */
+	private uploadInto(
+		target: { tex: WebGLTexture; w: number; h: number },
 		source: TexImageSource,
 		w: number,
 		h: number,
 	) {
-		if (w <= 0 || h <= 0) return;
 		const gl = this.gl;
-		// The lane moved on from a model to a picture.
-		const model = this.modelLayers.get(key);
-		if (model) {
-			this.modelLayers.delete(key);
-			this.modelBoxes.delete(key);
-			this.releaseMesh(model);
-		}
-		let entry = this.mediaLayerTextures.get(key);
-		if (!entry) {
-			const tex = gl.createTexture()!;
-			gl.bindTexture(gl.TEXTURE_2D, tex);
-			// LINEAR and clamped, unlike the chain's buffers: the placement pass samples
-			// this at an arbitrary scale, where NEAREST would alias a shrunk photo.
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-			entry = { tex, w: 0, h: 0, sig: "" };
-			this.mediaLayerTextures.set(key, entry);
-		} else {
-			gl.bindTexture(gl.TEXTURE_2D, entry.tex);
-		}
-		// Same fast path as the source uploads: a playing video lane keeps its
-		// allocation instead of revalidating storage every frame.
-		const held = entry;
+		gl.bindTexture(gl.TEXTURE_2D, target.tex);
 		this.#timeUpload(() => {
-			if (held.w === w && held.h === h) {
+			if (target.w === w && target.h === h) {
 				gl.texSubImage2D(
 					gl.TEXTURE_2D,
 					0,
@@ -1261,10 +1264,76 @@ export class GlRenderer {
 					gl.UNSIGNED_BYTE,
 					source,
 				);
-				held.w = w;
-				held.h = h;
+				target.w = w;
+				target.h = h;
 			}
 		});
+	}
+
+	private uploadLayerTexture(
+		key: string,
+		source: TexImageSource,
+		w: number,
+		h: number,
+	) {
+		if (w <= 0 || h <= 0) return;
+		this.leaveModel(key);
+		this.uploadInto(this.layerEntry(key), source, w, h);
+	}
+
+	/** A slide drawn into its slideshow's frame, fitted the way the slideshow fit it.
+	 * "contain" leaves the bars transparent. */
+	private uploadFramedLayer(
+		key: string,
+		source: TexImageSource,
+		w: number,
+		h: number,
+		frame: SlideFrame,
+	) {
+		if (w <= 0 || h <= 0) return;
+		this.leaveModel(key);
+		const gl = this.gl;
+		const stage = (this.frameStage ??= {
+			tex: this.createLayerTexture(),
+			w: 0,
+			h: 0,
+		});
+		this.uploadInto(stage, source, w, h);
+
+		this.layerEntry(key);
+		const entry = this.sizedLayer(key, frame.width, frame.height)!;
+		let fbo = this.framedLayerFBOs.get(key);
+		if (!fbo) {
+			const made = this.createRenderTarget(entry.tex);
+			if (!made) return;
+			fbo = made;
+			this.framedLayerFBOs.set(key, fbo);
+		}
+		const fw = frame.width;
+		const fh = frame.height;
+		const k =
+			frame.fit === "cover"
+				? Math.max(fw / w, fh / h)
+				: Math.min(fw / w, fh / h);
+		const dw = frame.fit === "stretch" ? fw : Math.round(w * k);
+		const dh = frame.fit === "stretch" ? fh : Math.round(h * k);
+		gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+		gl.viewport(0, 0, fw, fh);
+		gl.clearColor(0, 0, 0, 0);
+		gl.clear(gl.COLOR_BUFFER_BIT);
+		gl.viewport(Math.round((fw - dw) / 2), Math.round((fh - dh) / 2), dw, dh);
+		gl.useProgram(this.passthrough.program);
+		gl.bindVertexArray(this.quadVAO);
+		gl.activeTexture(gl.TEXTURE0);
+		gl.bindTexture(gl.TEXTURE_2D, stage.tex);
+		if (this.passthrough.uniforms["u_texture"]) {
+			gl.uniform1i(this.passthrough.uniforms["u_texture"], 0);
+		}
+		if (this.passthrough.uniforms["u_flipY"]) {
+			gl.uniform1f(this.passthrough.uniforms["u_flipY"], 1.0);
+		}
+		gl.drawArrays(gl.TRIANGLES, 0, 6);
+		gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 	}
 
 	get hasAltSource(): boolean {
@@ -3178,6 +3247,12 @@ export class GlRenderer {
 			this.gl.deleteTexture(entry.tex);
 		}
 		this.mediaLayerTextures.clear();
+		for (const fbo of this.framedLayerFBOs.values()) {
+			this.gl.deleteFramebuffer(fbo);
+		}
+		this.framedLayerFBOs.clear();
+		if (this.frameStage) this.gl.deleteTexture(this.frameStage.tex);
+		this.frameStage = null;
 		this.modelLayers.clear();
 		this.modelBoxes.clear();
 		this.meshPass.dispose();
