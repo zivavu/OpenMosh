@@ -41,7 +41,9 @@ async function addSlideshowToEditor(page: Page) {
 	await waitForRender(page);
 	await expect(poolCount(page)).toHaveText(/^1\s+source$/i);
 
-	await page.getByTitle("Add one of your slideshows to the pool").click();
+	await page
+		.getByTitle("Add one of your slideshows or single edits to the pool")
+		.click();
 	await page
 		.getByRole("dialog")
 		.getByRole("button", { name: /2 images/ })

@@ -264,6 +264,12 @@
 		slidesLeftBehind,
 	} from "../../editor/slideshow-source";
 	import {
+		openSavedSingle,
+		singleClipIds,
+		withSingleChain,
+		type SavedSingle,
+	} from "../../editor/single-source";
+	import {
 		loadMediaPool,
 		loadMediaPoolSlides,
 		pruneSequenceMediaThrottled,
@@ -662,8 +668,8 @@
 	const loadWebcamPanel = lazy(() => import("../webcam/WebcamPanel.svelte"));
 	let webcamOpen = $state(false);
 
-	const loadSlideshowPicker = lazy(() => import("./SlideshowPicker.svelte"));
-	let slideshowPickerOpen = $state(false);
+	const loadProjectPicker = lazy(() => import("./ProjectPicker.svelte"));
+	let projectPickerOpen = $state(false);
 	let takeStart = 0;
 
 	function takeTransport(playing: boolean) {
@@ -726,7 +732,7 @@
 		}
 		const cuts = await addSlideshowSource(frozen.slides, frozen.cutFile);
 		if (!cuts) return;
-		slideshowPickerOpen = false;
+		projectPickerOpen = false;
 
 		const start = timelineAxis?.staticTime ?? 0;
 		const end = start + frozen.cutList.duration;
@@ -815,6 +821,116 @@
 		setMediaTimeline(retargetMediaSource(mediaTimeline, sourceId, cuts.id));
 		dropFromPool(sourceId);
 		showToast(`Updated “${old.name}”`, "info");
+	}
+
+	/** A saved single edit on a lane of its own on top, from the playhead: its media
+	 * with its chain held on the clip, and its song under it. */
+	async function addSingleEdit(sessionKey: string, name: string) {
+		const saved = await openSavedSingle(sessionKey).catch(() => null);
+		if (!saved) {
+			showToast("That edit couldn't be opened", "error");
+			return;
+		}
+		if (mediaTimeline.lanes.length >= MAX_MEDIA_LANES) {
+			showToast("No room for the edit: every lane is full", "error");
+			return;
+		}
+		const source = await addSingleSource(saved);
+		if (!source) return;
+		projectPickerOpen = false;
+
+		const start = timelineAxis?.staticTime ?? 0;
+		const span = saved.songSpan;
+		const end =
+			start +
+			(span
+				? span.end - span.start
+				: droppedClipLength(source, sourceRegistry.edits[source.id]));
+		const songId = span && saved.trackId ? trackSourceId(saved.trackId) : null;
+		const audioLanes = mediaTimeline.audioLanes ?? [];
+		const withSong = songId && audioLanes.length < MAX_AUDIO_LANES;
+		if (withSong) await audioBank.settle([songId]);
+		const isSong = !!withSong && !audio.trackFile;
+
+		asOneEdit(() => {
+			if (end > mixer.duration) growProjectTo(end);
+			let next = appendMediaLane(
+				mediaTimeline,
+				source.id,
+				nextLayerZ(layerOrder),
+			);
+			const lane = next.lanes[next.lanes.length - 1]!;
+			const clip = {
+				...withSingleChain(createMediaClip(start, end), saved.effects),
+				single: { sessionKey, name },
+			};
+			next = updateMediaLaneIn(next, lane.id, (l) => ({
+				...l,
+				name,
+				clips: [clip],
+			}));
+			if (withSong) {
+				const songLane = createAudioLane(nextAudioLaneName(audioLanes), isSong);
+				songLane.clips = [createAudioClip(start, end, songId, span!.start)];
+				next = {
+					...next,
+					audioLanes: isSong
+						? [songLane, ...audioLanes]
+						: [...audioLanes, songLane],
+				};
+			}
+			pushMediaHistory();
+			setMediaTimeline(next);
+			selectedMediaClipId = clip.id;
+			selectedMediaClipIds = [clip.id];
+			void revealLaneRow(lane.id);
+		});
+		if (isSong) await loadSong(saved.trackId);
+	}
+
+	/** The edit's file joins the pool listed, with its crop, key and erase unless the
+	 * pool already has its own. */
+	async function addSingleSource(
+		saved: SavedSingle,
+	): Promise<SequenceSource | null> {
+		const id = stableSourceId(saved.file);
+		if (slideOnlyIds.has(id)) {
+			slideOnlyIds = new Set([...slideOnlyIds].filter((s) => s !== id));
+		}
+		await sourceRegistry.add([saved.file]);
+		const source = sourceRegistry.get(id);
+		if (!source) {
+			showToast("That edit's media couldn't be read", "error");
+			return null;
+		}
+		if (saved.sourceEdit && !sourceRegistry.edits[id]) {
+			sourceRegistry.setEdit(id, saved.sourceEdit);
+		}
+		return source;
+	}
+
+	/** Read the single edit again: its clips take its chain and media now, keeping
+	 * their place and what's locked on them. */
+	async function refreshSingleEdit(sessionKey: string) {
+		const saved = await openSavedSingle(sessionKey).catch(() => null);
+		if (!saved) {
+			showToast("Couldn't find that edit to update from", "error");
+			return;
+		}
+		const before = poolNow();
+		const source = await addSingleSource(saved);
+		if (!source) return;
+		const ids = singleClipIds(mediaTimeline, sessionKey);
+		const name = findMediaClip(mediaTimeline, ids[0] ?? null)?.single?.name;
+		asOneEdit(() => {
+			poolHistory.push(before);
+			pushMediaHistory();
+		});
+		const next = updateMediaClips(mediaTimeline, new Set(ids), (clip) =>
+			withSingleChain(clip, saved.effects),
+		);
+		setMediaTimeline(setMediaClipSources(next, ids, source.id));
+		showToast(name ? `Updated “${name}”` : "Updated", "info");
 	}
 
 	/** A pool thumb dropped on the picture: a lane of its own on top, centred where it
@@ -5103,8 +5219,8 @@
 					onAdd={() => sourceInput?.click()}
 					onGenerate={() => (generateOpen = true)}
 					onRecord={() => (webcamOpen = true)}
-					onSlideshow={isSequenceMode
-						? () => (slideshowPickerOpen = true)
+					onProjects={isSequenceMode
+						? () => (projectPickerOpen = true)
 						: undefined}
 					onClear={() => (showClearSourcesConfirm = true)}
 				/>
@@ -5243,7 +5359,7 @@
 		{#if sequenceGridOpen}
 			<SequenceGridView
 				sources={poolSources}
-				onSlideshow={() => (slideshowPickerOpen = true)}
+				onProjects={() => (projectPickerOpen = true)}
 				selectedCount={selectedMediaClipIds.length}
 				selectedSourceId={railSourceId}
 				pendingCount={sourceRegistry.loadingTotal - sourceRegistry.loadingDone}
@@ -6093,6 +6209,7 @@
 					? () => reattachClipsAudio(selectedMediaClipIds)
 					: undefined}
 				onRefreshSlideshow={(id) => void refreshSlideshow(id)}
+				onRefreshSingle={(key) => void refreshSingleEdit(key)}
 			/>
 		{:else if selectedTextClip}
 			<TextClipPanel
@@ -6185,14 +6302,17 @@
 		</div>
 	{/if}
 
-	{#if slideshowPickerOpen}
-		{#await loadSlideshowPicker() then SlideshowPicker}
-			<SlideshowPicker
-				onPick={addSlideshow}
-				onClose={() => (slideshowPickerOpen = false)}
+	{#if projectPickerOpen}
+		{#await loadProjectPicker() then ProjectPicker}
+			<ProjectPicker
+				onPick={(mode, key, name) =>
+					mode === "single"
+						? addSingleEdit(key, name)
+						: addSlideshow(key, name)}
+				onClose={() => (projectPickerOpen = false)}
 			/>
 		{:catch}
-			<LoadFailed onclose={() => (slideshowPickerOpen = false)} />
+			<LoadFailed onclose={() => (projectPickerOpen = false)} />
 		{/await}
 	{/if}
 

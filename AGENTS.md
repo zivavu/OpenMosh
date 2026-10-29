@@ -119,6 +119,9 @@ Outside CI a run reuses whatever already serves its port, so when my dev server 
   file holding its beat times and slide ids, with the slides pooled but hidden. The editor
   never runs slideshow code while playing, and a slideshow clip's auto mosh rolls on the
   slideshow's own cuts, never on the editor's BPM. Update from slideshow freezes it again.
+- A saved single edit enters the editor (`editor/single-source.ts`) as its file in the pool and
+  one static clip holding its chain, with its song on an audio lane; its FX and text lanes stay
+  behind. The clip's `single` link lets Update from single edit pull the chain in again.
 - Every mode's library drawer lists that mode's saved projects only (`lib/editor/recent-edits.ts`,
   shared with the upload screen's Recent list).
 - Editor sound goes through the `lib/mix/` mixer; single mode and slideshow stay on

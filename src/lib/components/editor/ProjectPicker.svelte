@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from "svelte";
-	import { GalleryHorizontal } from "lucide-svelte";
+	import { FolderOpen } from "lucide-svelte";
 	import PanelModal from "../ui/PanelModal.svelte";
 	import { readProjectNames } from "../../editor/project-names";
 	import {
@@ -10,52 +10,68 @@
 		type RecentEdit,
 	} from "../../editor/recent-edits";
 
-	/** The saved slideshows, to bring one into the editor's pool. */
+	type PickedMode = "slideshow" | "single";
+
+	/** The saved slideshows and single edits, to bring one into the editor. */
 	interface Props {
-		/** Settles once the slideshow is in; the list stays up meanwhile. */
-		onPick: (sessionKey: string, name: string) => Promise<void>;
+		/** Settles once it's in; the list stays up meanwhile. */
+		onPick: (
+			mode: PickedMode,
+			sessionKey: string,
+			name: string,
+		) => Promise<void>;
 		onClose: () => void;
 	}
 
 	let { onPick, onClose }: Props = $props();
 
-	let edits = $state<RecentEdit[]>(readCachedRecentEdits("slideshow"));
+	let slideshows = $state<RecentEdit[]>(readCachedRecentEdits("slideshow"));
+	let singles = $state<RecentEdit[]>(readCachedRecentEdits("single"));
 	const names = readProjectNames();
 	let busy = $state(false);
 
 	onMount(() => {
 		void listRecentEdits("slideshow")
-			.then((list) => (edits = list))
+			.then((list) => (slideshows = list))
+			.catch(() => {});
+		void listRecentEdits("single")
+			.then((list) => (singles = list))
 			.catch(() => {});
 	});
 
-	async function pick(edit: RecentEdit) {
+	async function pick(mode: PickedMode, edit: RecentEdit) {
 		if (busy) return;
 		busy = true;
 		try {
-			await onPick(edit.key, recentEditName(edit, names));
+			await onPick(mode, edit.key, recentEditName(edit, names));
 		} finally {
 			busy = false;
 		}
 	}
 </script>
 
-<PanelModal title="Add a slideshow" {busy} {onClose}>
-	{#snippet icon()}<GalleryHorizontal size={12} />{/snippet}
-	{#if edits.length === 0}
+<PanelModal title="Add a project" {busy} {onClose}>
+	{#snippet icon()}<FolderOpen size={12} />{/snippet}
+	{#if slideshows.length === 0 && singles.length === 0}
 		<p class="hint">
-			You have no saved slideshows yet. Make one in Slideshow mode and it will
-			show up here.
+			You have no saved slideshows or single edits yet. Make one in Slideshow or
+			Single mode and it will show up here.
 		</p>
-	{:else}
+	{/if}
+	{#if slideshows.length > 0}
+		<h3 class="section">Slideshows</h3>
 		<p class="hint">
 			It comes in as one clip that cuts on the slideshow's own beat. If you
 			change the slideshow later, pick Update from slideshow on its clip.
 		</p>
 		<ul class="list">
-			{#each edits as edit (edit.key)}
+			{#each slideshows as edit (edit.key)}
 				<li>
-					<button class="row" disabled={busy} onclick={() => pick(edit)}>
+					<button
+						class="row"
+						disabled={busy}
+						onclick={() => pick("slideshow", edit)}
+					>
 						<span class="name">{recentEditName(edit, names)}</span>
 						<span class="count"
 							>{edit.sourceCount}
@@ -66,9 +82,39 @@
 			{/each}
 		</ul>
 	{/if}
+	{#if singles.length > 0}
+		<h3 class="section">Single edits</h3>
+		<p class="hint">
+			It comes in as one clip with the edit's effects, and its song goes on an
+			audio lane under it. If you change the edit later, pick Update from single
+			edit on its clip.
+		</p>
+		<ul class="list">
+			{#each singles as edit (edit.key)}
+				<li>
+					<button
+						class="row"
+						disabled={busy}
+						onclick={() => pick("single", edit)}
+					>
+						<span class="name">{recentEditName(edit, names)}</span>
+					</button>
+				</li>
+			{/each}
+		</ul>
+	{/if}
 </PanelModal>
 
 <style>
+	.section {
+		margin: 0.4rem 0 0;
+		font-size: 0.68rem;
+		font-weight: 600;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--text-2);
+	}
+
 	.hint {
 		margin: 0;
 		font-size: 0.75rem;
