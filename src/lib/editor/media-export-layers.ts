@@ -1,7 +1,7 @@
 import type { GlRenderer } from "../gl/renderer";
 import { parseMesh, type Mesh } from "../mesh";
 import { mediaLayerSides, type ResolvedMediaLayer } from "../media";
-import { throughCuts } from "../media/cut-list";
+import { shownAs, throughCuts } from "../media/cut-list";
 import { SlideVideoSampler } from "../slideshow/video-sampler";
 import type { SequenceSource } from "./sequence-sources.svelte";
 
@@ -78,11 +78,12 @@ export async function createMediaExportLayers(
 			// Run the lanes together rather than in series: each holds its own decoder and texture.
 			await Promise.all(
 				mediaLayerSides(layers).map(async (layer) => {
-					const { src, sourceTime, bounce } = throughCuts(
+					const { src, sourceTime, bounce, frame } = throughCuts(
 						byId.get(layer.sourceId),
 						layer.sourceTime,
 						layer.bounce,
 						(id) => byId.get(id),
+						layer.slideFrame,
 					);
 					if (!src) return;
 
@@ -102,26 +103,27 @@ export async function createMediaExportLayers(
 
 					if (src.kind === "image") {
 						// Same as the preview driver: the renderer collects a lane's texture when it stops resolving.
+						const wanted = shownAs(src.id, frame);
 						if (
-							uploaded.get(layer.key) === src.id &&
+							uploaded.get(layer.key) === wanted &&
 							renderer.hasLayerTexture(layer.key)
 						) {
 							return;
 						}
 						const img = images.get(src.id);
 						if (!img) return;
-						renderer.updateLayerImage(layer.key, img);
-						uploaded.set(layer.key, src.id);
+						renderer.updateLayerImage(layer.key, img, frame);
+						uploaded.set(layer.key, wanted);
 						return;
 					}
 
 					const sampler = await samplerFor(layer.key, src.file, src.id);
 					if (!sampler) return;
 					uploaded.set(layer.key, src.id);
-					const frame = await sampler.at(sourceTime, true, false, bounce);
-					if (frame) {
-						renderer.updateLayerFrame(layer.key, frame);
-						frame.close();
+					const videoFrame = await sampler.at(sourceTime, true, false, bounce);
+					if (videoFrame) {
+						renderer.updateLayerFrame(layer.key, videoFrame, frame);
+						videoFrame.close();
 					}
 				}),
 			);

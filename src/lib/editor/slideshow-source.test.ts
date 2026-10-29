@@ -67,6 +67,23 @@ describe("freezeSavedSlideshow", () => {
 		expect(frozen?.cutList.duration).toBe(30);
 	});
 
+	test("keeps the slideshow's output size and fit", async () => {
+		const key = sessions.newSessionKey("slideshow");
+		await sessions.saveSession(key, "slideshow", [slide("a.png")], {
+			config: {},
+		});
+		const { saveRenderSettings } = await import("./render-settings");
+		saveRenderSettings(key, { width: 1080, height: 1920 });
+		const { updateSettings } = await import("./settings");
+		updateSettings({ sourceFit: "cover" });
+		const frozen = await freezeSavedSlideshow(key, "Show");
+		expect(frozen?.cutList.frame).toEqual({
+			width: 1080,
+			height: 1920,
+			fit: "cover",
+		});
+	});
+
 	test("is null for a slideshow that's gone", async () => {
 		expect(await freezeSavedSlideshow("slideshow:p:gone", "Show")).toBeNull();
 	});

@@ -63,6 +63,8 @@ export interface MediaStyle {
 	/** How much of that margin is a fade rather than a hard edge, 0..1. Measured
 	 * within the margin alone, so it never eats into the media. */
 	bleedFade: number;
+	/** Slideshows only: every slide drawn in the slideshow's frame, as it fit them. */
+	slideFrame: boolean;
 }
 
 /** One span of media on a lane. A chain clip: the effects run on this clip's media
@@ -138,6 +140,7 @@ export const DEFAULT_MEDIA_STYLE: MediaStyle = {
 	blendMode: "normal",
 	bleed: 0.25,
 	bleedFade: 0.5,
+	slideFrame: true,
 };
 
 export const EMPTY_MEDIA_TIMELINE: MediaTimeline = {

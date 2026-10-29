@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { cutAt, parseCutList } from "../media/cut-list";
+import {
+	cutAt,
+	parseCutList,
+	throughCuts,
+	type CutList,
+} from "../media/cut-list";
 import { beatAtTime } from "./beat-clock";
 import { freezeCuts, freezeSlideshow } from "./cut-list";
 import { DEFAULT_SLIDESHOW_CONFIG, type SlideshowConfig } from "./types";
@@ -150,5 +155,24 @@ describe("cut lists", () => {
 		expect(bad({ version: 2 })).toBeNull();
 		expect(parseCutList("{")).toBeNull();
 		expect(parseCutList("null")).toBeNull();
+	});
+
+	test("keep a frame that holds up and drop one that doesn't", () => {
+		const frame = { width: 1080, height: 1920, fit: "cover" as const };
+		const framed = (f: object) =>
+			parseCutList(JSON.stringify({ ...list, frame: f }));
+		expect(framed(frame)?.frame).toEqual(frame);
+		expect(framed({ ...frame, width: 0 })).toEqual(list);
+		expect(framed({ ...frame, height: 1e9 })).toEqual(list);
+		expect(framed({ ...frame, fit: "zoom" })).toEqual(list);
+	});
+
+	test("hand the slide its frame only when the lane keeps it", () => {
+		const frame = { width: 1080, height: 1920, fit: "contain" as const };
+		type Src = { kind: string; id: string; cutList?: CutList };
+		const show: Src = { kind: "cuts", id: "show", cutList: { ...list, frame } };
+		const get = (id: string): Src => ({ kind: "image", id });
+		expect(throughCuts(show, 0, undefined, get).frame).toEqual(frame);
+		expect(throughCuts(show, 0, undefined, get, false).frame).toBeUndefined();
 	});
 });

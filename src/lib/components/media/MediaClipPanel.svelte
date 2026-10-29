@@ -330,6 +330,30 @@
 				</div>
 			{/if}
 
+			{#if source?.kind === "cuts" && source.cutList?.frame}
+				{@const frame = source.cutList.frame}
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<div
+					class="row"
+					title="Draws each slide in the slideshow's frame, fitted the way the slideshow fits it. Off, every slide keeps its own shape. Double-click to reset."
+					ondblclick={(e) => resetStyle(e, "slideFrame")}
+				>
+					<label for="mc-slide-frame">Slideshow frame</label>
+					<Checkbox
+						id="mc-slide-frame"
+						checked={lane.style.slideFrame}
+						onchange={(e) =>
+							setStyle(
+								"slideFrame",
+								(e.currentTarget as HTMLInputElement).checked,
+							)}
+					/>
+					<span class="frame-size"
+						>{frame.width}×{frame.height}, {frame.fit}</span
+					>
+				</div>
+			{/if}
+
 			{#if !source}
 				<p class="warn">
 					This clip has nothing to draw — pick media above, or drag a thumb from
@@ -744,6 +768,11 @@
 		color: var(--text-2);
 		font-size: 0.7rem;
 		cursor: pointer;
+	}
+
+	.frame-size {
+		color: var(--text-3);
+		font-size: 0.7rem;
 	}
 
 	.detach:hover {

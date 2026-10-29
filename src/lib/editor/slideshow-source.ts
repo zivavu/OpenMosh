@@ -2,7 +2,7 @@
  * pool, hidden, and a cut list plays them. */
 
 import { getDecodedAudioBuffer } from "../audio/audio-buffer-cache";
-import { cutListFile, type CutList } from "../media/cut-list";
+import { cutListFile, type CutList, type SlideFrame } from "../media/cut-list";
 import { mediaTimelineSourceIds, type MediaTimeline } from "../media";
 import { freezeSlideshow } from "../slideshow/cut-list";
 import {
@@ -11,6 +11,7 @@ import {
 	type TimelineSegment,
 } from "../slideshow/types";
 import { loadRenderSettings } from "./render-settings";
+import { DEFAULT_SETTINGS, loadSettings } from "./settings";
 import { stableSourceId } from "./sequence-media-store";
 import { openSession } from "./sessions";
 
@@ -40,6 +41,7 @@ export async function freezeSavedSlideshow(
 		sessionKey,
 		slideIds: opened.files.map(stableSourceId),
 		span,
+		frame: savedFrame(sessionKey, opened.trackId) ?? undefined,
 	});
 	if (cutList.cuts.length === 0) return null;
 	return {
@@ -76,6 +78,22 @@ function isSegment(seg: TimelineSegment): boolean {
 		Number.isFinite(seg.startTime) &&
 		typeof seg.subdivision === "number"
 	);
+}
+
+/** The output size the slideshow last had, read as the slideshow reads it, and the
+ * fit it shows slides with. That fit is a setting every slideshow shares. */
+function savedFrame(
+	sessionKey: string,
+	trackId: string | null,
+): SlideFrame | null {
+	const saved =
+		loadRenderSettings(sessionKey) ??
+		(trackId ? loadRenderSettings(`slideshow:${trackId}`) : null);
+	const width = Math.round(saved?.width ?? 0);
+	const height = Math.round(saved?.height ?? 0);
+	if (width <= 0 || height <= 0) return null;
+	const fit = loadSettings().sourceFit ?? DEFAULT_SETTINGS.sourceFit;
+	return { width, height, fit };
 }
 
 /** The whole song, or a songless slideshow's export length. */
