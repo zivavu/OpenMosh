@@ -50,6 +50,8 @@ export interface ProjectPoolEntry {
 	lastModified: number;
 	/** Where the bytes live in the zip. */
 	path: string;
+	/** In the pool only as a slideshow's slide. */
+	slide?: true;
 }
 
 export interface ProjectSongEntry {
@@ -141,6 +143,7 @@ function parsePool(raw: unknown): ProjectPoolEntry[] {
 			lastModified:
 				typeof item.lastModified === "number" ? item.lastModified : 0,
 			path: safePath(item.path, "media/"),
+			...(item.slide === true ? { slide: true as const } : {}),
 		});
 	}
 	return out;

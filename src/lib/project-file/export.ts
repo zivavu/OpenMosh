@@ -18,6 +18,7 @@ import {
 	getSession,
 	getTimeline,
 	loadMediaPool,
+	loadMediaPoolSlides,
 	sessionTimelineKeys,
 	storedMediaToFile,
 } from "../editor/sequence-media-store";
@@ -132,7 +133,7 @@ export interface ProjectContent {
 	state?: unknown;
 	/** The song a single or slideshow edit is keyed to. */
 	trackId?: string | null;
-	media: { id: string; file: File }[];
+	media: { id: string; file: File; slide?: boolean }[];
 	render?: RenderSettings | null;
 }
 
@@ -152,9 +153,12 @@ async function storedMedia(ids: string[]) {
 async function storedEditorProject(projectKey: string) {
 	const entry = (await getTimeline(`seq:${projectKey}`)) as SeqEntry | null;
 	if (!entry) throw new Error("This project has nothing saved yet");
-	const { media, missing } = await storedMedia(
-		(await loadMediaPool(projectKey)) ?? [],
+	const stored = await storedMedia((await loadMediaPool(projectKey)) ?? []);
+	const slides = new Set(await loadMediaPoolSlides(projectKey));
+	const media = stored.media.map((m) =>
+		slides.has(m.id) ? { ...m, slide: true } : m,
 	);
+	const { missing } = stored;
 	const content: ProjectContent = {
 		mode: "sequence",
 		// A project keyed by its song predates the song field; the import gives it a
@@ -241,7 +245,7 @@ export async function buildProjectFile(
 
 	const pool: ProjectPoolEntry[] = [];
 	const mediaParts: ZipEntryInput[] = [];
-	content.media.forEach(({ id, file }, i) => {
+	content.media.forEach(({ id, file, slide }, i) => {
 		const path = `media/${i}.${extOf(file.name, file.type)}`;
 		pool.push({
 			id,
@@ -249,6 +253,7 @@ export async function buildProjectFile(
 			type: file.type,
 			lastModified: file.lastModified,
 			path,
+			...(slide ? { slide: true as const } : {}),
 		});
 		mediaParts.push({ name: path, blob: file });
 	});

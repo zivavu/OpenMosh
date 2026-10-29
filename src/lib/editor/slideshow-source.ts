@@ -117,28 +117,31 @@ interface PoolSource {
 	cutList?: CutList;
 }
 
-/** Slides no clip shows directly: the pool lists their slideshow in their place. */
+/** Slides that came in only with their slideshow and no clip shows directly: the
+ * pool lists the slideshow in their place. Media added on its own stays listed. */
 export function hiddenSlides(
 	sources: PoolSource[],
 	timeline: MediaTimeline | null | undefined,
+	slideOnly: ReadonlySet<string>,
 ): Set<string> {
 	const hidden = new Set<string>();
-	if (!sources.some((s) => s.cutList)) return hidden;
+	if (slideOnly.size === 0 || !sources.some((s) => s.cutList)) return hidden;
 	const used = new Set(mediaTimelineSourceIds(timeline));
 	for (const s of sources) {
 		for (const id of s.cutList?.slides ?? []) {
-			if (!used.has(id)) hidden.add(id);
+			if (slideOnly.has(id) && !used.has(id)) hidden.add(id);
 		}
 	}
 	return hidden;
 }
 
-/** The slides that go with a slideshow taken out of the pool: those no other one
- * plays and no clip shows. */
+/** The slides that go with a slideshow taken out of the pool: those that came in
+ * with it alone, no other one plays and no clip shows. */
 export function slidesLeftBehind(
 	sources: PoolSource[],
 	cutsId: string,
 	timeline: MediaTimeline | null | undefined,
+	slideOnly: ReadonlySet<string>,
 ): string[] {
 	const gone = sources.find((s) => s.id === cutsId)?.cutList;
 	if (!gone) return [];
@@ -147,6 +150,6 @@ export function slidesLeftBehind(
 		sources.flatMap((s) => (s.id === cutsId ? [] : (s.cutList?.slides ?? []))),
 	);
 	return [...new Set(gone.slides)].filter(
-		(id) => !shown.has(id) && !playedElsewhere.has(id),
+		(id) => slideOnly.has(id) && !shown.has(id) && !playedElsewhere.has(id),
 	);
 }

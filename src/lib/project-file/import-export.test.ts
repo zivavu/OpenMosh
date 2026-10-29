@@ -180,6 +180,20 @@ describe("a project file round trip", () => {
 		expect(fakeFonts().map((f) => f.family)).toEqual(["'My Font'"]);
 	});
 
+	test("keeps which pool media came in only as a slideshow's slides", async () => {
+		const key = "proj-slides";
+		const a = await seedMedia("a.png", 100, 1000);
+		const b = await seedMedia("b.png", 200, 2000);
+		await store.saveMediaPool(key, [a.id, b.id], [b.id]);
+		await store.putTimeline(`seq:${key}`, { v: 3, length: 10 });
+		const built = await buildProjectFile(key);
+		await store.clearAllSequenceStores();
+
+		const landed = await openProjectFile(built.blob);
+		expect(await store.loadMediaPool(landed)).toEqual([a.id, b.id]);
+		expect(await store.loadMediaPoolSlides(landed)).toEqual([b.id]);
+	});
+
 	test("keeps a stored file that a different one shares its name, size and date with", async () => {
 		const key = "proj-clash";
 		const a = await seedMedia("a.png", 100, 1000);

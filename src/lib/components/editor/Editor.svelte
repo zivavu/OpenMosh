@@ -265,6 +265,7 @@
 	} from "../../editor/slideshow-source";
 	import {
 		loadMediaPool,
+		loadMediaPoolSlides,
 		pruneSequenceMediaThrottled,
 		isOwnSessionKey,
 		saveMediaPool,
@@ -770,11 +771,16 @@
 		if (isSong) await loadSong(frozen.trackId);
 	}
 
-	/** Slides first, so the slideshow's thumbnail finds them. */
+	/** Slides first, so the slideshow's thumbnail finds them. Media already in the pool
+	 * stays listed; the rest hides behind the slideshow. */
 	async function addSlideshowSource(
 		slides: File[],
 		cutFile: File,
 	): Promise<SequenceSource | null> {
+		const fresh = slides
+			.map(stableSourceId)
+			.filter((id) => !sourceRegistry.get(id));
+		if (fresh.length > 0) slideOnlyIds = new Set([...slideOnlyIds, ...fresh]);
 		await sourceRegistry.add(slides);
 		const missing = slides.filter(
 			(f) => !sourceRegistry.get(stableSourceId(f)),
@@ -1683,6 +1689,7 @@
 			const media = sourceRegistry.sources.map((s) => ({
 				id: s.id,
 				file: s.file,
+				slide: slideOnlyIds.has(s.id),
 			}));
 			return { mode: "sequence", entry, media, render };
 		}
@@ -2024,9 +2031,12 @@
 	});
 
 	let sequenceSources = $derived(sourceRegistry.sources);
+	/** Pool media that came in only as a slideshow's slides. Kept past a removal, so an
+	 * undo brings a slideshow back with its slides still behind it. */
+	let slideOnlyIds = $state<ReadonlySet<string>>(new Set());
 	/** The pool as its views list it: a slideshow's slides stay behind it. */
 	let poolSources = $derived.by(() => {
-		const hidden = hiddenSlides(sequenceSources, mediaTimeline);
+		const hidden = hiddenSlides(sequenceSources, mediaTimeline, slideOnlyIds);
 		return hidden.size === 0
 			? sequenceSources
 			: sequenceSources.filter((s) => !hidden.has(s.id));
@@ -2104,7 +2114,9 @@
 		void (async () => {
 			try {
 				const ids = await loadMediaPool(key);
+				const slides = ids ? await loadMediaPoolSlides(key) : [];
 				if (poolKey !== key) return;
+				if (ids) slideOnlyIds = new Set(slides);
 				// A song with a saved pool swaps to it; one with none keeps what's loaded.
 				if (ids) await sourceRegistry.setPool(ids);
 			} catch {
@@ -2122,6 +2134,7 @@
 		if (!isSequenceMode || !poolReady) return;
 		const key = poolKey;
 		const ids = sourceRegistry.sources.map((s) => s.id);
+		slideOnlyIds;
 		if (!key) return;
 		clearTimeout(poolSaveTimer);
 		untrack(() => saves.schedule("pool"));
@@ -2141,7 +2154,7 @@
 				"pool",
 				holdIfStale(
 					seqKeyPrefix + key,
-					saveMediaPool(key, ids).then(() => true),
+					saveMediaPool(key, ids, [...slideOnlyIds]).then(() => true),
 				),
 			)
 			.then((ok) => {
@@ -2203,6 +2216,13 @@
 		const otherModels = files.filter(isOtherModelFile);
 		files = files.filter((f) => !isOtherModelFile(f));
 		const repeats = alreadyPooled(files);
+		// Added on its own, a slideshow's slide joins the pool's list.
+		const own = files.map(stableSourceId).filter((id) => slideOnlyIds.has(id));
+		if (own.length > 0) {
+			slideOnlyIds = new Set(
+				[...slideOnlyIds].filter((id) => !own.includes(id)),
+			);
+		}
 		// Single mode's pool is session-scoped: no song to persist under.
 		const added = await sourceRegistry.add(files, {
 			persist: isSequenceMode,
@@ -2362,7 +2382,12 @@
 
 	/** A slideshow takes the slides only it played with it. */
 	function dropFromPool(id: string) {
-		const slides = slidesLeftBehind(sequenceSources, id, mediaTimeline);
+		const slides = slidesLeftBehind(
+			sequenceSources,
+			id,
+			mediaTimeline,
+			slideOnlyIds,
+		);
 		for (const gone of [id, ...slides]) {
 			sourceRegistry.remove(gone);
 			setMediaTimeline(detachMediaSource(mediaTimeline, gone));

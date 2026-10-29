@@ -28,6 +28,9 @@ export interface StoredSequenceProxy {
 export interface StoredMediaPool {
 	key: string;
 	sourceIds: string[];
+	/** Pool media that came in only as a slideshow's slides: the pool lists the
+	 * slideshow in their place. */
+	slideIds?: string[];
 	updatedAt: number;
 }
 
@@ -378,8 +381,24 @@ export async function loadMediaPool(key: string): Promise<string[] | null> {
 	return pool ? pool.sourceIds : null;
 }
 
-export function saveMediaPool(key: string, sourceIds: string[]): Promise<void> {
-	return putUnlessStale<StoredMediaPool>(POOL_STORE, { key, sourceIds });
+/** See `StoredMediaPool.slideIds`. */
+export async function loadMediaPoolSlides(key: string): Promise<string[]> {
+	const pool = await readSeen<StoredMediaPool>(POOL_STORE, key);
+	return Array.isArray(pool?.slideIds) ? pool.slideIds : [];
+}
+
+export function saveMediaPool(
+	key: string,
+	sourceIds: string[],
+	slideIds: string[] = [],
+): Promise<void> {
+	const pooled = new Set(sourceIds);
+	const slides = slideIds.filter((id) => pooled.has(id));
+	return putUnlessStale<StoredMediaPool>(POOL_STORE, {
+		key,
+		sourceIds,
+		...(slides.length > 0 ? { slideIds: slides } : {}),
+	});
 }
 
 export function getAllMediaPools(): Promise<StoredMediaPool[]> {
