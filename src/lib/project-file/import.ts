@@ -333,12 +333,15 @@ export async function storeProjectFile(
 		}
 
 		const pool = manifest.pool.map((p) => sourceIds.get(p.id) ?? p.id);
+		const slides = manifest.pool
+			.filter((p) => p.slide)
+			.map((p) => sourceIds.get(p.id) ?? p.id);
 		const entry =
 			manifest.entry && remapProject(manifest.entry, trackIds, sourceIds);
 		if (manifest.mode === "sequence") {
 			const key = `proj-${generateId()}`;
 			await putTimeline(`seq:${key}`, entry);
-			await saveMediaPool(key, pool);
+			await saveMediaPool(key, pool, slides);
 			return key;
 		}
 		const key = newSessionKey(manifest.mode);

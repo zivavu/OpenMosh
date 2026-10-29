@@ -104,17 +104,33 @@ describe("slideshow slides in the pool", () => {
 			lanes: ids.map((id) => ({ id, sourceId: id, clips: [] })),
 		}) as unknown as MediaTimeline;
 
+	const slideOnly = new Set(["a", "b", "c"]);
+
 	test("hide unless a clip shows one", () => {
-		expect([...hiddenSlides(sources, timeline(["show1", "c"]))]).toEqual([
-			"a",
-			"b",
-		]);
+		expect([
+			...hiddenSlides(sources, timeline(["show1", "c"]), slideOnly),
+		]).toEqual(["a", "b"]);
+	});
+
+	test("stay listed when they were in the pool before their slideshow", () => {
+		expect([
+			...hiddenSlides(sources, timeline(["show1"]), new Set(["b"])),
+		]).toEqual(["b"]);
+		expect(hiddenSlides(sources, timeline(["show1"]), new Set()).size).toBe(0);
 	});
 
 	test("leave with their slideshow unless another plays them or a clip shows them", () => {
-		expect(slidesLeftBehind(sources, "show1", timeline(["show1"]))).toEqual([
-			"a",
-		]);
-		expect(slidesLeftBehind(sources, "show1", timeline(["a"]))).toEqual([]);
+		expect(
+			slidesLeftBehind(sources, "show1", timeline(["show1"]), slideOnly),
+		).toEqual(["a"]);
+		expect(
+			slidesLeftBehind(sources, "show1", timeline(["a"]), slideOnly),
+		).toEqual([]);
+	});
+
+	test("never take media that was in the pool on its own", () => {
+		expect(
+			slidesLeftBehind(sources, "show1", timeline(["show1"]), new Set()),
+		).toEqual([]);
 	});
 });
