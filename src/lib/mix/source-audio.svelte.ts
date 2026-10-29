@@ -15,7 +15,7 @@ export const PEAKS_PER_SEC = 100;
 const CONCURRENCY = 2;
 
 type Entry =
-	| { state: "pending"; done: Promise<void> }
+	| { state: "pending"; done: Promise<AudioBuffer | null> }
 	| { state: "ready"; buffer: AudioBuffer; peaks: Float32Array }
 	| { state: "none" };
 
@@ -67,14 +67,17 @@ export class SourceAudioBank {
 
 	#entries = new Map<string, Entry>();
 	#resolve: (sourceId: string) => Promise<File | null> | File | null;
+	#decodeFile: (file: File) => Promise<AudioBuffer | null>;
 	#running = 0;
 	#queue: (() => void)[] = [];
 	#disposed = false;
 
 	constructor(
 		resolve: (sourceId: string) => Promise<File | null> | File | null,
+		decodeFile = decodeSourceAudio,
 	) {
 		this.#resolve = resolve;
+		this.#decodeFile = decodeFile;
 	}
 
 	/** Start decoding whatever of these isn't known yet. */
@@ -96,6 +99,15 @@ export class SourceAudioBank {
 				return e?.state === "pending" ? e.done : undefined;
 			}),
 		);
+	}
+
+	/** The decoded sound, even when a `retain` lets go of it before the caller reads it:
+	 * something just added isn't on the lanes yet, so `retain` doesn't keep it. */
+	async load(id: string): Promise<AudioBuffer | null> {
+		this.ensure([id]);
+		const e = this.#entries.get(id);
+		if (e?.state === "pending") return e.done;
+		return e?.state === "ready" ? e.buffer : null;
 	}
 
 	buffer(id: string): AudioBuffer | null {
@@ -156,14 +168,14 @@ export class SourceAudioBank {
 		else this.#running--;
 	}
 
-	async #decode(id: string): Promise<void> {
+	async #decode(id: string): Promise<AudioBuffer | null> {
 		let entry: Entry | null = { state: "none" };
 		let file: File | null = null;
 		try {
 			file = await this.#resolve(id);
 			// Not there yet (still coming back from storage): asked again later.
 			if (!file) entry = null;
-			const buffer = file ? await decodeSourceAudio(file) : null;
+			const buffer = file ? await this.#decodeFile(file) : null;
 			if (buffer && buffer.length > 0) {
 				entry = { state: "ready", buffer, peaks: computePeaks(buffer) };
 			}
@@ -175,12 +187,13 @@ export class SourceAudioBank {
 		} finally {
 			this.#release();
 		}
-		if (this.#disposed) return;
+		if (this.#disposed) return null;
 		if (!entry) {
 			this.#entries.delete(id);
-			return;
+			return null;
 		}
 		this.#entries.set(id, entry);
 		this.version++;
+		return entry.state === "ready" ? entry.buffer : null;
 	}
 }

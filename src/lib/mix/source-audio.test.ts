@@ -31,3 +31,24 @@ describe("SourceAudioBank.retain", () => {
 		expect(audio.isSilent("busy")).toBe(true);
 	});
 });
+
+describe("SourceAudioBank.load", () => {
+	it("hands over a decode that a retain let go of before it was read", async () => {
+		const sound = {
+			length: 4,
+			numberOfChannels: 1,
+			sampleRate: 4,
+			duration: 1,
+			getChannelData: () => new Float32Array(4),
+		} as unknown as AudioBuffer;
+		const audio = new SourceAudioBank(
+			(id) => new File(["x"], `${id}.mp3`),
+			async () => sound,
+		);
+		const loading = audio.load("dropped");
+		while (!audio.hasAudio("dropped")) await Promise.resolve();
+		// Not on a lane yet, so the mix effect's retain doesn't keep it.
+		audio.retain(new Set());
+		expect(await loading).toBe(sound);
+	});
+});

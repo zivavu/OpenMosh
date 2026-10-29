@@ -2805,8 +2805,7 @@
 			const sourceId = trackSourceId(track.id);
 			const isSong = !audio.trackFile;
 			if (isSong) setSong(f, track.id);
-			await audioBank.settle([sourceId]);
-			const buffer = audioBank.buffer(sourceId);
+			const buffer = await audioBank.load(sourceId);
 			if (!buffer) {
 				showToast(`"${f.name}" has no sound that could be decoded`, "error");
 				if (isSong) dropSong();
@@ -2905,8 +2904,7 @@
 				),
 			});
 		} else {
-			await audioBank.settle([sourceId]);
-			const length = decodedLength(sourceId);
+			const length = (await audioBank.load(sourceId))?.duration ?? null;
 			if (length === null) {
 				showToast("That track has no sound that could be decoded", "error");
 				return;
@@ -2964,8 +2962,7 @@
 			});
 			return;
 		}
-		void audioBank.settle([to]).then(() => {
-			const buffer = audioBank.buffer(to);
+		void audioBank.load(to).then((buffer) => {
 			if (buffer && currentTrackId === trackId) {
 				placeAudio(to, buffer.duration, 0, true);
 			}
@@ -3332,10 +3329,7 @@
 
 	const bpmDetection = new BpmDetection({
 		source: () => bpmPoolSource ?? audio.trackFile,
-		decode: async (id) => {
-			await audioBank.settle([id]);
-			return audioBank.buffer(id);
-		},
+		decode: (id) => audioBank.load(id),
 		bpm: () => sequenceBpm,
 		onDetected: setSequenceBpmDetected,
 	});
