@@ -222,6 +222,8 @@
 		addClip,
 		appendMediaLane,
 		applyBpmToMediaClips,
+		autoOnSlideshow,
+		autoOnSlideshows,
 		clearMediaClips,
 		dealMediaClipSources,
 		createMediaChainSource,
@@ -255,10 +257,7 @@
 		type SourceEdit,
 		createSourceEdit,
 	} from "../../media";
-	import {
-		chainClipMoshSnapshot,
-		withChainMode,
-	} from "../../editor/chain-clip";
+	import { chainClipMoshSnapshot } from "../../editor/chain-clip";
 	import {
 		freezeSavedSlideshow,
 		hiddenSlides,
@@ -748,7 +747,7 @@
 			next = updateMediaLaneIn(next, lane.id, (l) => ({
 				...l,
 				name,
-				clips: [frozen.rolls ? withChainMode(clip, "interval") : clip],
+				clips: [autoOnSlideshow(clip, true)],
 			}));
 			if (withSong) {
 				const songLane = createAudioLane(nextAudioLaneName(audioLanes), isSong);
@@ -835,7 +834,10 @@
 			droppedClipLength(source, sourceRegistry.edits[source.id]),
 		);
 		if (!span) return;
-		const clip = createMediaClip(span.start, span.end);
+		const clip = autoOnSlideshow(
+			createMediaClip(span.start, span.end),
+			source.kind === "cuts",
+		);
 		pushMediaHistory();
 		setMediaTimeline(
 			updateMediaLaneIn(next, lane.id, (l) => ({
@@ -4582,6 +4584,8 @@
 	// Fill, mosh, clear and static/auto on a media clip: the same gestures an fx clip takes.
 	const isModelSource = (id: string) =>
 		sourceRegistry.get(id)?.kind === "model";
+	const isSlideshowSource = (id: string) =>
+		sourceRegistry.get(id)?.kind === "cuts";
 	const previewMediaChains = createMediaChainSource(getMoshOptions, {
 		isModel: isModelSource,
 		cutList: (id) => sourceRegistry.get(id)?.cutList,
@@ -4707,7 +4711,11 @@
 		if (selectedMediaClipIds.length === 0) return;
 		pushMediaHistory();
 		setMediaTimeline(
-			setMediaClipSources(mediaTimeline, selectedMediaClipIds, sourceId),
+			autoOnSlideshows(
+				setMediaClipSources(mediaTimeline, selectedMediaClipIds, sourceId),
+				selectedMediaClipIds,
+				isSlideshowSource,
+			),
 		);
 	}
 
@@ -4721,7 +4729,13 @@
 				: mediaTimeline.lanes.flatMap((l) => l.clips.map((c) => c.id));
 		if (ids.length === 0) return;
 		pushMediaHistory();
-		setMediaTimeline(dealMediaClipSources(mediaTimeline, new Set(ids), pool));
+		setMediaTimeline(
+			autoOnSlideshows(
+				dealMediaClipSources(mediaTimeline, new Set(ids), pool),
+				ids,
+				isSlideshowSource,
+			),
+		);
 	}
 
 	function toggleTextTimeline() {

@@ -23,8 +23,6 @@ export interface FrozenSlideshow {
 	cutList: CutList;
 	/** The song it was cut to, which the editor lays on an audio lane. */
 	trackId: string | null;
-	/** "consistent" never rolls, so its clip starts static. */
-	rolls: boolean;
 }
 
 /** Null when the slideshow, or every one of its slides, is gone. */
@@ -49,7 +47,6 @@ export async function freezeSavedSlideshow(
 		cutFile: cutListFile(cutList),
 		cutList,
 		trackId: opened.trackId,
-		rolls: config.moshMode !== "consistent",
 	};
 }
 
@@ -65,7 +62,6 @@ function savedConfig(state: unknown): SlideshowConfig {
 		bpm: number(raw.bpm, DEFAULT_SLIDESHOW_CONFIG.bpm),
 		beatOffset: number(raw.beatOffset, 0),
 		subdivision: raw.subdivision ?? DEFAULT_SLIDESHOW_CONFIG.subdivision,
-		moshMode: raw.moshMode ?? DEFAULT_SLIDESHOW_CONFIG.moshMode,
 		segments: Array.isArray(raw.segments) ? raw.segments.filter(isSegment) : [],
 		span:
 			span && span.end > span.start

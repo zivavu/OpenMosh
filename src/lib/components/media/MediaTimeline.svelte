@@ -18,6 +18,8 @@
 	import { ClipLaneController } from "../../timeline/clip-lane-controller.svelte";
 	import {
 		addClip,
+		autoOnSlideshow,
+		autoOnSlideshows,
 		clipSourceId,
 		copyMediaClips,
 		createMediaClip,
@@ -136,6 +138,8 @@
 	/** Media that plays out over time and wraps: a video, or a slideshow's cuts. */
 	const isTimed = (src: SequenceSource) =>
 		src.kind === "video" || src.kind === "cuts";
+	const isSlideshow = (id: string | null | undefined) =>
+		!!id && sources.find((s) => s.id === id)?.kind === "cuts";
 	const slideThumb = (id: string) =>
 		sources.find((s) => s.id === id)?.thumbUrl ?? null;
 
@@ -164,21 +168,18 @@
 			},
 			createClip: (start, end, lane) => {
 				const sourceId = newClipSourceId(lane, start);
-				return createMediaClip(
-					start,
-					end,
-					0,
-					sourceId && sourceId !== lane.sourceId ? sourceId : undefined,
+				return autoOnSlideshow(
+					createMediaClip(
+						start,
+						end,
+						0,
+						sourceId && sourceId !== lane.sourceId ? sourceId : undefined,
+					),
+					isSlideshow(sourceId),
 				);
 			},
 			splitClipAt: (lane, at) =>
-				splitMediaClipAt(
-					lane,
-					at,
-					edits,
-					sourceDurations,
-					(id) => sources.find((s) => s.id === id)?.kind === "cuts",
-				),
+				splitMediaClipAt(lane, at, edits, sourceDurations, isSlideshow),
 			clipSpanAt: (lane, time) =>
 				clipSpanAt(lane, time, newClipSourceId(lane, time)),
 			// A clip keeps showing what it showed: one that inherited its old lane's source
@@ -414,17 +415,26 @@
 			);
 			if (!changes) return;
 			onBeforeEdit?.();
-			onChange(setMediaClipSources(timeline, [...ids], sourceId));
+			onChange(
+				autoOnSlideshows(
+					setMediaClipSources(timeline, [...ids], sourceId),
+					ids,
+					isSlideshow,
+				),
+			);
 			return;
 		}
 		if (!ghost || ghost.laneId !== laneId) return;
 		// A lane with no media of its own takes the drop as its default too.
 		const inherits = lane.sourceId === null || lane.sourceId === sourceId;
-		const clip = createMediaClip(
-			ghost.start,
-			ghost.end,
-			0,
-			inherits ? undefined : sourceId,
+		const clip = autoOnSlideshow(
+			createMediaClip(
+				ghost.start,
+				ghost.end,
+				0,
+				inherits ? undefined : sourceId,
+			),
+			isSlideshow(sourceId),
 		);
 		onBeforeEdit?.();
 		onChange(

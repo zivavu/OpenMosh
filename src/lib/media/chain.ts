@@ -14,8 +14,8 @@ import type { MoshSnapshot } from "../editor/mosh-history";
 import { beatsToSeconds, type ChainMode } from "../editor/sequence";
 import type { Preset } from "../effects";
 import { shuffleInPlace } from "../utils";
-import { clipMoshOptions, updateMediaClips } from "./resolve";
-import type { MediaTimeline } from "./types";
+import { clipMoshOptions, clipSourceId, updateMediaClips } from "./resolve";
+import type { MediaClip, MediaTimeline } from "./types";
 
 export function setMediaClipsMode(
 	timeline: MediaTimeline,
@@ -27,6 +27,28 @@ export function setMediaClipsMode(
 	return updateMediaClips(timeline, clipIds, (clip) =>
 		withChainMode(clip, mode, intervalSec, intervalBeats),
 	);
+}
+
+/** A clean clip that comes onto a slideshow rolls a mosh on each of its cuts. One
+ * that already carries a chain keeps it. */
+export function autoOnSlideshow(
+	clip: MediaClip,
+	isSlideshow: boolean,
+): MediaClip {
+	if (!isSlideshow || clip.mode === "interval") return clip;
+	if (clip.effects.some((e) => e.enabled)) return clip;
+	return withChainMode(clip, "interval");
+}
+
+export function autoOnSlideshows(
+	timeline: MediaTimeline,
+	clipIds: Iterable<string>,
+	isSlideshow: (sourceId: string) => boolean,
+): MediaTimeline {
+	return updateMediaClips(timeline, new Set(clipIds), (clip, lane) => {
+		const sourceId = clipSourceId(lane, clip);
+		return autoOnSlideshow(clip, !!sourceId && isSlideshow(sourceId));
+	});
 }
 
 export function rollMediaClips(
