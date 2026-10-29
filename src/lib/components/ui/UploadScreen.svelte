@@ -777,7 +777,7 @@
 						style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none"
 					/>
 					<Upload size={16} />
-					{isMultiMode ? "Load files" : "Load a file"}
+					{isMultiMode ? "Load files" : "Load file"}
 				</label>
 				<button
 					class="load-btn alt-btn"
