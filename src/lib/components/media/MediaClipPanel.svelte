@@ -2,6 +2,7 @@
 	import LoadFailed from "../ui/LoadFailed.svelte";
 	import { SlidersHorizontal } from "lucide-svelte";
 	import {
+		autoOnSlideshow,
 		clipSourceId,
 		DEFAULT_MEDIA_STYLE,
 		DEFAULT_SOURCE_EDIT,
@@ -169,10 +170,13 @@
 	function setClipSource(id: string) {
 		if (!clip || !lane) return;
 		onBeforeEdit?.();
-		onClipChange({
-			...clip,
-			sourceId: id && id !== lane.sourceId ? id : undefined,
-		});
+		const shown = sources.find((s) => s.id === (id || lane.sourceId));
+		onClipChange(
+			autoOnSlideshow(
+				{ ...clip, sourceId: id && id !== lane.sourceId ? id : undefined },
+				shown?.kind === "cuts",
+			),
+		);
 	}
 
 	/** Zero means no ramp at all, which the clip carries as an absent field. */

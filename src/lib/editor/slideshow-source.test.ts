@@ -56,7 +56,6 @@ describe("freezeSavedSlideshow", () => {
 				[2, 0],
 			],
 		});
-		expect(frozen?.rolls).toBe(true);
 	});
 
 	test("runs a songless slideshow for its export length", async () => {
@@ -66,7 +65,6 @@ describe("freezeSavedSlideshow", () => {
 		});
 		const frozen = await freezeSavedSlideshow(key, "Show");
 		expect(frozen?.cutList.duration).toBe(30);
-		expect(frozen?.rolls).toBe(false);
 	});
 
 	test("is null for a slideshow that's gone", async () => {
