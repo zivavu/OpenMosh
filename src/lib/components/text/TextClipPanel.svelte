@@ -355,7 +355,7 @@
 						id="tc-outline-w"
 						value={lane.style.outlineWidth}
 						min={0}
-						max={8}
+						max={20}
 						step={0.5}
 						oninput={(v) => setStyle("outlineWidth", v, `tc-ow-${clip.id}`)}
 					/>
