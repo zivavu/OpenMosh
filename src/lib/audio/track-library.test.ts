@@ -18,4 +18,13 @@ describe("addTrack", () => {
 		expect(other.id).not.toBe(first.id);
 		expect(await other.blob.text()).toBe("wxyz");
 	});
+
+	test("marks a mic take, and only a take", async () => {
+		const take = await addTrack(new File(["abcd"], "Mic take.wav"), {
+			take: true,
+		});
+		const song = await addTrack(new File(["wxyz"], "song.wav"));
+		expect(take.take).toBe(true);
+		expect(song.take).toBeUndefined();
+	});
 });

@@ -3058,12 +3058,12 @@
 		else void micRecorder.start(laneId, timelineAxis?.staticTime ?? 0);
 	}
 
-	/** A finished take joins the library like a dropped file, and covers what was on its
-	 * lane from where it began. */
+	/** A finished take is stored beside the songs, off the library's list, and covers
+	 * what was on its lane from where it began. */
 	async function placeMicTake({ laneId, file, start, length }: MicTakeResult) {
 		let track;
 		try {
-			track = await addTrack(file);
+			track = await addTrack(file, { take: true });
 		} catch (e) {
 			console.error("Failed to store take:", e);
 			showToast("Couldn't store the take. Storage refused the write.", "error");

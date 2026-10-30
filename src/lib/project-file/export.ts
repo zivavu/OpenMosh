@@ -277,6 +277,7 @@ export async function buildProjectFile(
 			type: track.blob.type,
 			path,
 			...(normalized.has(trackId) ? { normalized: true as const } : {}),
+			...(track.take ? { take: true as const } : {}),
 		});
 		songParts.push({ name: path, blob: track.blob });
 	}

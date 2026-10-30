@@ -48,9 +48,31 @@ async function seedMedia(name: string, size: number, mtime?: number) {
 	return { id, file };
 }
 
-async function seedTrack(name: string, size: number) {
+async function seedTrack(name: string, size: number, take = false) {
 	const file = new File([bytes(size)], name, { type: "audio/wav" });
-	return (await tracks.addTrack(file)).id;
+	return (await tracks.addTrack(file, { take })).id;
+}
+
+/** A saved Editor timeline whose one audio lane plays these library tracks. */
+function laneEntry(...trackIds: string[]) {
+	return {
+		v: 3,
+		media: {
+			lanes: [],
+			audioLanes: [
+				{
+					id: "a1",
+					clips: trackIds.map((id, i) => ({
+						id: `c${i}`,
+						start: i,
+						end: i + 1,
+						sourceStart: 0,
+						sourceId: `track:${id}`,
+					})),
+				},
+			],
+		},
+	};
 }
 
 async function idsInStore(): Promise<string[]> {
@@ -129,6 +151,16 @@ describe("loadStorageInventory", () => {
 		expect(inv.unassigned).toEqual([]);
 		expect(inv.totals.media).toBe(600);
 		expect(inv.totals.tracks).toBe(1000);
+	});
+
+	test("a mic take is no project of its own, though its bytes count", async () => {
+		const take = await seedTrack("Mic take.wav", 40, true);
+		await store.saveMediaPool("proj-1", []);
+		await store.putTimeline("seq:proj-1", laneEntry(take));
+		const inv = await loadStorageInventory();
+		expect(inv.projects).toHaveLength(0);
+		expect(inv.looseEdits.map((e) => e.key)).toEqual(["proj-1"]);
+		expect(inv.totals.tracks).toBe(40);
 	});
 
 	test("a song with no work is still a project, with no modes", async () => {
@@ -598,6 +630,22 @@ describe("keepStorage", () => {
 });
 
 describe("deleteRecentEdit", () => {
+	test("an Editor project's mic takes go with it, unless another project plays them", async () => {
+		const song = await seedTrack("song.wav", 10);
+		const own = await seedTrack("Mic take 1.wav", 11, true);
+		const shared = await seedTrack("Mic take 2.wav", 12, true);
+		await store.saveMediaPool("proj-1", []);
+		await store.putTimeline("seq:proj-1", laneEntry(song, own, shared));
+		await store.saveMediaPool("proj-2", []);
+		await store.putTimeline("seq:proj-2", laneEntry(shared));
+
+		await deleteRecentEdit("sequence", "proj-1");
+
+		expect(await tracks.getTrack(own)).toBeNull();
+		expect(await tracks.getTrack(shared)).not.toBeNull();
+		expect(await tracks.getTrack(song)).not.toBeNull();
+	});
+
 	test("an Editor project that plays a song goes, the song and its other work stay", async () => {
 		const song = await seedTrack("song.wav", 10);
 		const a = await seedMedia("a.png", 5);

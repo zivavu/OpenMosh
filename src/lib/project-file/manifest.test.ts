@@ -51,6 +51,17 @@ describe("parseManifest", () => {
 		expect(m.fonts[0].url).toBe("https://fonts.google.com/x");
 	});
 
+	it("keeps a song's take mark, and only a true one", () => {
+		const raw = validManifest();
+		const songs = [
+			{ ...raw.songs[0], take: true },
+			{ ...raw.songs[0], trackId: "song-2", take: "yes" },
+		];
+		const m = parseManifest({ ...raw, songs });
+		expect(m.songs[0].take).toBe(true);
+		expect(m.songs[1].take).toBeUndefined();
+	});
+
 	it("keeps only usable render settings", () => {
 		const m = parseManifest({
 			...validManifest(),

@@ -251,7 +251,7 @@
 
 	onMount(async () => {
 		try {
-			const loaded = await getAllTracks();
+			const loaded = (await getAllTracks()).filter((t) => !t.take);
 			tracks = loaded.sort((a, b) => a.addedAt - b.addedAt);
 		} catch (e) {
 			console.error("Failed to load tracks:", e);
