@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Activity, Metronome, Repeat } from "lucide-svelte";
+	import { Activity, Metronome, Mic, Repeat } from "lucide-svelte";
 	import { getTimelineStack } from "../../editor/timeline-stack.svelte";
 	import { latestCopy, markCopied } from "../../editor/copy-stamp";
 	import {
@@ -72,6 +72,12 @@
 			trackId: string,
 			target: { clipIds: string[] } | { laneId: string; time: number },
 		) => void;
+		/** Starts a mic take on the lane, or stops the one running. */
+		onRecord?: (laneId: string) => void;
+		/** The take running, up to where it has got. */
+		recording?: { laneId: string; start: number; end: number } | null;
+		/** The lane whose mic is being asked for. */
+		armingLaneId?: string | null;
 	}
 
 	let {
@@ -95,6 +101,9 @@
 		onToggleFold,
 		trackLength = () => null,
 		onDropTrack,
+		onRecord,
+		recording = null,
+		armingLaneId = null,
 	}: Props = $props();
 
 	const stack = getTimelineStack();
@@ -364,6 +373,22 @@
 				onRename={(name) => ctrl.setLane(lane.id, "name", name)}
 				onDelete={() => ctrl.requestDeleteLane(lane)}
 			>
+				{#if onRecord}
+					{@const live =
+						recording?.laneId === lane.id || armingLaneId === lane.id}
+					<button
+						class="lane-record"
+						class:on={live}
+						aria-pressed={live}
+						disabled={!live && (!!recording || !!armingLaneId)}
+						title={live
+							? "Stop recording"
+							: "Record your microphone onto this lane from the playhead while the project plays. Wear headphones to keep the playback out of the take."}
+						onclick={() => onRecord?.(lane.id)}
+					>
+						<Mic size={12} />
+					</button>
+				{/if}
 				{#snippet trailing()}
 					<button
 						class="lane-drives"
@@ -437,6 +462,12 @@
 						</div>
 					{/if}
 				{/each}
+
+				{#if recording?.laneId === lane.id}
+					{const left = $derived(vp.toPct(recording.start))}
+					{const width = $derived(Math.max(0, vp.toPct(recording.end) - left))}
+					<div class="clip take" style="left: {left}%; width: {width}%"></div>
+				{/if}
 
 				{#if dropGhost?.laneId === lane.id}
 					{const left = $derived(vp.toPct(dropGhost.start))}
@@ -562,6 +593,32 @@
 		border-color: var(--mosh);
 		background: rgba(0, 0, 0, 0.35);
 		pointer-events: none;
+	}
+
+	.clip.take {
+		border-color: var(--rec);
+		background: color-mix(in srgb, var(--rec) 22%, transparent);
+		pointer-events: none;
+	}
+
+	.lane-record:hover:not(:disabled) {
+		color: var(--text);
+	}
+
+	.lane-record:disabled {
+		opacity: 0.4;
+		cursor: default;
+	}
+
+	.lane-record.on {
+		color: var(--rec);
+		animation: record-pulse 1s ease-in-out infinite;
+	}
+
+	@keyframes record-pulse {
+		50% {
+			opacity: 0.45;
+		}
 	}
 
 	.clip.drop-target {

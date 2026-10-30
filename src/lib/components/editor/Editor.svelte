@@ -45,6 +45,10 @@
 	} from "../../editor/render-settings";
 	import { addTrack, getTrack, trackToFile } from "../../audio/track-library";
 	import { SequenceMixer } from "../../mix/mixer.svelte";
+	import {
+		MicRecorder,
+		type MicTakeResult,
+	} from "../../mix/mic-recorder.svelte";
 	import { SourceAudioBank } from "../../mix/source-audio.svelte";
 	import {
 		planMix,
@@ -64,6 +68,7 @@
 		createAudioLane,
 		MAX_AUDIO_LANES,
 		nextAudioLaneName,
+		punchInAudioClip,
 		removeAudioSource,
 		removeAudioSourceIn,
 		retargetAudioSource,
@@ -1094,7 +1099,13 @@
 		initialOutputVolume: saved.outputVolume ?? DEFAULT_SETTINGS.outputVolume,
 		initialLoop: saved.loopAudio ?? DEFAULT_SETTINGS.loopAudio,
 	});
+	const micRecorder = new MicRecorder(
+		mixer,
+		(take) => void placeMicTake(take),
+		(message) => showToast(message, "error"),
+	);
 	$effect(() => () => {
+		micRecorder.dispose();
 		mixer.dispose();
 		audioBank.dispose();
 	});
@@ -3040,6 +3051,46 @@
 			selectedAudioClipIds = [clip.id];
 		}
 		if (!audio.trackFile) await loadSong(trackId);
+	}
+
+	function toggleMicTake(laneId: string) {
+		if (micRecorder.take || micRecorder.arming) micRecorder.stop();
+		else void micRecorder.start(laneId, timelineAxis?.staticTime ?? 0);
+	}
+
+	/** A finished take joins the library like a dropped file, and covers what was on its
+	 * lane from where it began. */
+	async function placeMicTake({ laneId, file, start, length }: MicTakeResult) {
+		let track;
+		try {
+			track = await addTrack(file);
+		} catch (e) {
+			console.error("Failed to store take:", e);
+			showToast("Couldn't store the take. Storage refused the write.", "error");
+			return;
+		}
+		const sourceId = trackSourceId(track.id);
+		await audioBank.load(sourceId);
+		const end = Math.min(mixer.duration, start + length);
+		if (end - start < MIN_CLIP_LENGTH) return;
+		const lane = (mediaTimeline.audioLanes ?? []).find((l) => l.id === laneId);
+		if (!lane) {
+			placeAudio(sourceId, length, start, false);
+			return;
+		}
+		const clip = createAudioClip(start, end, sourceId);
+		pushMediaHistory();
+		setMediaTimeline({
+			...mediaTimeline,
+			audioLanes: (mediaTimeline.audioLanes ?? []).map((l) =>
+				l.id === laneId
+					? punchInAudioClip(l, clip, sourceRegistry.edits, videoLengths)
+					: l,
+			),
+		});
+		selectedAudioClipId = clip.id;
+		selectedAudioClipIds = [clip.id];
+		showToast(`Take on ${lane.name}`, "info");
 	}
 
 	/** A lane with no sound yet, for clips pasted or dragged in from another. Goes
@@ -5858,7 +5909,7 @@
 							class="tl-tool-btn"
 							disabled={(mediaTimeline.audioLanes?.length ?? 0) >=
 								MAX_AUDIO_LANES}
-							title="Add an empty audio lane, to paste or drag clips onto from another"
+							title="Add an empty audio lane to record your microphone onto, or to paste or drag clips onto"
 							onclick={addEmptyAudioLane}
 						>
 							<Plus size={12} /> Audio lane
@@ -6023,6 +6074,12 @@
 							onToggleFold={laneFolds.toggle}
 							trackLength={decodedLength}
 							onDropTrack={dropTrack}
+							onRecord={toggleMicTake}
+							recording={micRecorder.take && {
+								...micRecorder.take,
+								end: mixer.currentTime,
+							}}
+							armingLaneId={micRecorder.arming}
 						/>
 					{/if}
 				</div>

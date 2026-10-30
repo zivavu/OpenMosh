@@ -5,6 +5,7 @@ import {
 	createAudioClip,
 	createAudioLane,
 	normalizeAudioLanes,
+	punchInAudioClip,
 	removeAudioSource,
 	removeAudioSourceIn,
 	retargetAudioSource,
@@ -151,5 +152,30 @@ describe("removeAudioSourceIn", () => {
 		lane.clips = [createAudioClip(6, 8, "vid")];
 		const lanes = [lane];
 		expect(removeAudioSourceIn(lanes, "vid", 2, 6)).toBe(lanes);
+	});
+});
+
+describe("punchInAudioClip", () => {
+	it("replaces what the take covers and cuts the clips at its edges", () => {
+		const lane = createAudioLane("Voice");
+		const a = createAudioClip(0, 4, trackSourceId("a"));
+		const b = createAudioClip(5, 6, trackSourceId("b"));
+		const c = createAudioClip(7, 12, trackSourceId("c"), 1);
+		lane.clips = [a, b, c];
+		const take = createAudioClip(3, 9, trackSourceId("take"));
+		const clips = punchInAudioClip(lane, take).clips;
+		expect(clips.map((x) => [x.sourceId, x.start, x.end])).toEqual([
+			[trackSourceId("a"), 0, 3],
+			[trackSourceId("take"), 3, 9],
+			[trackSourceId("c"), 9, 12],
+		]);
+		expect(clips[2].sourceStart).toBe(3);
+	});
+
+	it("lands on an empty lane as it is", () => {
+		const take = createAudioClip(1, 2, trackSourceId("take"));
+		expect(punchInAudioClip(createAudioLane("Voice"), take).clips).toEqual([
+			take,
+		]);
 	});
 });

@@ -133,6 +133,7 @@
 	.tl-gutter :global(.lane-solo),
 	.tl-gutter :global(.lane-sound),
 	.tl-gutter :global(.lane-copy),
+	.tl-gutter :global(.lane-record),
 	.tl-gutter :global(.lane-drives) {
 		display: inline-flex;
 		align-items: center;
