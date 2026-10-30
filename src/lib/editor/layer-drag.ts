@@ -1,4 +1,5 @@
 import type { MediaStyle } from "../media/types";
+import { TEXT_SIZE_MAX, TEXT_SIZE_MIN } from "../text/types";
 
 /** The slider's floor, so a handle can't drag a layer past the panel's reach. */
 export const MIN_SCALE = 0.05;
@@ -102,4 +103,23 @@ export function rotateFromHandle(
 	}
 	deg = ((((deg + 180) % 360) + 360) % 360) - 180;
 	return deg === -180 ? 180 : deg;
+}
+
+type Point = { x: number; y: number };
+
+/** A text layer's size after dragging a handle of its box. Text grows about its
+ * anchor, so the size follows the cursor along the line from the anchor through the
+ * handle as it sat at the press. */
+export function textSizeFromHandle(
+	fromSize: number,
+	anchor: Point,
+	handle: Point,
+	pointer: Point,
+): number {
+	const vx = handle.x - anchor.x;
+	const vy = handle.y - anchor.y;
+	const p =
+		((pointer.x - anchor.x) * vx + (pointer.y - anchor.y) * vy) /
+		(vx * vx + vy * vy);
+	return Math.min(TEXT_SIZE_MAX, Math.max(TEXT_SIZE_MIN, fromSize * p));
 }

@@ -6,8 +6,10 @@ import {
 	MIN_SCALE,
 	rotateFromHandle,
 	scaleFromHandle,
+	textSizeFromHandle,
 	type HandleFrame,
 } from "./layer-drag";
+import { TEXT_SIZE_MAX, TEXT_SIZE_MIN } from "../text/types";
 
 const FW = 400;
 const FH = 300;
@@ -181,5 +183,39 @@ describe("rotateFromHandle", () => {
 	test("snaps with Shift", () => {
 		expect(rotateFromHandle(FROM, g, 300, 140, true)).toBe(90);
 		expect(rotateFromHandle(FROM, g, 300, 130, true)).toBe(75);
+	});
+});
+
+describe("textSizeFromHandle", () => {
+	const anchor = { x: 200, y: 150 };
+
+	test("a corner dragged twice as far from the anchor doubles the size", () => {
+		const size = textSizeFromHandle(
+			0.1,
+			anchor,
+			{ x: 250, y: 170 },
+			{ x: 300, y: 190 },
+		);
+		expect(size).toBeCloseTo(0.2);
+	});
+
+	test("a side follows only the cursor's reach along it", () => {
+		const size = textSizeFromHandle(
+			0.1,
+			anchor,
+			{ x: 250, y: 150 },
+			{ x: 225, y: 40 },
+		);
+		expect(size).toBeCloseTo(0.05);
+	});
+
+	test("keeps to the Size slider's range", () => {
+		const handle = { x: 250, y: 150 };
+		expect(textSizeFromHandle(0.1, anchor, handle, { x: 1000, y: 150 })).toBe(
+			TEXT_SIZE_MAX,
+		);
+		expect(textSizeFromHandle(0.1, anchor, handle, { x: 100, y: 150 })).toBe(
+			TEXT_SIZE_MIN,
+		);
 	});
 });

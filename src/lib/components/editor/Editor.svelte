@@ -5467,6 +5467,10 @@
 					if (clip)
 						textTimeline = replaceTextClip(textTimeline, { ...clip, x, y });
 				}}
+				onTextResize={(clipId, size) => {
+					const lane = findTextClipLane(textTimeline, clipId);
+					if (lane) updateTextLane({ ...lane, style: { ...lane.style, size } });
+				}}
 				onLayerStyleChange={(id, style) =>
 					(mediaTimeline = updateMediaLaneIn(mediaTimeline, id, (l) => ({
 						...l,

@@ -118,6 +118,10 @@ export interface TextTimeline {
 	lyricsTagged?: true;
 }
 
+/** The Size slider's range, which stretching the text on the preview keeps to too. */
+export const TEXT_SIZE_MIN = 0.02;
+export const TEXT_SIZE_MAX = 0.5;
+
 export const DEFAULT_TEXT_STYLE: TextStyle = {
 	x: 0.5,
 	y: 0.5,
