@@ -51,6 +51,8 @@ export {
 	MIN_CLIP_LENGTH,
 	normalizeTextTimeline,
 	splitTextClipAt,
+	TEXT_SIZE_MAX,
+	TEXT_SIZE_MIN,
 	textClipPosition,
 } from "./types";
 

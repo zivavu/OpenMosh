@@ -27,6 +27,7 @@
 		clampMove,
 		rotateFromHandle,
 		scaleFromHandle,
+		textSizeFromHandle,
 	} from "../../editor/layer-drag";
 	import { frameLooksDead } from "../../editor/frame-check";
 	import { isTextEntryTarget } from "../../editor/shortcut-target";
@@ -135,6 +136,8 @@
 		/** Dragging a text layer moves the anchor of the clip on screen, live. */
 		onTextMove?: ((clipId: string, x: number, y: number) => void) | null;
 		onTextDragStart?: ((clipId: string) => void) | null;
+		/** Dragging a handle of the selected text sets its lane's size, live. */
+		onTextResize?: ((clipId: string, size: number) => void) | null;
 		/** A pool thumb dropped on the picture, with where it landed, normalized. */
 		onDropSource?:
 			((sourceId: string, at: { x: number; y: number }) => void) | null;
@@ -189,6 +192,7 @@
 		onLayerDragStart = null,
 		onTextMove = null,
 		onTextDragStart = null,
+		onTextResize = null,
 		onDropSource = null,
 	}: Props = $props();
 
@@ -219,6 +223,8 @@
 		rot: number;
 		/** The whole frame, which the highlight trace spans. */
 		frame: { left: number; top: number; w: number; h: number };
+		/** Text only: the anchor it grows about, as a fraction of the box. */
+		anchor: { x: number; y: number } | null;
 	} | null>(null);
 
 	/** Longest side the highlight is traced at; the readback grows with its area. */
@@ -311,10 +317,14 @@
 		};
 	}
 
+	function selectedTextLayer(): ResolvedTextLayer | null {
+		const id = selectedTextClipId;
+		return (id && pickable.text.find((l) => l.clipId === id)) || null;
+	}
+
 	/** The selected text clip's box as last drawn, in the font the beat gave it. */
 	function selectedTextRect(): MediaRect | null {
-		const id = selectedTextClipId;
-		const layer = id ? pickable.text.find((l) => l.clipId === id) : null;
+		const layer = selectedTextLayer();
 		if (!layer || !canvasEl) return null;
 		const box = overlayTextBox(
 			canvasEl.width,
@@ -323,6 +333,13 @@
 			layer.style,
 		);
 		return box && { ...box, rot: 0 };
+	}
+
+	function textAnchor(layer: ResolvedTextLayer): { x: number; y: number } {
+		return {
+			x: layer.style.x * canvasEl!.width,
+			y: layer.style.y * canvasEl!.height,
+		};
 	}
 
 	function updateOutline() {
@@ -336,6 +353,8 @@
 			return;
 		}
 		const ar = previewArea.getBoundingClientRect();
+		const textLayer = mediaRect ? null : selectedTextLayer();
+		const anchor = textLayer && textAnchor(textLayer);
 		const next = {
 			kind: mediaRect ? ("media" as const) : ("text" as const),
 			left: fit.left - ar.left + rect.x * fit.s,
@@ -349,6 +368,10 @@
 				w: canvasEl!.width * fit.s,
 				h: canvasEl!.height * fit.s,
 			},
+			anchor: anchor && {
+				x: (anchor.x - rect.x) / rect.w,
+				y: (anchor.y - rect.y) / rect.h,
+			},
 		};
 		// Compared before assigning: a fresh object each frame would re-render the outline.
 		if (
@@ -359,6 +382,8 @@
 			Math.abs(outline.w - next.w) < 0.5 &&
 			Math.abs(outline.h - next.h) < 0.5 &&
 			outline.rot === next.rot &&
+			outline.anchor?.x === next.anchor?.x &&
+			outline.anchor?.y === next.anchor?.y &&
 			Math.abs(outline.frame.left - next.frame.left) < 0.5 &&
 			Math.abs(outline.frame.top - next.frame.top) < 0.5 &&
 			Math.abs(outline.frame.w - next.frame.w) < 0.5 &&
@@ -639,6 +664,62 @@
 		);
 	}
 
+	/** A handle of the selected text being dragged, in output pixels. */
+	let textScale: {
+		clipId: string;
+		from: number;
+		anchor: { x: number; y: number };
+		handle: { x: number; y: number };
+		moved: boolean;
+	} | null = null;
+
+	function startTextScale(e: PointerEvent, hx: -1 | 0 | 1, hy: -1 | 0 | 1) {
+		const layer = selectedTextLayer();
+		const box = selectedTextRect();
+		if (!onTextResize || !layer || !box || e.button !== 0) return;
+		e.stopPropagation();
+		textScale = {
+			clipId: layer.clipId,
+			from: layer.style.size,
+			anchor: textAnchor(layer),
+			handle: {
+				x: box.x + ((hx + 1) / 2) * box.w,
+				y: box.y + ((hy + 1) / 2) * box.h,
+			},
+			moved: false,
+		};
+		previewArea.setPointerCapture(e.pointerId);
+	}
+
+	function textScaleMove(e: PointerEvent) {
+		const ts = textScale;
+		const fit = frameFit();
+		if (!ts || !fit) return;
+		const size = textSizeFromHandle(ts.from, ts.anchor, ts.handle, {
+			x: (e.clientX - fit.left) / fit.s,
+			y: (e.clientY - fit.top) / fit.s,
+		});
+		if (!ts.moved && size === ts.from) return;
+		if (!ts.moved) {
+			ts.moved = true;
+			onTextDragStart?.(ts.clipId);
+		}
+		onTextResize?.(ts.clipId, size);
+	}
+
+	/** Handles at the anchor can't grow the text, so they stay off. */
+	function textHandles(o: NonNullable<typeof outline>) {
+		const anchor = o.anchor;
+		if (!anchor) return [];
+		return HANDLES.filter(
+			(h) =>
+				Math.hypot(
+					((h.hx + 1) / 2 - anchor.x) * o.w,
+					((h.hy + 1) / 2 - anchor.y) * o.h,
+				) >= 6,
+		);
+	}
+
 	function startScale(e: PointerEvent, hx: -1 | 0 | 1, hy: -1 | 0 | 1) {
 		const lane = selectedMediaLane;
 		if (!onLayerStyleChange || !lane || !renderer || e.button !== 0) return;
@@ -698,6 +779,10 @@
 			textDragMove(e);
 			return;
 		}
+		if (textScale) {
+			textScaleMove(e);
+			return;
+		}
 		if (!drag) {
 			updateHoverCursor(e);
 			return;
@@ -736,9 +821,10 @@
 	}
 
 	function endDrag(e: PointerEvent) {
-		if (!drag && !textDrag) return;
+		if (!drag && !textDrag && !textScale) return;
 		drag = null;
 		textDrag = null;
+		textScale = null;
 		if (previewArea.hasPointerCapture(e.pointerId)) {
 			previewArea.releasePointerCapture(e.pointerId);
 		}
@@ -1447,8 +1533,17 @@
 			class="layer-outline"
 			style="left: {outline.left}px; top: {outline.top}px; width: {outline.w}px; height: {outline.h}px; transform: rotate({outline.rot}rad)"
 		>
-			<!-- Text is placed from its panel; only media scales on the canvas. -->
-			{#if onLayerStyleChange && outline.kind === "media"}
+			{#if onTextResize && outline.kind === "text"}
+				{#each textHandles(outline) as h (h.hx * 3 + h.hy)}
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<div
+						class="layer-handle"
+						style="left: {(h.hx + 1) * 50}%; top: {(h.hy + 1) *
+							50}%; cursor: {h.cursor}"
+						onpointerdown={(e) => startTextScale(e, h.hx, h.hy)}
+					></div>
+				{/each}
+			{:else if onLayerStyleChange && outline.kind === "media"}
 				<!-- Children of the rotated box, so they turn with it. -->
 				{#each HANDLES as h (h.hx * 3 + h.hy)}
 					<!-- svelte-ignore a11y_no_static_element_interactions -->

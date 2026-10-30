@@ -4,6 +4,8 @@
 	import { ensureFontLoaded } from "../../text-overlay";
 	import {
 		DEFAULT_TEXT_STYLE,
+		TEXT_SIZE_MAX,
+		TEXT_SIZE_MIN,
 		textClipPosition,
 		type TextAlign,
 		type TextClip,
@@ -230,8 +232,8 @@
 				<RangeSlider
 					id="tc-size"
 					value={lane.style.size}
-					min={0.02}
-					max={0.5}
+					min={TEXT_SIZE_MIN}
+					max={TEXT_SIZE_MAX}
 					step={0.005}
 					oninput={(v) => setStyle("size", v, `tc-size-${clip.id}`)}
 				/>
