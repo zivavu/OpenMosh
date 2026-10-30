@@ -7,6 +7,7 @@
 		Pencil,
 		Play,
 		Plus,
+		Search,
 		Trash2,
 		X,
 	} from "lucide-svelte";
@@ -167,6 +168,29 @@
 	let libraryLoaded = $state(false);
 	let fileInput: HTMLInputElement;
 	let libraryEl: HTMLDivElement;
+
+	let query = $state("");
+	// Each tab and each opening starts unfiltered.
+	$effect(() => {
+		void showing;
+		void open;
+		query = "";
+	});
+
+	function matchesQuery(...names: string[]): boolean {
+		const q = query.trim().toLowerCase();
+		return !q || names.some((name) => name.toLowerCase().includes(q));
+	}
+
+	const shownProjects = $derived(
+		projects.filter((p) => matchesQuery(recentEditName(p, projectNames))),
+	);
+	const shownTracks = $derived(
+		tracks.filter((t) => matchesQuery(t.name, trackFileName(t))),
+	);
+	const listEmpty = $derived(
+		showing === "projects" ? projects.length === 0 : tracks.length === 0,
+	);
 
 	let normalizedIds = $state<Set<string>>(readNormalizedTracks());
 	// Not $state: only used internally, never read in the template directly
@@ -514,14 +538,48 @@
 			</button>
 		</div>
 
+		{#if !listEmpty}
+			<div class="search-bar">
+				<Search class="search-icon" size={12} />
+				<input
+					class="search-input"
+					type="text"
+					placeholder={showing === "projects"
+						? "Search projects"
+						: "Search songs"}
+					aria-label={showing === "projects"
+						? "Search projects"
+						: "Search songs"}
+					bind:value={query}
+					onkeydown={(e) => {
+						if (e.key === "Escape" && query) {
+							e.stopPropagation();
+							query = "";
+						}
+					}}
+				/>
+				{#if query}
+					<button
+						class="search-clear"
+						onclick={() => (query = "")}
+						title="Clear"
+					>
+						<X size={11} />
+					</button>
+				{/if}
+			</div>
+		{/if}
+
 		{#if showing === "projects"}
 			{#if projects.length === 0}
 				<div class="empty">
 					No saved projects yet.<br />This one saves as you work.
 				</div>
+			{:else if shownProjects.length === 0}
+				<div class="empty">Nothing here is called “{query.trim()}”.</div>
 			{:else}
 				<ul class="track-list">
-					{#each projects as project (project.key)}
+					{#each shownProjects as project (project.key)}
 						{@const name = recentEditName(project, projectNames)}
 						{@const isOpen = project.key === activeProjectKey}
 						<li class="project" class:open-now={isOpen}>
@@ -582,9 +640,11 @@
 			{/if}
 		{:else if tracks.length === 0}
 			<div class="empty">No tracks yet.<br />Click + to add.</div>
+		{:else if shownTracks.length === 0}
+			<div class="empty">Nothing here is called “{query.trim()}”.</div>
 		{:else}
 			<ul class="track-list">
-				{#each tracks as track (track.id)}
+				{#each shownTracks as track (track.id)}
 					{const isActive = $derived(isTrackActive(track))}
 					{const isPlaying = $derived(isActive && mainPlaying)}
 					<li
@@ -800,6 +860,55 @@
 	.collapse-btn:hover {
 		color: var(--text-2);
 		background: var(--raised);
+	}
+
+	.search-bar {
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+		padding: 0.3rem 0.5rem 0.3rem 0.6rem;
+		border-bottom: 1px solid var(--line);
+		flex-shrink: 0;
+	}
+
+	.search-bar :global(.search-icon) {
+		color: var(--text-4);
+		flex-shrink: 0;
+	}
+
+	.search-input {
+		flex: 1;
+		min-width: 0;
+		padding: 0.15rem 0;
+		background: none;
+		border: none;
+		color: var(--text);
+		font-size: 0.65rem;
+		font-family: inherit;
+		outline: none;
+	}
+
+	.search-input::placeholder {
+		color: var(--text-4);
+	}
+
+	.search-clear {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 18px;
+		height: 18px;
+		padding: 0;
+		background: none;
+		border: none;
+		border-radius: var(--r-1);
+		color: var(--text-4);
+		cursor: pointer;
+		flex-shrink: 0;
+	}
+
+	.search-clear:hover {
+		color: var(--text);
 	}
 
 	.empty {
