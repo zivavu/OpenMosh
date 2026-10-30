@@ -31,6 +31,5 @@ test("single mode opens another single project from the drawer", async ({
 
 	await projects.getByTitle(`Open "red.png"`).click();
 	await waitForRender(page);
-	await page.getByTitle("Open projects and songs").click();
 	await expect(projects.locator("[aria-current]")).toHaveText(/red\.png/);
 });
