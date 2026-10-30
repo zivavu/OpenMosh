@@ -179,9 +179,11 @@ what Vercel serves. `main` itself only deploys as a Vercel preview.
 - Run changelog text through the `/humanizer` skill before it goes in: the release PR's
   changelog, release notes, and `feat`/`fix`/`perf` commit messages, since those become
   changelog lines.
-- Versioning: every release is a patch bump (0.9.2, 0.9.3, …) until I call 1.0.0, even when saved
-  data changes shape. So never use `!` or `BREAKING CHANGE` (release-please would bump the minor);
-  say what happens to old projects in the commit message or the release PR's changelog instead.
+- Versioning: every release is a patch bump (1.0.1, 1.0.2, …), even when saved data changes shape;
+  `"versioning": "always-bump-patch"` in `release-please-config.json` holds it. Never use `!` or
+  `BREAKING CHANGE` anyway; say what happens to old projects in the commit message or the release
+  PR's changelog instead. A different version (as 1.0.0 was) is set by hand on the release PR:
+  its title, body, `package.json`, the manifest, `CHANGELOG.md` and the README's Status line.
 - Keep the README current in the PR that changes it: the effect count under "How to use it" and
   any credits a port owes.
 - I merge release PRs. When a batch of work has landed, ask me whether it's time for one.
