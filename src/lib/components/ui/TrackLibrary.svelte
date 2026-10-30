@@ -1,4 +1,10 @@
+<script module lang="ts">
+	/** Opening a project remounts the editor, and the drawer with it; this outlives that. */
+	const kept = { query: "", scrollTops: new Map<string, number>() };
+</script>
+
 <script lang="ts">
+	import type { Attachment } from "svelte/attachments";
 	import {
 		AudioLines,
 		ChevronLeft,
@@ -129,7 +135,6 @@
 
 	function openProject(key: string) {
 		if (key === activeProjectKey) return;
-		open = false;
 		onOpenProject?.(key);
 	}
 
@@ -169,13 +174,28 @@
 	let fileInput: HTMLInputElement;
 	let libraryEl: HTMLDivElement;
 
-	let query = $state("");
-	// Each tab and each opening starts unfiltered.
+	let query = $state(kept.query);
 	$effect(() => {
-		void showing;
-		void open;
-		query = "";
+		kept.query = query;
 	});
+	$effect(() => {
+		if (!open) query = "";
+	});
+
+	function selectTab(next: typeof tab) {
+		if (next !== tab) query = "";
+		tab = next;
+	}
+
+	function keepScroll(list: typeof tab): Attachment<HTMLElement> {
+		const key = `${projectMode}:${list}`;
+		return (el) => {
+			el.scrollTop = kept.scrollTops.get(key) ?? 0;
+			const save = () => kept.scrollTops.set(key, el.scrollTop);
+			el.addEventListener("scroll", save, { passive: true });
+			return () => el.removeEventListener("scroll", save);
+		};
+	}
 
 	function matchesQuery(...names: string[]): boolean {
 		const q = query.trim().toLowerCase();
@@ -391,8 +411,6 @@
 			return;
 		}
 		onLoad(track);
-		// Picking a track is what the drawer is for, so close it once the job is done.
-		open = false;
 	}
 
 	/** Communicate this track's normalize gain to the editor. The gain cache is
@@ -505,14 +523,14 @@
 						role="tab"
 						aria-selected={showing === "projects"}
 						class:active={showing === "projects"}
-						onclick={() => (tab = "projects")}>Projects</button
+						onclick={() => selectTab("projects")}>Projects</button
 					>
 					<button
 						class="tab"
 						role="tab"
 						aria-selected={showing === "songs"}
 						class:active={showing === "songs"}
-						onclick={() => (tab = "songs")}>Songs</button
+						onclick={() => selectTab("songs")}>Songs</button
 					>
 				</div>
 			{:else}
@@ -578,7 +596,7 @@
 			{:else if shownProjects.length === 0}
 				<div class="empty">Nothing here is called “{query.trim()}”.</div>
 			{:else}
-				<ul class="track-list">
+				<ul class="track-list" {@attach keepScroll("projects")}>
 					{#each shownProjects as project (project.key)}
 						{@const name = recentEditName(project, projectNames)}
 						{@const isOpen = project.key === activeProjectKey}
@@ -643,7 +661,7 @@
 		{:else if shownTracks.length === 0}
 			<div class="empty">Nothing here is called “{query.trim()}”.</div>
 		{:else}
-			<ul class="track-list">
+			<ul class="track-list" {@attach keepScroll("songs")}>
 				{#each shownTracks as track (track.id)}
 					{const isActive = $derived(isTrackActive(track))}
 					{const isPlaying = $derived(isActive && mainPlaying)}
