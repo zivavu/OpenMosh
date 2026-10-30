@@ -51,6 +51,10 @@ export class SequenceMixer {
 	/** Preview-only: playback goes round this range, over the span and the loop setting. */
 	repeat = $state<{ start: number; end: number } | null>(null);
 	outputVolume = $state(1);
+	/** Set while recording: playback runs on to the end, past the loop and the repeat. */
+	straight = false;
+	/** Bumped by every play, seek and stop: the jumps `clock` doesn't follow across. */
+	run = 0;
 
 	/** The segments to play, from `planMix`. */
 	plan = $state.raw<MixSegment[]>([]);
@@ -177,6 +181,18 @@ export class SequenceMixer {
 		if (this.#master) this.#master.gain.value = v;
 	}
 
+	/** The context the mix plays through, woken; call it from a user gesture. */
+	context(): AudioContext {
+		const ctx = this.#ensureGraph();
+		wakeAudioContext(ctx);
+		return ctx;
+	}
+
+	/** Timeline time `time` sounds at context time `ctx`, until `run` moves on. */
+	get clock(): { time: number; ctx: number } {
+		return { time: this.#anchorTime, ctx: this.#anchorCtx };
+	}
+
 	/** Called from a user gesture: that's when a context may start. */
 	#ensureGraph(): AudioContext {
 		if (this.#ctx && this.#ctx.state !== "closed") return this.#ctx;
@@ -245,7 +261,7 @@ export class SequenceMixer {
 		const ctx = this.#ensureGraph();
 		wakeAudioContext(ctx);
 		let t = this.currentTime;
-		const repeat = this.repeat;
+		const repeat = this.#repeat();
 		if (repeat) {
 			this.pastSpan = false;
 			if (t < repeat.start || t >= repeat.end) t = repeat.start;
@@ -260,6 +276,7 @@ export class SequenceMixer {
 		this.#anchorWall = performance.now();
 		this.currentTime = t;
 		this.playing = true;
+		this.run++;
 		this.#reschedule(true);
 		this.#stopFrame?.();
 		// Read phase: the clock moves before the frame that shows it draws.
@@ -278,6 +295,7 @@ export class SequenceMixer {
 
 	#halt(): void {
 		this.playing = false;
+		this.run++;
 		this.#stopFrame?.();
 		this.#stopFrame = null;
 		if (this.#hiddenTick) clearInterval(this.#hiddenTick);
@@ -293,6 +311,7 @@ export class SequenceMixer {
 		this.currentTime = clamped;
 		this.pastSpan = this.spanEnd > 0 && clamped >= this.spanEnd;
 		if (this.playing && this.#ctx) {
+			this.run++;
 			this.#anchorTime = clamped;
 			this.#anchorCtx = this.#ctx.currentTime;
 			this.#anchorWall = performance.now();
@@ -306,7 +325,7 @@ export class SequenceMixer {
 		if (!this.playing) return;
 		if (this.#turnLoop()) return;
 		const t = this.#now();
-		const repeat = this.repeat;
+		const repeat = this.#repeat();
 		if (repeat && t >= repeat.end) {
 			this.seek(repeat.start);
 			return;
@@ -316,7 +335,7 @@ export class SequenceMixer {
 		if (!this.#passes && end !== this.#scheduledEnd && t < end)
 			this.#reschedule();
 		if (!repeat && t >= end) {
-			if (this.loop && !this.pastSpan) {
+			if (this.loop && !this.pastSpan && !this.straight) {
 				this.seek(this.spanStart);
 			} else {
 				this.currentTime = this.pastSpan ? this.duration : this.spanStart;
@@ -328,6 +347,10 @@ export class SequenceMixer {
 		}
 	};
 
+	#repeat(): { start: number; end: number } | null {
+		return this.straight ? null : this.repeat;
+	}
+
 	/** Where playback stops: the span's end, or the project's once past it. */
 	#playEnd(): number {
 		return !this.pastSpan && this.spanEnd > 0 ? this.spanEnd : this.duration;
@@ -335,6 +358,7 @@ export class SequenceMixer {
 
 	/** The timeline range that plays round: the repeat, else a looping span. */
 	#loopRange(): { start: number; end: number } | null {
+		if (this.straight) return null;
 		const range =
 			this.repeat ??
 			(this.loop && !this.pastSpan

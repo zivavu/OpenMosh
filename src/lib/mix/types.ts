@@ -168,6 +168,29 @@ export function splitAudioClipAt(
 	};
 }
 
+/** Lay `clip` over the lane like a recorded take: what it covers goes, and clips
+ * straddling its edges are cut there. */
+export function punchInAudioClip(
+	lane: AudioLane,
+	clip: AudioClip,
+	edits?: Record<string, SourceEdit>,
+	durations?: Record<string, number>,
+): AudioLane {
+	const cut = splitAudioClipAt(
+		splitAudioClipAt(lane, clip.start, edits, durations),
+		clip.end,
+		edits,
+		durations,
+	);
+	return {
+		...cut,
+		clips: sortClips([
+			...cut.clips.filter((c) => c.end <= clip.start || c.start >= clip.end),
+			clip,
+		]),
+	};
+}
+
 export function normalizeAudioLanes(raw: unknown): AudioLane[] {
 	return records<AudioLane>(raw).map((lane, i) => ({
 		id: lane.id ?? nextId("alane"),

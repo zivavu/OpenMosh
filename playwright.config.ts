@@ -35,6 +35,9 @@ const CHROMIUM_ARGS = [
 	// click, so the autoplay gate has to be open or every clock stalls.
 	"--autoplay-policy=no-user-gesture-required",
 	"--mute-audio",
+	// A beeping stand-in microphone, granted without a prompt, for the mic take spec.
+	"--use-fake-device-for-media-stream",
+	"--use-fake-ui-for-media-stream",
 ];
 
 /**
