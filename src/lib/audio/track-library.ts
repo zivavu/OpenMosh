@@ -10,6 +10,9 @@ export interface StoredTrack {
 	fileName?: string;
 	blob: Blob;
 	addedAt: number;
+	/** A mic take recorded in the editor: kept off the library's list, and deleted
+	 * with the last project that plays it. */
+	take?: true;
 }
 
 /** The name a dropped file is matched against, whatever the track is called now. */
@@ -47,10 +50,13 @@ export async function getTrack(id: string): Promise<StoredTrack | null> {
  * inside the write transaction on purpose: two callers can save the same song at
  * once, and a lookup before it misses a write still in flight, storing it twice.
  */
-export async function addTrack(file: File): Promise<StoredTrack> {
+export async function addTrack(
+	file: File,
+	{ take = false } = {},
+): Promise<StoredTrack> {
 	const different = new Set<string>();
 	for (;;) {
-		const { track, isNew } = await findOrSave(file, different);
+		const { track, isNew } = await findOrSave(file, different, take);
 		if (isNew) return track;
 		// Name and size can match a different song. Its bytes are read out here, since an
 		// await on anything but the store would end the write transaction.
@@ -63,6 +69,7 @@ export async function addTrack(file: File): Promise<StoredTrack> {
 function findOrSave(
 	file: File,
 	different: Set<string>,
+	take: boolean,
 ): Promise<{ track: StoredTrack; isNew: boolean }> {
 	return db.run("readwrite", async (store) => {
 		const existing = await request(store.getAll() as IDBRequest<StoredTrack[]>);
@@ -78,6 +85,7 @@ function findOrSave(
 			name: file.name,
 			blob: file,
 			addedAt: Date.now(),
+			...(take ? { take: true as const } : {}),
 		};
 		store.put(track);
 		return { track, isNew: true };

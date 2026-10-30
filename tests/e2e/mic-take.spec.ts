@@ -39,4 +39,11 @@ test("records a take onto an empty audio lane", async ({ page }) => {
 	expect(box.left).toBeLessThan(2);
 	expect(box.width).toBeGreaterThan(5);
 	expect(box.width).toBeLessThan(60);
+
+	// It belongs to the project, not the song library.
+	await page.getByTitle("Open projects and songs").click();
+	await page.getByRole("tab", { name: "Songs" }).click();
+	const songs = page.locator(".library .track-row");
+	await expect(songs).toHaveCount(1);
+	await expect(songs).not.toContainText("Mic take");
 });

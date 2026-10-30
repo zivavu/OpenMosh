@@ -63,6 +63,8 @@ export interface ProjectSongEntry {
 	path: string;
 	/** Loudness normalization was on; absent when off. */
 	normalized?: true;
+	/** A mic take, which stays off the library's list. */
+	take?: true;
 }
 
 export interface ProjectFontEntry {
@@ -162,6 +164,7 @@ function parseSongs(raw: unknown): ProjectSongEntry[] {
 			type: typeof item.type === "string" ? item.type : "",
 			path: safePath(item.path, "songs/"),
 			...(item.normalized === true ? { normalized: true as const } : {}),
+			...(item.take === true ? { take: true as const } : {}),
 		});
 	}
 	return out;

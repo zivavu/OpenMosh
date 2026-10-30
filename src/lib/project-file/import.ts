@@ -297,7 +297,7 @@ export async function storeProjectFile(
 			const songFile = new File([entry.blob], item.fileName, {
 				type: item.type || "audio/mpeg",
 			});
-			const track = await addTrack(songFile);
+			const track = await addTrack(songFile, { take: item.take });
 			// A song renamed in the library comes back under that name, unless this
 			// browser has already named it.
 			if (track.name === item.fileName && item.name !== item.fileName)

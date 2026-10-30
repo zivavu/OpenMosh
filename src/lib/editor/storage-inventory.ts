@@ -1,6 +1,11 @@
 /** What the app has stored, grouped the way the user thinks about it. */
 
-import { clearTracks, deleteTrack, getAllTracks } from "../audio/track-library";
+import {
+	clearTracks,
+	deleteTrack,
+	getAllTracks,
+	getTrack,
+} from "../audio/track-library";
 import {
 	forgetAllTrackEntries,
 	forgetTrackEntries,
@@ -30,6 +35,7 @@ import {
 	getAllSessions,
 	getAllTimelines,
 	getSession,
+	getTimeline,
 	isOwnSessionKey,
 	loadMediaPool,
 	sessionTimelineKeys,
@@ -40,7 +46,12 @@ import {
 import { forgetSavedSession, listSavedSessions } from "./sessions";
 import type { SeqEntry } from "./seq-entry";
 import { records } from "../records";
-import { trackSourceId, type AudioClip, type AudioLane } from "../mix/types";
+import {
+	trackIdOf,
+	trackSourceId,
+	type AudioClip,
+	type AudioLane,
+} from "../mix/types";
 
 export type ProjectMode = "sequence" | "single" | "slideshow";
 
@@ -223,7 +234,9 @@ export async function loadStorageInventory(): Promise<StorageInventory> {
 	const poolByKey = new Map(pools.map((p) => [p.key, p]));
 	const sessionByKey = new Map(sessions.map((s) => [s.key, s]));
 	const timelineByKey = new Map(timelines.map((t) => [t.key, t]));
-	const trackIds = new Set(tracks.map((t) => t.id));
+	// Takes ride on the projects that play them; only songs get rows.
+	const songs = tracks.filter((t) => !t.take);
+	const trackIds = new Set(songs.map((t) => t.id));
 
 	/** Own-id projects grouped under the song they play, so a song lists once. */
 	const ownProjectsBySong = new Map<string, StoredMediaPool[]>();
@@ -237,7 +250,7 @@ export async function loadStorageInventory(): Promise<StorageInventory> {
 		[...ownProjectsBySong.values()].flat().map((p) => p.key),
 	);
 
-	const projects: StorageProject[] = tracks.map((track) => {
+	const projects: StorageProject[] = songs.map((track) => {
 		const id = track.id;
 		const pool = poolByKey.get(id);
 		const seqTimeline = timelineByKey.get(`seq:${id}`);
@@ -414,6 +427,29 @@ export async function countTrackUsers(
 	return users.size;
 }
 
+/** Library tracks the audio lanes of these stored timelines play. */
+async function tracksOnLanes(timelineKeys: string[]): Promise<string[]> {
+	const ids: string[] = [];
+	for (const key of timelineKeys) {
+		const entry = (await getTimeline(key)) as SeqEntry | null;
+		for (const lane of records<AudioLane>(entry?.media?.audioLanes)) {
+			for (const clip of records<AudioClip>(lane.clips)) {
+				const id = clip.sourceId ? trackIdOf(clip.sourceId) : null;
+				if (id) ids.push(id);
+			}
+		}
+	}
+	return ids;
+}
+
+/** Delete the mic takes in `ids` that no saved project plays any more. */
+async function dropOrphanedTakes(ids: Iterable<string>): Promise<void> {
+	for (const id of new Set(ids)) {
+		const track = await getTrack(id).catch(() => null);
+		if (track?.take && (await countTrackUsers(id)) === 0) await deleteTrack(id);
+	}
+}
+
 /** Delete the blobs in `ids` that nothing remaining points at, plus their proxies. */
 async function dropOrphanedMedia(ids: Iterable<string>): Promise<void> {
 	const candidates = new Set(ids);
@@ -461,6 +497,10 @@ export function describeLooseEditDeletion(e: StorageLooseEdit): string {
 /** The song and everything keyed to it, in every mode. */
 export async function deleteProject(project: StorageProject): Promise<void> {
 	const id = project.trackId;
+	const takes = await tracksOnLanes([
+		`seq:${id}`,
+		...project.projectKeys.map((k) => `seq:${k}`),
+	]);
 	for (const key of project.projectKeys) {
 		await deleteMediaPool(key);
 		await deleteTimeline(`seq:${key}`);
@@ -481,6 +521,7 @@ export async function deleteProject(project: StorageProject): Promise<void> {
 	forgetTrackEntries([id, `seq:${id}`, `single:${id}`]);
 	forgetProjectNames([id]);
 	await dropOrphanedMedia(project.media.map((m) => m.id));
+	await dropOrphanedTakes(takes);
 	await refreshListCaches();
 }
 
@@ -489,12 +530,14 @@ export async function deleteLooseEdit(edit: StorageLooseEdit): Promise<void> {
 		await deleteRecentEdit(edit.mode, edit.key);
 		return;
 	}
+	const takes = await tracksOnLanes([`seq:${edit.key}`]);
 	await deleteMediaPool(edit.key);
 	await deleteTimeline(`seq:${edit.key}`);
 	await deleteTimeline(`single:${edit.key}`);
 	forgetTrackEntries([edit.key, `seq:${edit.key}`, `single:${edit.key}`]);
 	forgetProjectNames([edit.key]);
 	await dropOrphanedMedia(edit.media.map((m) => m.id));
+	await dropOrphanedTakes(takes);
 	await refreshListCaches();
 }
 
@@ -506,6 +549,7 @@ export async function deleteRecentEdit(
 ): Promise<void> {
 	if (mode === "sequence") {
 		const ids = (await loadMediaPool(key)) ?? [];
+		const takes = await tracksOnLanes([`seq:${key}`, key]);
 		await deleteMediaPool(key);
 		await deleteTimeline(`seq:${key}`);
 		// Saved before the mode prefix existed.
@@ -514,6 +558,7 @@ export async function deleteRecentEdit(
 		// A song's name is shared by its edits in every mode, so it outlives this one.
 		if (isProjectKey(key)) forgetProjectNames([key]);
 		await dropOrphanedMedia(ids);
+		await dropOrphanedTakes(takes);
 	} else {
 		const session = await getSession(key);
 		await deleteSession(key);
