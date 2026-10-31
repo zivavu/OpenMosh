@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.0.0](https://github.com/zivavu/OpenMosh/compare/v0.9.27...v1.0.0) (2026-10-31)
+
+This is OpenMosh 1.0. The editor can now pull in your other work: a saved slideshow or single edit goes onto the timeline as one clip, and Update brings in what you change in it later. Datamosh is a new effect whose keyframes land on the beat. You can record your microphone onto an audio lane while the project plays, and resize text by dragging its box on the preview. The library drawer has a search box and stays open after you pick something.
+
+Saved projects open as before, and nothing they store has changed.
+
+
+### Added
+
+* Add a Datamosh effect with beat-synced keyframes ([2c0c7e2](https://github.com/zivavu/OpenMosh/commit/2c0c7e2c30c534d9a4c546d14b4303b4ce9a86d7))
+* Add a saved slideshow to the editor as one clip, in its own frame and fit ([016e5da](https://github.com/zivavu/OpenMosh/commit/016e5da1d9e9f7eff7bec5d876982dd5004c15b4), [681965e](https://github.com/zivavu/OpenMosh/commit/681965e96aac0eb41684e16cb991caebd3940ecb), [40287bf](https://github.com/zivavu/OpenMosh/commit/40287bf7633f65bc1c2bb3ed6ffdf64d93689a6d), [cfce50d](https://github.com/zivavu/OpenMosh/commit/cfce50d24ff0587fb45a85557ba506438b334c49))
+* Add a saved single edit to the editor as one clip ([19765d0](https://github.com/zivavu/OpenMosh/commit/19765d0200770e90d42645cac70d49c5334db526))
+* Record your microphone onto an audio lane while the project plays ([c905dfa](https://github.com/zivavu/OpenMosh/commit/c905dfae835cbfb37290d3a36473101451cbe982), [7f27d54](https://github.com/zivavu/OpenMosh/commit/7f27d542e870b09e6596f58874641aa8aa274d80))
+* Search your saved projects and songs in the library drawer, which stays open after you pick one ([5089f75](https://github.com/zivavu/OpenMosh/commit/5089f75f0ccbf8ac42e88505123a550b5097593c), [a9c2d88](https://github.com/zivavu/OpenMosh/commit/a9c2d8850b1ae576d1de2ae5bc3fc14cc0f9c477))
+* Resize text by dragging the edges of its box on the preview, and make its outline up to 20 wide ([5d63280](https://github.com/zivavu/OpenMosh/commit/5d6328028e69fc1bf9a65ecf4fba3a59430ffd39), [7d4eb29](https://github.com/zivavu/OpenMosh/commit/7d4eb29cc2e8e19c95ceba6ce6860a2b87d7096a))
+
+
+### Fixed
+
+* Step through dropdown options with the up and down arrows ([d1443b1](https://github.com/zivavu/OpenMosh/commit/d1443b152d602353ee79fc6e584fa14725a07b64))
+* Stop sound dropped into the editor showing as undecodable ([70bf72d](https://github.com/zivavu/OpenMosh/commit/70bf72d83c3b7ac3e18c64db575a3f8f2b2fe5ed))
+* Stop hitches at cuts on a layer that plays three videos ([ffbc345](https://github.com/zivavu/OpenMosh/commit/ffbc3451ca29685aaec0ceba16ef7f782c2a4154))
+* Say "Saves on pause" instead of "Saving…" during playback ([202dff1](https://github.com/zivavu/OpenMosh/commit/202dff16cf567ed25c6677a8c285b084e83a29fc))
+
 ## [0.9.27](https://github.com/zivavu/OpenMosh/compare/v0.9.26...v0.9.27) (2026-10-25)
 
 Edit media opens again. Since 0.9.26, opening it from a clip's panel or the Media rail froze the editor. Video clips on the timeline also show the video's own frames along their length now, following its trim, speed, loops and bounces, where they used to repeat its first frame.
