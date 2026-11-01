@@ -84,24 +84,7 @@ const CLIP_ROWS: ShortcutRow[] = [
 		description:
 			"Box-select the clips it touches, and on media lanes the joins inside it",
 	},
-	{
-		keys: ["Click a join on a media lane"],
-		description:
-			"Set its transition; clicking one of several selected edits them all",
-	},
-	{
-		keys: ["Shift+Click a join on a media lane"],
-		description: "Add or remove it from the selected joins",
-	},
-	{
-		keys: ["Drag a selected join"],
-		description: "Move every selected join together",
-	},
-	{
-		keys: ["Ctrl/Cmd+C", "Ctrl/Cmd+V"],
-		description:
-			"With only joins selected, copy their cuts and transitions; paste by clicking where the first lands",
-	},
+	{ keys: ["Esc"], description: "Deselect" },
 	{
 		keys: ["Dbl-click", "Ctrl/Cmd+Click"],
 		description:
@@ -125,12 +108,6 @@ const CLIP_ROWS: ShortcutRow[] = [
 		description: "Hold the snap off (edges, beats, marker)",
 	},
 	{
-		keys: ["R"],
-		description:
-			"Repeat the selected clips in the preview, or stop; the export isn't affected",
-	},
-	{ keys: ["Delete", "Backspace"], description: "Delete the selection" },
-	{
 		keys: ["Ctrl/Cmd+C"],
 		description: "Copy the selected clips",
 	},
@@ -139,7 +116,30 @@ const CLIP_ROWS: ShortcutRow[] = [
 		description:
 			"Paste onto the selected clips — the text, the effects, or what the copies showed; with none selected, stamp copies at the start marker on the lane you last touched",
 	},
-	{ keys: ["Esc"], description: "Deselect" },
+	{ keys: ["Delete", "Backspace"], description: "Delete the selection" },
+	{
+		keys: ["Click a join on a media lane"],
+		description:
+			"Set its transition; clicking one of several selected edits them all",
+	},
+	{
+		keys: ["Shift+Click a join on a media lane"],
+		description: "Add or remove it from the selected joins",
+	},
+	{
+		keys: ["Drag a selected join"],
+		description: "Move every selected join together",
+	},
+	{
+		keys: ["Ctrl/Cmd+C", "Ctrl/Cmd+V"],
+		description:
+			"With only joins selected, copy their cuts and transitions; paste by clicking where the first lands",
+	},
+	{
+		keys: ["R"],
+		description:
+			"Repeat the selected clips in the preview, or stop; the export isn't affected",
+	},
 	{ keys: ["Dbl-click a lane name"], description: "Rename the lane" },
 ];
 
@@ -183,19 +183,19 @@ export function editorShortcutGroups(opts: {
 					keys: ["Space"],
 					description: "Play or pause, from the start marker",
 				},
-				...(sequence ? [] : [MOSH]),
-				...UNDO,
-				SAVE_FRAME,
-				SAVE_PROJECT,
+				FULLSCREEN,
 				...(sequence
 					? []
 					: [
+							MOSH,
 							{
 								keys: ["V"],
 								description: "Bake the current frame as the new source",
 							},
 						]),
-				FULLSCREEN,
+				...UNDO,
+				SAVE_FRAME,
+				SAVE_PROJECT,
 			],
 		},
 		TIMELINE,
@@ -228,12 +228,13 @@ export function slideshowShortcutGroups(opts: {
 		{
 			title: "Segments",
 			shortcuts: [
+				{ keys: ["Click"], description: "Select a segment" },
+				{ keys: ["Shift+Drag"], description: "Rectangle-select boundaries" },
+				{ keys: ["Esc"], description: "Deselect, or cancel a paste" },
 				{
 					keys: ["Ctrl/Cmd+Click"],
 					description: "Create or split a segment at the cursor",
 				},
-				{ keys: ["Click"], description: "Select a segment" },
-				{ keys: ["Shift+Drag"], description: "Rectangle-select boundaries" },
 				{ keys: ["Ctrl/Cmd+C"], description: "Copy the selected boundaries" },
 				{
 					keys: ["Ctrl/Cmd+V"],
@@ -243,7 +244,6 @@ export function slideshowShortcutGroups(opts: {
 					keys: ["Delete", "Backspace"],
 					description: "Delete the selection; over a dot, merge its segments",
 				},
-				{ keys: ["Esc"], description: "Deselect, or cancel a paste" },
 			],
 		},
 		...(opts.text ? [CLIPS] : []),
