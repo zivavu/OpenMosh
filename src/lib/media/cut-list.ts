@@ -136,10 +136,7 @@ export interface CutPosition {
 	slideTime: number;
 }
 
-/** The beat on screen at `sourceTime`. */
-export function cutAt(list: CutList, sourceTime: number): CutPosition {
-	const loop = Math.floor(Math.max(0, sourceTime) / list.duration);
-	const local = Math.max(0, sourceTime) - loop * list.duration;
+function cutIndexAt(list: CutList, local: number): number {
 	const { cuts } = list;
 	let lo = 0;
 	let hi = cuts.length - 1;
@@ -148,11 +145,46 @@ export function cutAt(list: CutList, sourceTime: number): CutPosition {
 		if (cuts[mid][0] <= local) lo = mid;
 		else hi = mid - 1;
 	}
+	return lo;
+}
+
+/** The beat on screen at `sourceTime`. */
+export function cutAt(list: CutList, sourceTime: number): CutPosition {
+	const loop = Math.floor(Math.max(0, sourceTime) / list.duration);
+	const local = Math.max(0, sourceTime) - loop * list.duration;
+	const { cuts } = list;
+	const lo = cutIndexAt(list, local);
 	return {
 		tick: loop * cuts.length + lo,
 		slideId: list.slides[cuts[lo][1]],
 		slideTime: local + list.songStart,
 	};
+}
+
+/** The slides cut in over the next `seconds` after `sourceTime`, soonest first and
+ * each once, wrapping as the cut list loops. */
+export function upcomingSlides(
+	list: CutList,
+	sourceTime: number,
+	seconds: number,
+	max: number,
+): string[] {
+	const { cuts, duration } = list;
+	const local = Math.max(0, sourceTime) % duration;
+	const end = local + seconds;
+	const out = new Set<string>();
+	let i = cutIndexAt(list, local);
+	let offset = 0;
+	// One pass through the list at most: a short list shows every slide by then.
+	for (let n = 0; n <= cuts.length && out.size < max; n++) {
+		if (cuts[i][0] + offset > end) break;
+		out.add(list.slides[cuts[i][1]]);
+		if (++i === cuts.length) {
+			i = 0;
+			offset += duration;
+		}
+	}
+	return [...out];
 }
 
 /** Where a layer is in its media once a cut list hands over to the slide on screen,

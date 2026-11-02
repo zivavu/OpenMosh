@@ -16,6 +16,8 @@ import {
 } from "../mesh";
 import { renderMeshThumb } from "../mesh/thumb";
 import { isCutListFile, readCutList, type CutList } from "../media/cut-list";
+import type { SourceImage } from "../gl/renderer";
+import { ImageCache } from "./image-cache";
 import { probeSlideVideo, SlideVideoSampler } from "../slideshow/video-sampler";
 import { decodeFilmstrip, filmstripFrameCount } from "../video/filmstrip";
 import { needsProxy, startProxyJob, type ProxyJob } from "../video/proxy";
@@ -31,8 +33,11 @@ import {
 	type StoredSequenceMedia,
 } from "./sequence-media-store";
 
-/** Full-resolution decodes held at once; the rest re-decode on demand. */
-const MAX_DECODED_IMAGES = 16;
+/** Full-resolution decodes held at once; the rest re-decode on demand. A fast
+ * slideshow needs a second or so of its slides held ahead of the playhead. */
+const DECODED_IMAGE_BYTES = 768 * 1024 * 1024;
+const MIN_DECODED_IMAGES = 16;
+const MAX_PREFETCHING = 6;
 /** Videos probed concurrently while adding, to bound peak memory. */
 const ADD_BATCH_SIZE = 8;
 /** Thumbnails generated concurrently after the chips are already on screen. */
@@ -116,9 +121,19 @@ export class SequenceSourceRegistry {
 	/** Overlapping loads share the counters; the last one out clears them. */
 	#loads = 0;
 
-	/** Insertion-ordered LRU of decoded images (see MAX_DECODED_IMAGES). */
-	#images = new Map<string, HTMLImageElement>();
-	#decoding = new Set<string>();
+	#images = new ImageCache<SourceImage>({
+		decode: (id) => {
+			const src = this.get(id);
+			return src?.kind === "image"
+				? decodeImage(src.objectUrl)
+				: Promise.resolve(null);
+		},
+		stillWanted: (id) => !this.#disposed && !!this.get(id),
+		onReady: () => this.#onReady?.(),
+		maxBytes: DECODED_IMAGE_BYTES,
+		minEntries: MIN_DECODED_IMAGES,
+		maxPrefetching: MAX_PREFETCHING,
+	});
 	/** Parsed models, held while they're in the pool: they're small, and re-parsing isn't. */
 	#meshes = new Map<string, Mesh>();
 	/** Ids an in-flight `add` has claimed but not appended yet. */
@@ -139,7 +154,7 @@ export class SequenceSourceRegistry {
 		}
 		const old = live.objectUrl;
 		live.objectUrl = url;
-		this.#images.delete(id);
+		this.#images.drop(id);
 		URL.revokeObjectURL(old);
 		this.#onReady?.();
 	});
@@ -354,7 +369,7 @@ export class SequenceSourceRegistry {
 			delete next[id];
 			this.edits = next;
 		}
-		this.#images.delete(id);
+		this.#images.drop(id);
 		this.#meshes.delete(id);
 		this.#sizeSync.untrack(id);
 		this.#revoke(src);
@@ -412,30 +427,13 @@ export class SequenceSourceRegistry {
 	}
 
 	/** Undefined while the image decodes; the caller holds the previous frame. */
-	image(id: string): HTMLImageElement | undefined {
-		const hit = this.#images.get(id);
-		if (hit) {
-			// Re-insert to mark as most recently used.
-			this.#images.delete(id);
-			this.#images.set(id, hit);
-			return hit;
-		}
-		if (this.#decoding.has(id)) return undefined;
-		const src = this.get(id);
-		if (!src || src.kind !== "image") return undefined;
-		this.#decoding.add(id);
-		void decodeImage(src.objectUrl).then((img) => {
-			this.#decoding.delete(id);
-			if (!img || this.#disposed || !this.get(id)) return;
-			this.#images.set(id, img);
-			while (this.#images.size > MAX_DECODED_IMAGES) {
-				const oldest = this.#images.keys().next().value;
-				if (oldest === undefined) break;
-				this.#images.delete(oldest);
-			}
-			this.#onReady?.();
-		});
-		return undefined;
+	image(id: string): SourceImage | undefined {
+		return this.get(id)?.kind === "image" ? this.#images.get(id) : undefined;
+	}
+
+	/** Decode the images about to be shown, soonest first. */
+	prefetchImages(ids: readonly string[]) {
+		this.#images.prefetch(ids.filter((id) => this.get(id)?.kind === "image"));
 	}
 
 	/** A model's mesh; parsed on add, so only a removed source has none. */
@@ -496,7 +494,6 @@ export class SequenceSourceRegistry {
 		this.#proxyJobs.clear();
 		this.#images.clear();
 		this.#meshes.clear();
-		this.#decoding.clear();
 		this.#pendingIds.clear();
 		this.loadingTotal = 0;
 		this.loadingDone = 0;
@@ -825,7 +822,21 @@ function paintChecker(ctx: OffscreenCanvasRenderingContext2D, size: number) {
 	}
 }
 
-function decodeImage(url: string): Promise<HTMLImageElement | null> {
+/** Decoded off the main thread and unpremultiplied, as WebGL takes it: an <img>
+ * decodes during the upload instead, on the main thread, every time it's evicted. */
+async function decodeImage(url: string): Promise<SourceImage | null> {
+	try {
+		const blob = await (await fetch(url)).blob();
+		return await createImageBitmap(blob, {
+			premultiplyAlpha: "none",
+			imageOrientation: "from-image",
+		});
+	} catch {
+		return decodeImageElement(url);
+	}
+}
+
+function decodeImageElement(url: string): Promise<HTMLImageElement | null> {
 	return new Promise((resolve) => {
 		const img = new Image();
 		img.crossOrigin = "anonymous";

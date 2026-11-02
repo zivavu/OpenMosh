@@ -1,6 +1,11 @@
 import type { GlRenderer } from "../gl/renderer";
 import { mediaLayerSides, type ResolvedMediaLayer } from "../media";
-import { shownAs, throughCuts, type CutList } from "../media/cut-list";
+import {
+	shownAs,
+	throughCuts,
+	upcomingSlides,
+	type CutList,
+} from "../media/cut-list";
 import { SlideVideoSampler } from "../slideshow/video-sampler";
 import type { SequenceSourceRegistry } from "./sequence-sources.svelte";
 
@@ -41,10 +46,19 @@ export class MediaLayerDriver {
 		const renderer = this.#getRenderer();
 		const sides = mediaLayerSides(layers);
 		this.#active = new Set();
+		const upcoming: string[] = [];
 		for (const layer of sides) {
 			const shown = this.#registry.get(layer.sourceId);
 			if (shown?.cutList) {
 				this.#extraSamplers.set(layer.key, this.#videoSlides(shown.cutList));
+				upcoming.push(
+					...upcomingSlides(
+						shown.cutList,
+						layer.sourceTime,
+						SLIDE_LOOKAHEAD_SECONDS,
+						MAX_UPCOMING_SLIDES,
+					),
+				);
 			} else this.#extraSamplers.delete(layer.key);
 			const { src, sourceTime, bounce, frame } = throughCuts(
 				shown,
@@ -84,7 +98,7 @@ export class MediaLayerDriver {
 					continue;
 				}
 				const img = this.#registry.image(src.id);
-				if (img?.complete) {
+				if (img) {
 					this.#getRenderer()?.updateLayerImage(layer.key, img, frame);
 					this.#uploaded.set(layer.key, wanted);
 				}
@@ -115,6 +129,7 @@ export class MediaLayerDriver {
 				videoFrame.close();
 			});
 		}
+		this.#registry.prefetchImages(upcoming);
 		// Lanes that stopped asking for frames drop theirs; decoders are kept for a later clip.
 		for (const key of this.#uploaded.keys()) {
 			if (!sides.some((l) => l.key === key)) this.#uploaded.delete(key);
@@ -225,6 +240,10 @@ const videoSlideCounts = new WeakMap<CutList, number>();
 
 /** A backward pass holds a chunk of frames at once; the preview keeps them this size. */
 const PREVIEW_REVERSE_MAX_SIDE = 1280;
+
+/** How far ahead a slideshow's image slides decode, so a fast cut never waits on one. */
+const SLIDE_LOOKAHEAD_SECONDS = 1.5;
+const MAX_UPCOMING_SLIDES = 32;
 
 /** How many decoders one lane may hold at once. */
 const MAX_LANE_SAMPLERS = 4;
