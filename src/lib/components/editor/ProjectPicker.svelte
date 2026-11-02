@@ -2,6 +2,13 @@
 	import { onMount } from "svelte";
 	import { FolderOpen } from "lucide-svelte";
 	import PanelModal from "../ui/PanelModal.svelte";
+	import MediaThumb from "../ui/MediaThumb.svelte";
+	import { fmtAgo } from "../../utils";
+	import {
+		readProjectPreviews,
+		sourceThumb,
+		type ProjectPreview,
+	} from "../../editor/project-preview";
 	import { readProjectNames } from "../../editor/project-names";
 	import {
 		listRecentEdits,
@@ -29,6 +36,8 @@
 	let singles = $state<RecentEdit[]>(readCachedRecentEdits("single"));
 	const names = readProjectNames();
 	let busy = $state(false);
+	let previews = $state<Map<string, ProjectPreview>>(new Map());
+	let thumbs = $state<Record<string, string | null>>({});
 
 	onMount(() => {
 		void listRecentEdits("slideshow")
@@ -37,7 +46,28 @@
 		void listRecentEdits("single")
 			.then((list) => (singles = list))
 			.catch(() => {});
+		for (const mode of ["slideshow", "single"] as const) {
+			void readProjectPreviews(mode)
+				.then((found) => {
+					previews = new Map([...previews, ...found]);
+					for (const { sourceIds } of found.values()) loadThumbs(sourceIds);
+				})
+				.catch(() => {});
+		}
 	});
+
+	function loadThumbs(ids: string[]) {
+		for (const id of ids) {
+			if (id in thumbs) continue;
+			void sourceThumb(id).then((url) => (thumbs[id] = url));
+		}
+	}
+
+	function effectsLine(effects: string[]): string {
+		if (effects.length === 0) return "No effects";
+		const shown = effects.slice(0, 3).join(", ");
+		return effects.length > 3 ? `${shown} +${effects.length - 3}` : shown;
+	}
 
 	async function pick(mode: PickedMode, edit: RecentEdit) {
 		if (busy) return;
@@ -49,6 +79,21 @@
 		}
 	}
 </script>
+
+{#snippet frames(edit: RecentEdit, kind: "slide" | "single")}
+	{@const ids = previews.get(edit.key)?.sourceIds}
+	<span class="frames {kind}" aria-hidden="true">
+		{#if ids}
+			{#each ids as id (id)}
+				<span class="frame">
+					<MediaThumb thumbUrl={thumbs[id]} thumbPending={!(id in thumbs)} />
+				</span>
+			{/each}
+		{:else}
+			<span class="frame"><MediaThumb thumbPending /></span>
+		{/if}
+	</span>
+{/snippet}
 
 <PanelModal title="Add a project" {busy} {onClose}>
 	{#snippet icon()}<FolderOpen size={12} />{/snippet}
@@ -72,11 +117,15 @@
 						disabled={busy}
 						onclick={() => pick("slideshow", edit)}
 					>
-						<span class="name">{recentEditName(edit, names)}</span>
-						<span class="count"
-							>{edit.sourceCount}
-							{edit.sourceCount === 1 ? "slide" : "slides"}</span
-						>
+						{@render frames(edit, "slide")}
+						<span class="text">
+							<span class="name">{recentEditName(edit, names)}</span>
+							<span class="meta"
+								>{edit.sourceCount}
+								{edit.sourceCount === 1 ? "slide" : "slides"}</span
+							>
+						</span>
+						<span class="when">{fmtAgo(edit.updatedAt)}</span>
 					</button>
 				</li>
 			{/each}
@@ -97,7 +146,16 @@
 						disabled={busy}
 						onclick={() => pick("single", edit)}
 					>
-						<span class="name">{recentEditName(edit, names)}</span>
+						{@render frames(edit, "single")}
+						<span class="text">
+							<span class="name">{recentEditName(edit, names)}</span>
+							{#if previews.get(edit.key)}
+								<span class="meta"
+									>{effectsLine(previews.get(edit.key)!.effects)}</span
+								>
+							{/if}
+						</span>
+						<span class="when">{fmtAgo(edit.updatedAt)}</span>
 					</button>
 				</li>
 			{/each}
@@ -133,10 +191,10 @@
 
 	.row {
 		display: flex;
-		align-items: baseline;
-		gap: 0.6rem;
+		align-items: center;
+		gap: 0.75rem;
 		width: 100%;
-		padding: 0.5rem 0.65rem;
+		padding: 0.4rem 0.65rem 0.4rem 0.4rem;
 		border: 1px solid var(--line);
 		border-radius: var(--r-2);
 		background: none;
@@ -158,18 +216,68 @@
 		opacity: 0.6;
 	}
 
-	.name {
+	.frames {
+		display: flex;
+		flex-shrink: 0;
+		gap: 2px;
+	}
+
+	.frames.slide {
+		width: 208px;
+	}
+
+	.frame {
+		position: relative;
+		width: 40px;
+		height: 48px;
+		overflow: hidden;
+		border-radius: var(--r-1);
+		background: var(--sunken);
+	}
+
+	.frames.single .frame {
+		width: 72px;
+	}
+
+	.text {
+		display: flex;
 		flex: 1;
+		flex-direction: column;
+		gap: 0.15rem;
 		min-width: 0;
+	}
+
+	.name,
+	.meta {
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+
+	.name {
 		font-size: 0.8rem;
 	}
 
-	.count {
+	.meta,
+	.when {
 		font-family: var(--font-mono);
 		font-size: 0.62rem;
 		color: var(--text-4);
+	}
+
+	.when {
+		flex-shrink: 0;
+		align-self: flex-start;
+		padding-top: 0.15rem;
+	}
+
+	@media (max-width: 520px) {
+		.frames.slide {
+			width: auto;
+		}
+
+		.frames.slide .frame:nth-child(n + 4) {
+			display: none;
+		}
 	}
 </style>
