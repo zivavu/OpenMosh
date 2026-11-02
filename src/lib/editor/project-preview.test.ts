@@ -8,6 +8,17 @@ describe("previewOf", () => {
 		const preview = previewOf({ mode: "slideshow", sourceIds: ids, state: {} });
 		expect(preview.sourceIds).toEqual(ids.slice(0, PREVIEW_FRAMES));
 		expect(preview.effects).toEqual([]);
+		expect(preview.hasSong).toBe(false);
+	});
+
+	test("a project with a song says so", () => {
+		const preview = previewOf({
+			mode: "slideshow",
+			sourceIds: ids,
+			state: {},
+			trackId: "song",
+		});
+		expect(preview.hasSong).toBe(true);
 	});
 
 	test("a single edit shows its file and its shown effects", () => {

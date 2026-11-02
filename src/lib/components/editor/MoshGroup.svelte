@@ -96,7 +96,7 @@
 	.mosh-settings {
 		left: 50%;
 		transform: translateX(-50%);
-		min-width: 210px;
+		min-width: 260px;
 	}
 
 	@media (max-width: 450px) {
