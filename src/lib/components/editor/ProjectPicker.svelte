@@ -32,10 +32,18 @@
 
 	let { onPick, onClose }: Props = $props();
 
-	let slideshows = $state<RecentEdit[]>(readCachedRecentEdits("slideshow"));
-	let singles = $state<RecentEdit[]>(readCachedRecentEdits("single"));
+	const cachedSlideshows = readCachedRecentEdits("slideshow");
+	const cachedSingles = readCachedRecentEdits("single");
+	let slideshows = $state<RecentEdit[]>(cachedSlideshows);
+	let singles = $state<RecentEdit[]>(cachedSingles);
 	const names = readProjectNames();
 	let busy = $state(false);
+	/** Opens on whichever kind was edited last. */
+	let tab = $state<PickedMode>(
+		(cachedSingles[0]?.updatedAt ?? 0) > (cachedSlideshows[0]?.updatedAt ?? 0)
+			? "single"
+			: "slideshow",
+	);
 	let previews = $state<Map<string, ProjectPreview>>(new Map());
 	let thumbs = $state<Record<string, string | null>>({});
 
@@ -97,14 +105,24 @@
 
 <PanelModal title="Add a project" {busy} {onClose}>
 	{#snippet icon()}<FolderOpen size={12} />{/snippet}
-	{#if slideshows.length === 0 && singles.length === 0}
+	<div class="tabs" role="tablist">
+		{#each [["slideshow", "Slideshows", slideshows.length], ["single", "Single edits", singles.length]] as const as [mode, label, count] (mode)}
+			<button
+				class="tab"
+				role="tab"
+				aria-selected={tab === mode}
+				class:active={tab === mode}
+				onclick={() => (tab = mode)}
+				>{label}<span class="tab-count">{count}</span></button
+			>
+		{/each}
+	</div>
+	{#if tab === "slideshow" && slideshows.length === 0}
 		<p class="hint">
-			You have no saved slideshows or single edits yet. Make one in Slideshow or
-			Single mode and it will show up here.
+			You have no saved slideshows yet. Make one in Slideshow mode and it will
+			show up here.
 		</p>
-	{/if}
-	{#if slideshows.length > 0}
-		<h3 class="section">Slideshows</h3>
+	{:else if tab === "slideshow"}
 		<p class="hint">
 			It comes in as one clip that cuts on the slideshow's own beat. If you
 			change the slideshow later, pick Update from slideshow on its clip.
@@ -131,8 +149,12 @@
 			{/each}
 		</ul>
 	{/if}
-	{#if singles.length > 0}
-		<h3 class="section">Single edits</h3>
+	{#if tab === "single" && singles.length === 0}
+		<p class="hint">
+			You have no saved single edits yet. Make one in Single mode and it will
+			show up here.
+		</p>
+	{:else if tab === "single"}
 		<p class="hint">
 			It comes in as one clip with the edit's effects, and its song goes on an
 			audio lane under it. If you change the edit later, pick Update from single
@@ -164,13 +186,54 @@
 </PanelModal>
 
 <style>
-	.section {
-		margin: 0.4rem 0 0;
-		font-size: 0.68rem;
+	.tabs {
+		display: flex;
+		gap: 2px;
+		padding: 2px;
+		background: var(--sunken);
+		border: 1px solid var(--line);
+		border-radius: var(--r-2);
+	}
+
+	.tab {
+		display: inline-flex;
+		flex: 1;
+		align-items: center;
+		justify-content: center;
+		gap: 0.4rem;
+		padding: 0.3rem 0;
+		background: none;
+		border: none;
+		border-radius: var(--r-1);
+		color: var(--text-3);
+		font-family: inherit;
+		font-size: 0.72rem;
 		font-weight: 600;
-		letter-spacing: 0.06em;
-		text-transform: uppercase;
+		cursor: pointer;
+		transition:
+			color var(--t-fast),
+			background var(--t-fast);
+	}
+
+	.tab:hover {
 		color: var(--text-2);
+	}
+
+	.tab.active {
+		color: var(--text);
+		background: var(--raised);
+		box-shadow: inset 0 0 0 1px var(--line);
+	}
+
+	.tab:focus-visible {
+		outline: 1px solid var(--live);
+		outline-offset: -1px;
+	}
+
+	.tab-count {
+		font-family: var(--font-mono);
+		font-size: 0.6rem;
+		color: var(--text-4);
 	}
 
 	.hint {
