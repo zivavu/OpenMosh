@@ -36,7 +36,11 @@ const layer = (lane: string, sourceId: string) =>
 function driver(sources: { id: string; kind: string; cutList?: CutList }[]) {
 	const byId = new Map(sources.map((s) => [s.id, s]));
 	return new MediaLayerDriver({
-		registry: { sources, get: (id: string) => byId.get(id) } as never,
+		registry: {
+			sources,
+			get: (id: string) => byId.get(id),
+			prefetchImages: () => {},
+		} as never,
 		getRenderer: () => null,
 	});
 }

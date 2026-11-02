@@ -3,6 +3,7 @@ import {
 	cutAt,
 	parseCutList,
 	throughCuts,
+	upcomingSlides,
 	type CutList,
 } from "../media/cut-list";
 import { beatAtTime } from "./beat-clock";
@@ -174,5 +175,38 @@ describe("cut lists", () => {
 		const get = (id: string): Src => ({ kind: "image", id });
 		expect(throughCuts(show, 0, undefined, get).frame).toEqual(frame);
 		expect(throughCuts(show, 0, undefined, get, false).frame).toBeUndefined();
+	});
+});
+
+describe("upcomingSlides", () => {
+	const list: CutList = {
+		version: 1,
+		name: "s",
+		sessionKey: "k",
+		duration: 2,
+		songStart: 0,
+		bpm: 120,
+		beatOffset: 0,
+		slides: ["a", "b", "c", "d"],
+		cuts: [
+			[0, 0],
+			[0.5, 1],
+			[1, 2],
+			[1.5, 0],
+		],
+	};
+
+	test("lists the slides ahead, soonest first and each once", () => {
+		expect(upcomingSlides(list, 0.2, 1.4, 10)).toEqual(["a", "b", "c"]);
+	});
+
+	test("wraps as the list loops", () => {
+		expect(upcomingSlides(list, 1.6, 1, 10)).toEqual(["a", "b"]);
+		expect(upcomingSlides(list, 5.6, 1, 10)).toEqual(["a", "b"]);
+	});
+
+	test("stops at max and after one pass", () => {
+		expect(upcomingSlides(list, 0, 1.6, 2)).toEqual(["a", "b"]);
+		expect(upcomingSlides(list, 0, 100, 10)).toEqual(["a", "b", "c"]);
 	});
 });
