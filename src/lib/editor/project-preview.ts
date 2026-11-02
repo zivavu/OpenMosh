@@ -18,15 +18,17 @@ export interface ProjectPreview {
 	sourceIds: string[];
 	/** A single edit's shown effects, in chain order. */
 	effects: string[];
+	hasSong: boolean;
 }
 
 export function previewOf(
-	session: Pick<StoredSession, "mode" | "sourceIds" | "state">,
+	session: Pick<StoredSession, "mode" | "sourceIds" | "state" | "trackId">,
 ): ProjectPreview {
 	const frames = session.mode === "single" ? 1 : PREVIEW_FRAMES;
 	return {
 		sourceIds: session.sourceIds.slice(0, frames),
 		effects: session.mode === "single" ? effectNames(session.state) : [],
+		hasSong: !!session.trackId,
 	};
 }
 

@@ -101,6 +101,7 @@
 		DEFAULT_SETTINGS,
 		loadSettings,
 		updateSettings,
+		type ProjectSongChoice,
 	} from "../../editor/settings";
 	import { linkBand } from "../../editor/link-band.svelte";
 	import { showSpectrum } from "../../editor/show-spectrum.svelte";
@@ -723,7 +724,11 @@
 
 	/** A saved slideshow on a lane of its own on top, from the playhead, with its song
 	 * under it. The project grows to fit it. */
-	async function addSlideshow(sessionKey: string, name: string) {
+	async function addSlideshow(
+		sessionKey: string,
+		name: string,
+		includeSong: boolean,
+	) {
 		const frozen = await freezeSavedSlideshow(sessionKey, name).catch(
 			() => null,
 		);
@@ -741,7 +746,8 @@
 
 		const start = timelineAxis?.staticTime ?? 0;
 		const end = start + frozen.cutList.duration;
-		const songId = frozen.trackId ? trackSourceId(frozen.trackId) : null;
+		const songId =
+			includeSong && frozen.trackId ? trackSourceId(frozen.trackId) : null;
 		const audioLanes = mediaTimeline.audioLanes ?? [];
 		const withSong = songId && audioLanes.length < MAX_AUDIO_LANES;
 		if (withSong) await audioBank.settle([songId]);
@@ -830,7 +836,11 @@
 
 	/** A saved single edit on a lane of its own on top, from the playhead: its media
 	 * with its chain held on the clip, and its song under it. */
-	async function addSingleEdit(sessionKey: string, name: string) {
+	async function addSingleEdit(
+		sessionKey: string,
+		name: string,
+		includeSong: boolean,
+	) {
 		const saved = await openSavedSingle(sessionKey).catch(() => null);
 		if (!saved) {
 			showToast("That edit couldn't be opened", "error");
@@ -851,7 +861,10 @@
 			(span
 				? span.end - span.start
 				: droppedClipLength(source, sourceRegistry.edits[source.id]));
-		const songId = span && saved.trackId ? trackSourceId(saved.trackId) : null;
+		const songId =
+			includeSong && span && saved.trackId
+				? trackSourceId(saved.trackId)
+				: null;
 		const audioLanes = mediaTimeline.audioLanes ?? [];
 		const withSong = songId && audioLanes.length < MAX_AUDIO_LANES;
 		if (withSong) await audioBank.settle([songId]);
@@ -1030,6 +1043,9 @@
 		saved.previewProxies ?? DEFAULT_SETTINGS.previewProxies,
 	);
 	let videoLoop = $state(saved.loopVideo ?? DEFAULT_SETTINGS.loopVideo);
+	let projectSong = $state<ProjectSongChoice>(
+		saved.projectSong ?? DEFAULT_SETTINGS.projectSong,
+	);
 	let sourceFit = $state<SourceFit>(
 		saved.sourceFit ?? DEFAULT_SETTINGS.sourceFit,
 	);
@@ -1189,6 +1205,7 @@
 			: audio.outputVolume;
 		const loopAudio = isSequenceMode ? mixer.loop : audio.loopAudio;
 		videoLoop;
+		projectSong;
 		// Merged, not replaced: the upload screen writes its mode under the same key.
 		updateSettings({
 			moshMin,
@@ -1207,6 +1224,7 @@
 			loopAudio,
 			loopVideo: videoLoop,
 			sourceFit,
+			projectSong,
 		});
 	});
 	let currentFps = $state(0);
@@ -5638,6 +5656,19 @@
 								bind:checked={layerHighlight.value}
 							/>
 						</div>
+						<div class="mosh-setting-row">
+							<label
+								for="project-song"
+								title="What to do with a project's song when you add it with Add a project"
+							>
+								Project songs
+							</label>
+							<select id="project-song" bind:value={projectSong}>
+								<option value="ask">Ask each time</option>
+								<option value="add">Always add</option>
+								<option value="skip">Leave out</option>
+							</select>
+						</div>
 					{/if}
 					<div class="mosh-setting-row">
 						<label
@@ -6366,10 +6397,12 @@
 	{#if projectPickerOpen}
 		{#await loadProjectPicker() then ProjectPicker}
 			<ProjectPicker
-				onPick={(mode, key, name) =>
+				{projectSong}
+				onRememberSong={(choice) => (projectSong = choice)}
+				onPick={(mode, key, name, includeSong) =>
 					mode === "single"
-						? addSingleEdit(key, name)
-						: addSlideshow(key, name)}
+						? addSingleEdit(key, name, includeSong)
+						: addSlideshow(key, name, includeSong)}
 				onClose={() => (projectPickerOpen = false)}
 			/>
 		{:catch}

@@ -3,6 +3,8 @@
 	import { FolderOpen } from "lucide-svelte";
 	import PanelModal from "../ui/PanelModal.svelte";
 	import MediaThumb from "../ui/MediaThumb.svelte";
+	import Checkbox from "../ui/Checkbox.svelte";
+	import type { ProjectSongChoice } from "../../editor/settings";
 	import { fmtAgo } from "../../utils";
 	import {
 		readProjectPreviews,
@@ -26,11 +28,15 @@
 			mode: PickedMode,
 			sessionKey: string,
 			name: string,
+			includeSong: boolean,
 		) => Promise<void>;
+		/** "ask" puts the question on the picked row before it goes in. */
+		projectSong: ProjectSongChoice;
+		onRememberSong: (choice: ProjectSongChoice) => void;
 		onClose: () => void;
 	}
 
-	let { onPick, onClose }: Props = $props();
+	let { onPick, projectSong, onRememberSong, onClose }: Props = $props();
 
 	const cachedSlideshows = readCachedRecentEdits("slideshow");
 	const cachedSingles = readCachedRecentEdits("single");
@@ -77,11 +83,32 @@
 		return effects.length > 3 ? `${shown} +${effects.length - 3}` : shown;
 	}
 
-	async function pick(mode: PickedMode, edit: RecentEdit) {
+	/** The row asking whether its song comes along. */
+	let askingKey = $state<string | null>(null);
+	let rememberSong = $state(false);
+
+	function pick(mode: PickedMode, edit: RecentEdit) {
+		if (busy) return;
+		// Not known yet counts as having one: the answer is ignored when there's none.
+		const hasSong = previews.get(edit.key)?.hasSong ?? true;
+		if (hasSong && projectSong === "ask") {
+			askingKey = askingKey === edit.key ? null : edit.key;
+			rememberSong = false;
+			return;
+		}
+		void add(mode, edit, projectSong !== "skip");
+	}
+
+	function answer(mode: PickedMode, edit: RecentEdit, includeSong: boolean) {
+		if (rememberSong) onRememberSong(includeSong ? "add" : "skip");
+		void add(mode, edit, includeSong);
+	}
+
+	async function add(mode: PickedMode, edit: RecentEdit, includeSong: boolean) {
 		if (busy) return;
 		busy = true;
 		try {
-			await onPick(mode, edit.key, recentEditName(edit, names));
+			await onPick(mode, edit.key, recentEditName(edit, names), includeSong);
 		} finally {
 			busy = false;
 		}
@@ -101,6 +128,37 @@
 			<span class="frame"><MediaThumb thumbPending /></span>
 		{/if}
 	</span>
+{/snippet}
+
+{#snippet songAsk(mode: PickedMode, edit: RecentEdit)}
+	{#if askingKey === edit.key}
+		<div class="song-ask">
+			<p class="ask-q">
+				Add its song too? It goes on an audio lane under the clip.
+			</p>
+			<div class="ask-actions">
+				<button
+					class="ask-btn primary"
+					disabled={busy}
+					onclick={() => answer(mode, edit, true)}>Add the song</button
+				>
+				<button
+					class="ask-btn"
+					disabled={busy}
+					onclick={() => answer(mode, edit, false)}>Leave it out</button
+				>
+				<label class="ask-remember">
+					<Checkbox bind:checked={rememberSong} disabled={busy} />
+					Remember my choice
+				</label>
+			</div>
+			{#if rememberSong}
+				<p class="hint">
+					You can change it later in Mosh settings, under Project songs.
+				</p>
+			{/if}
+		</div>
+	{/if}
 {/snippet}
 
 <PanelModal title="Add a project" {busy} {onClose}>
@@ -145,6 +203,7 @@
 						</span>
 						<span class="when">{fmtAgo(edit.updatedAt)}</span>
 					</button>
+					{@render songAsk("slideshow", edit)}
 				</li>
 			{/each}
 		</ul>
@@ -156,9 +215,8 @@
 		</p>
 	{:else if tab === "single"}
 		<p class="hint">
-			It comes in as one clip with the edit's effects, and its song goes on an
-			audio lane under it. If you change the edit later, pick Update from single
-			edit on its clip.
+			It comes in as one clip with the edit's effects. If you change the edit
+			later, pick Update from single edit on its clip.
 		</p>
 		<ul class="list">
 			{#each singles as edit (edit.key)}
@@ -179,6 +237,7 @@
 						</span>
 						<span class="when">{fmtAgo(edit.updatedAt)}</span>
 					</button>
+					{@render songAsk("single", edit)}
 				</li>
 			{/each}
 		</ul>
@@ -186,6 +245,66 @@
 </PanelModal>
 
 <style>
+	.song-ask {
+		display: flex;
+		flex-direction: column;
+		gap: 0.45rem;
+		margin-top: 0.25rem;
+		padding: 0.55rem 0.65rem;
+		border: 1px solid var(--line);
+		border-radius: var(--r-2);
+		background: var(--sunken);
+	}
+
+	.ask-q {
+		margin: 0;
+		font-size: 0.78rem;
+		color: var(--text-2);
+	}
+
+	.ask-actions {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.4rem;
+	}
+
+	.ask-btn {
+		padding: 0.3rem 0.65rem;
+		border: 1px solid var(--line-strong);
+		border-radius: var(--r-1);
+		background: none;
+		color: var(--text-2);
+		font-family: inherit;
+		font-size: 0.72rem;
+		cursor: pointer;
+	}
+
+	.ask-btn:hover:not(:disabled) {
+		color: var(--text);
+		border-color: var(--text-3);
+	}
+
+	.ask-btn.primary {
+		border-color: var(--mosh);
+		color: var(--text);
+	}
+
+	.ask-btn:disabled {
+		cursor: progress;
+		opacity: 0.6;
+	}
+
+	.ask-remember {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		margin-left: auto;
+		font-size: 0.72rem;
+		color: var(--text-3);
+		cursor: pointer;
+	}
+
 	.tabs {
 		display: flex;
 		gap: 2px;

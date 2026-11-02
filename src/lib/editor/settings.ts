@@ -8,6 +8,9 @@ const SETTINGS_KEY = "openmosh-settings";
 /** The three ways in from the upload screen. */
 export type UploadMode = "single" | "sequence" | "slideshow";
 
+/** What Add a project does with a project's song. */
+export type ProjectSongChoice = "ask" | "add" | "skip";
+
 export interface EditorSettings {
 	/** Which mode the app was last launched in, so it opens on it again. */
 	lastMode: UploadMode;
@@ -37,6 +40,7 @@ export interface EditorSettings {
 	previewProxies: boolean;
 	/** Whether the upload screen's demo keeps moshing behind the UI. */
 	demoBackground: boolean;
+	projectSong: ProjectSongChoice;
 }
 
 /** What a fresh editor starts from, and what double-clicking a control restores. */
@@ -61,6 +65,7 @@ export const DEFAULT_SETTINGS: EditorSettings = {
 	sourceFit: "contain",
 	previewProxies: true,
 	demoBackground: true,
+	projectSong: "ask",
 };
 
 export function loadSettings(): Partial<EditorSettings> {
