@@ -158,3 +158,22 @@ test.describe("chain bar in a narrow window", () => {
 		}
 	});
 });
+
+test.describe("action bar on a small phone", () => {
+	test.use({ viewport: { width: 360, height: 780 } });
+
+	test("keeps mosh, play and record on one row", async ({ page }) => {
+		await openSingle(page, "red.png", RED);
+		await waitForRender(page);
+		await page.getByRole("button", { name: "MP4", exact: true }).click();
+
+		const bar = actionBar(page);
+		await expect(bar.getByRole("button", { name: "RECORD" })).toBeVisible();
+		const tops = await bar
+			.locator("button:visible")
+			.evaluateAll((els) =>
+				els.map((el) => Math.round(el.getBoundingClientRect().top)),
+			);
+		expect(new Set(tops.map((t) => Math.round(t / 10))).size).toBe(1);
+	});
+});

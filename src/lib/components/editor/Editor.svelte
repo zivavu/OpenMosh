@@ -32,6 +32,7 @@
 	import { AudioManager } from "../../audio/audio-manager.svelte";
 	import type { AudioLinkGroup } from "../../audio/audio-utils";
 	import { downloadBlob } from "../../recorder";
+	import { getExportFormat } from "../../export-format.svelte";
 	import {
 		downloadProjectFile,
 		type ProjectContent,
@@ -612,6 +613,7 @@
 	);
 	let isImageFormat = $derived(format === "png" || format === "jpg");
 	let isVideoFormat = $derived(format === "webm");
+	let videoFormatLabel = $derived(getExportFormat() === "mp4" ? "MP4" : "WebM");
 	let imageSrc = $state("");
 	$effect(() => {
 		if (!file) {
@@ -5307,7 +5309,7 @@
 						buttons={[
 							{ label: "PNG", value: "png" },
 							{ label: "JPG", value: "jpg" },
-							{ label: "WebM", value: "webm" },
+							{ label: videoFormatLabel, value: "webm" },
 						]}
 						value={format}
 						onchange={(v) => (format = v)}
@@ -5614,7 +5616,7 @@
 							buttons={[
 								{ label: "PNG", value: "png" },
 								{ label: "JPG", value: "jpg" },
-								{ label: "WebM", value: "webm" },
+								{ label: videoFormatLabel, value: "webm" },
 							]}
 							value={format}
 							onchange={(v) => (format = v)}
@@ -5720,10 +5722,10 @@
 				>
 					{#if textClockRunning}
 						<Pause size={14} fill="currentColor" stroke="none" />
-						STOP
+						<span class="key-label">STOP</span>
 					{:else}
 						<Play size={14} fill="currentColor" stroke="none" />
-						PLAY
+						<span class="key-label">PLAY</span>
 					{/if}
 				</button>
 			{/if}
@@ -5734,11 +5736,11 @@
 					title="Save this frame as an image ({modKey}+S)"
 				>
 					<Download size={14} />
-					SAVE
+					<span class="key-label">SAVE</span>
 				</button>
 			{/if}
 
-			{#if isVideoFormat && !isMobile}
+			{#if isVideoFormat}
 				<RecordGroup
 					bind:this={recordGroupRef}
 					recording={recordingState.recording}

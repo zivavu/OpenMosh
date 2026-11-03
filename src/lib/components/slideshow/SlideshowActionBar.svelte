@@ -63,7 +63,6 @@
 		onRecordFpsChange,
 	}: Props = $props();
 
-	const isMobile = window.matchMedia("(pointer: coarse)").matches;
 	const fullscreenSupported = document.fullscreenEnabled;
 	let showOptionsPanel = $state(false);
 	let showRecordSettings = $state(false);
@@ -179,52 +178,50 @@
 	>
 		{#if previewPlaying}
 			<Pause size={14} fill="currentColor" stroke="none" />
-			STOP
+			<span class="key-label">STOP</span>
 		{:else}
 			<Play size={14} fill="currentColor" stroke="none" />
-			PLAY
+			<span class="key-label">PLAY</span>
 		{/if}
 	</button>
 
-	{#if !isMobile}
-		<RecordGroup
-			bind:this={recordGroupRef}
-			{recording}
-			disabled={slidesEmpty}
-			bind:showSettings={showRecordSettings}
-		>
-			{#snippet settingsContent()}
-				<div class="setting-row">
-					<span class="setting-label">Duration</span>
-					<span class="setting-val">{recordDuration.toFixed(1)}s</span>
-				</div>
-				<div class="setting-row">
-					<label for="ss-rec-fps">FPS</label>
-					<select
-						id="ss-rec-fps"
-						value={recordFps}
-						onchange={(e) =>
-							onRecordFpsChange(+(e.currentTarget as HTMLSelectElement).value)}
-					>
-						<option value={15}>15</option>
-						<option value={24}>24</option>
-						<option value={30}>30</option>
-						<option value={60}>60</option>
-						<option value={120}>120</option>
-					</select>
-				</div>
-				<button
-					class="start-btn"
-					onclick={() => {
-						showRecordSettings = false;
-						onStartRecording();
-					}}
+	<RecordGroup
+		bind:this={recordGroupRef}
+		{recording}
+		disabled={slidesEmpty}
+		bind:showSettings={showRecordSettings}
+	>
+		{#snippet settingsContent()}
+			<div class="setting-row">
+				<span class="setting-label">Duration</span>
+				<span class="setting-val">{recordDuration.toFixed(1)}s</span>
+			</div>
+			<div class="setting-row">
+				<label for="ss-rec-fps">FPS</label>
+				<select
+					id="ss-rec-fps"
+					value={recordFps}
+					onchange={(e) =>
+						onRecordFpsChange(+(e.currentTarget as HTMLSelectElement).value)}
 				>
-					Start Recording{trackFile ? "" : " (silent)"}
-				</button>
-			{/snippet}
-		</RecordGroup>
-	{/if}
+					<option value={15}>15</option>
+					<option value={24}>24</option>
+					<option value={30}>30</option>
+					<option value={60}>60</option>
+					<option value={120}>120</option>
+				</select>
+			</div>
+			<button
+				class="start-btn"
+				onclick={() => {
+					showRecordSettings = false;
+					onStartRecording();
+				}}
+			>
+				Start Recording{trackFile ? "" : " (silent)"}
+			</button>
+		{/snippet}
+	</RecordGroup>
 </div>
 
 {#if showShortcuts}
