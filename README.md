@@ -24,7 +24,7 @@ bun test           # Unit suite (bun:test)
 bun test:e2e       # End-to-end suite (Playwright, tests/e2e)
 ```
 
-Built with Svelte 5, Vite, TypeScript and WebGL2. `mediabunny` handles WebM muxing; BPM detection is our own, with no dependencies.
+Built with Svelte 5, Vite, TypeScript and WebGL2. `mediabunny` handles WebM and MP4 muxing; BPM detection is our own, with no dependencies.
 
 ---
 
@@ -42,7 +42,7 @@ Pick one of three modes on the upload screen.
 
 **Slideshow** is the fast one. Throw in a pile of images or videos, let it detect the BPM of your track (or set the tempo and length yourself), and it cuts between them on the beat with effects firing on the grid. Single edits and slideshows save to their own project files too (`.openmosh-single` and `.openmosh-slideshow`), with their media and song, and each one opens in the mode it came from.
 
-There are 70 effects, from the tame ones (pixelate, posterize, blur) through the usual glitch vocabulary (data bend, pixel sort, VHS, channel split) to things that follow motion or the salient region of the frame. A Mask effect limits the effects above it to an ellipse, a rectangle, a gradient, the bright parts of the picture, colors you pick from it, a shape you paint or an image you load. Anything with a clock — strobes, rolls, pulses, re-rolls — can run free or lock to the beat of the track. Everything renders in WebGL2 and exports to WebM with audio. No MP4, no GIF.
+There are 70 effects, from the tame ones (pixelate, posterize, blur) through the usual glitch vocabulary (data bend, pixel sort, VHS, channel split) to things that follow motion or the salient region of the frame. A Mask effect limits the effects above it to an ellipse, a rectangle, a gradient, the bright parts of the picture, colors you pick from it, a shape you paint or an image you load. Anything with a clock — strobes, rolls, pulses, re-rolls — can run free or lock to the beat of the track. Everything renders in WebGL2 and exports to WebM or MP4 with audio. No GIF.
 
 Keyboard shortcuts live behind the shortcuts button in the app.
 
@@ -86,7 +86,7 @@ Version 1.0.0. Single and slideshow modes are more or less settled. The editor i
 
 <!-- x-release-please-end -->
 
-MP4 and GIF export were both removed on purpose and aren't coming back.
+GIF export was removed on purpose and isn't coming back.
 
 ---
 
