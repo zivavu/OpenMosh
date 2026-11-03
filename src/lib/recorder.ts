@@ -41,6 +41,7 @@ import type { EffectInstance } from "./effects";
 import type { GlRenderer } from "./gl/renderer";
 import { downloadFile } from "./utils";
 import { openExportFile, removeExportFile } from "./export-files";
+import type { VideoContainer } from "./export-format.svelte";
 
 /** Bitrate scales with output size: a fixed rate starves big canvases and bloats
  * small ones. Chrome honors the target, Firefox clamps it. */
@@ -75,7 +76,9 @@ export interface RecordOptions {
 	/** Something the user should know that doesn't stop the export. */
 	onNotice?: (message: string) => void;
 	signal?: AbortSignal;
-	/** Decoded to drive effects during recording; for WebM it is also muxed. */
+	/** Defaults to WebM. */
+	container?: VideoContainer;
+	/** Decoded to drive effects during recording; it is also muxed. */
 	audioFile?: File;
 	/** Start of the audio region in seconds, for trimming and effect timing. */
 	audioStart?: number;
@@ -359,7 +362,7 @@ export async function openOutputBuffer(
 	return (await openDiskBuffer(kind)) ?? new SlabBuffer();
 }
 
-async function recordWebM(opts: RecordOptions): Promise<Blob> {
+async function encodeVideo(opts: RecordOptions): Promise<Blob> {
 	const mb = await import("mediabunny");
 
 	const {
@@ -372,6 +375,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		onFinalizing,
 		onNotice,
 		signal,
+		container = "webm",
 		audioFile,
 		audioStart = 0,
 		audioEnd,
@@ -444,14 +448,19 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		audioSampleRate = audio.sampleRate;
 	}
 
-	const outputFormat = new mb.WebMOutputFormat();
+	const mp4 = container === "mp4";
+	// Moov at the end: the target seeks, so nothing is held in memory for fast start.
+	const outputFormat = mp4
+		? new mb.Mp4OutputFormat({ fastStart: false })
+		: new mb.WebMOutputFormat();
 
 	const containerCodecs = outputFormat.getSupportedVideoCodecs();
 
 	// Prefer a hardware encoder (VP9/AV1 on most modern GPUs): far faster than software VP8.
-	const hwCandidates = (["vp9", "av1"] as const).filter((c) =>
-		containerCodecs.includes(c),
-	);
+	// MP4 sticks to H.264, the one codec every player and upload site takes.
+	const hwOrder: VideoCodec[] = mp4 ? ["avc"] : ["vp9", "av1"];
+	const swOrder: VideoCodec[] = mp4 ? ["avc"] : ["vp8", "vp9", "av1"];
+	const hwCandidates = hwOrder.filter((c) => containerCodecs.includes(c));
 	let selectedCodec: VideoCodec | null = null;
 	let hardware = false;
 	for (const c of hwCandidates) {
@@ -469,9 +478,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		}
 	}
 
-	const swCandidates = (["vp8", "vp9", "av1"] as const).filter((c) =>
-		containerCodecs.includes(c),
-	);
+	const swCandidates = swOrder.filter((c) => containerCodecs.includes(c));
 	if (!selectedCodec) {
 		selectedCodec = await mb.getFirstEncodableVideoCodec(swCandidates, {
 			width: canvas.width,
@@ -482,7 +489,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 
 	if (!selectedCodec) {
 		throw new Error(
-			`This browser can't encode WEBM video. ` +
+			`This browser can't encode ${container.toUpperCase()} video. ` +
 				`Tried ${swCandidates.join(", ")}. Try another browser.`,
 		);
 	}
@@ -717,19 +724,34 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 			sink = makeCanvasSink();
 		}
 
-		// Add audio track for WebM when we have audio (add track before start; add data after start)
+		// The track is added before start, its data after.
 		let audioSource: InstanceType<typeof mb.AudioBufferSource> | null = null;
 		if (wantsAudioTrack && audioBufferForMux) {
 			const supportedAudio = outputFormat.getSupportedAudioCodecs();
-			const preferredAudio = ["opus", "vorbis"] as const;
+			const preferredAudio = mp4
+				? (["aac"] as const)
+				: (["opus", "vorbis"] as const);
 			const audioCandidates = preferredAudio.filter((c) =>
 				supportedAudio.includes(c),
 			);
-			const audioCodec = await mb.getFirstEncodableAudioCodec(audioCandidates, {
+			const audioConfig = {
 				numberOfChannels: audioBufferForMux.numberOfChannels,
 				sampleRate: audioBufferForMux.sampleRate,
 				bitrate: 256_000,
-			});
+			};
+			let audioCodec = await mb.getFirstEncodableAudioCodec(
+				audioCandidates,
+				audioConfig,
+			);
+			// Chrome on Linux has no native AAC encoder; a WASM one stands in.
+			if (!audioCodec && mp4) {
+				const { registerAacEncoder } = await import("@mediabunny/aac-encoder");
+				registerAacEncoder();
+				audioCodec = await mb.getFirstEncodableAudioCodec(
+					audioCandidates,
+					audioConfig,
+				);
+			}
 			if (audioCodec) {
 				audioSource = new mb.AudioBufferSource({
 					codec: audioCodec,
@@ -844,7 +866,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 	onFinalizing?.();
 	await new Promise<void>((r) => setTimeout(r, 0));
 
-	const blob = await buffer.toBlob("video/webm");
+	const blob = await buffer.toBlob(mp4 ? "video/mp4" : "video/webm");
 	// Cancel stays honoured while the file is written: nothing downloads, nothing stays.
 	if (signal?.aborted) buffer.discard();
 	checkAbort(signal);
@@ -852,7 +874,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 }
 
 export async function recordVideo(opts: RecordOptions): Promise<Blob> {
-	return recordWebM(opts);
+	return encodeVideo(opts);
 }
 
 export function downloadBlob(blob: Blob, ext = "webm") {

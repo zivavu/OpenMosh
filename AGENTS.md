@@ -45,7 +45,9 @@ Outside CI a run reuses whatever already serves its port, so when my dev server 
 - Svelte 5 runes only — use `$state`, `$derived`, `$effect`, `$props`, `$bindable`; use `mount()`
   not `new App()`; use `$state.snapshot()` when you need a plain object copy.
 - Package manager: **bun** — always use `bun`, not `npm` or `yarn`.
-- No MP4 or GIF export — both were intentionally removed; do not re-add either. (GIF files are supported as _input_; they animate.)
+- No GIF export: it was intentionally removed; do not re-add it. (GIF files are supported as _input_; they animate.)
+- MP4 export is H.264 + AAC. Where the browser has no AAC encoder (Chrome on Linux),
+  `@mediabunny/aac-encoder` is lazy-loaded; keep it on the same version as `mediabunny`.
 - When adding a new effect: give it a file in `src/lib/effects/catalog/` exporting its
   `definition` and its GLSL `shader` (set `animated: true` if it uses `u_time` for
   animation — `ANIMATED_EFFECTS` is derived automatically, no separate registration needed;

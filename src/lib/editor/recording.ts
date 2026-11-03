@@ -5,6 +5,7 @@ import {
 	type AudioResponse,
 } from "../audio/auto-range";
 import { downloadBlob, recordVideo } from "../recorder";
+import { getExportFormat } from "../export-format.svelte";
 import { preloadCaptionFonts } from "../caption";
 import {
 	createTextChainSource,
@@ -365,6 +366,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 			textTimeline && moshOptions
 				? createTextChainSource(() => moshOptions, { clone: true })
 				: null;
+		const container = getExportFormat();
 		const blob = await recordVideo({
 			duration: exportDuration,
 			fps,
@@ -395,6 +397,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 			onProgress,
 			onFinalizing,
 			onNotice: ctx.onNotice,
+			container,
 			signal,
 			...(ctx.sequence?.mix && { audioMix: ctx.sequence.mix }),
 			// Explicit audio track: always include for both mux output and FFT reactivity
@@ -425,7 +428,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 						: {}),
 			...(effectsRef && { effectsRef, audioGroupsRef }),
 		});
-		downloadBlob(blob);
+		downloadBlob(blob, container);
 	} finally {
 		// Stops mediabunny's pre-decode pipeline and closes its decoder on abort/error.
 		// Not awaited: a cancel can leave a read pending, and return() queues behind it.

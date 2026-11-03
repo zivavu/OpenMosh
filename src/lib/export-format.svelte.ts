@@ -1,0 +1,45 @@
+import { readRaw, writeRaw } from "./storage";
+
+export type VideoContainer = "webm" | "mp4";
+
+const KEY = "openmosh-export-format";
+
+let format = $state<VideoContainer>(readRaw(KEY) === "mp4" ? "mp4" : "webm");
+/** Null until probed. */
+let mp4Supported = $state<boolean | null>(null);
+let probing: Promise<boolean> | null = null;
+
+export function getExportFormat(): VideoContainer {
+	return mp4Supported === false ? "webm" : format;
+}
+
+export function setExportFormat(value: VideoContainer) {
+	format = value;
+	writeRaw(KEY, value);
+}
+
+export function isMp4Supported(): boolean | null {
+	return mp4Supported;
+}
+
+/** H.264 is what MP4 players expect; without it the MP4 option stays off. */
+export function probeMp4(): Promise<boolean> {
+	probing ??= (async () => {
+		if (typeof VideoEncoder === "undefined") return false;
+		for (const codec of ["avc1.640028", "avc1.42001f"]) {
+			try {
+				const { supported } = await VideoEncoder.isConfigSupported({
+					codec,
+					width: 1280,
+					height: 720,
+					bitrate: 4_000_000,
+				});
+				if (supported) return true;
+			} catch {
+				// Unknown codec strings throw on some browsers.
+			}
+		}
+		return false;
+	})().then((ok) => (mp4Supported = ok));
+	return probing;
+}
