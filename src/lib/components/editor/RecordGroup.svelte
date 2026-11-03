@@ -65,7 +65,7 @@
 		title={exportBlocked ?? title}
 	>
 		<Disc size={14} />
-		RECORD
+		<span class="key-label">RECORD</span>
 	</button>
 
 	{#if showSettings && settingsContent}

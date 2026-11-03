@@ -4,7 +4,15 @@ export type VideoContainer = "webm" | "mp4";
 
 const KEY = "openmosh-export-format";
 
-let format = $state<VideoContainer>(readRaw(KEY) === "mp4" ? "mp4" : "webm");
+// Phones default to MP4: the iPhone Photos app can't play WebM.
+const stored = readRaw(KEY);
+let format = $state<VideoContainer>(
+	stored === "mp4" || stored === "webm"
+		? stored
+		: globalThis.matchMedia?.("(pointer: coarse)").matches
+			? "mp4"
+			: "webm",
+);
 /** Null until probed. */
 let mp4Supported = $state<boolean | null>(null);
 let probing: Promise<boolean> | null = null;

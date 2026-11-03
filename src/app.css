@@ -466,6 +466,21 @@ select option:disabled {
 		padding: 0 0.65rem;
 		font-size: 0.58rem;
 	}
+
+	/* Secondary keys drop to their icon so the strip stays one row. */
+	.bar-key .key-label {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+		white-space: nowrap;
+	}
+
+	.bar-key:has(.key-label) {
+		position: relative;
+		padding: 0 0.55rem;
+	}
 }
 
 :focus-visible {
