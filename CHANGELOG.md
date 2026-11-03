@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.0.1](https://github.com/zivavu/OpenMosh/compare/v1.0.0...v1.0.1) (2026-11-03)
+
+Videos can now export as MP4 as well as WebM; pick one in Record's settings. MP4 plays in the iPhone Photos app and on Instagram, where WebM doesn't. Phones get the Record button too, and start on MP4. In the editor, Add a project shows what each project looks like, puts slideshows and single edits on their own tabs, and asks whether a project's song comes along. The shortcuts list is ordered by task, and fast slideshows stay on the beat in the editor preview.
+
+Saved projects open as before, and nothing they store has changed.
+
+
+### Added
+
+* Export videos as MP4, and record them on phones ([44610a8](https://github.com/zivavu/OpenMosh/commit/44610a85083b08f03d673c79a9e28d0e6558f80c), [a29e9f4](https://github.com/zivavu/OpenMosh/commit/a29e9f46d7e4729feffa030fc2356e91ca837a0e))
+* See what each project looks like in Add a project, with slideshows and single edits on their own tabs, and choose whether a project's song comes along ([2c8e57f](https://github.com/zivavu/OpenMosh/commit/2c8e57f92166f53b65072fb5b5616a5e8197ab7b), [ea2f635](https://github.com/zivavu/OpenMosh/commit/ea2f635629e4463db75333deb0f5120ca626a680), [b59e88f](https://github.com/zivavu/OpenMosh/commit/b59e88fa6e34be2165e99964a0863ff9fc193260))
+* Order the shortcuts list by task ([8bc5205](https://github.com/zivavu/OpenMosh/commit/8bc520559a1bb4cc8d308b05a58dbd08fda27be9))
+
+
+### Faster
+
+* Keep fast slideshows on the beat in the editor preview ([e1bf8e9](https://github.com/zivavu/OpenMosh/commit/e1bf8e9d690bf21016c10326808bd9968246b57d))
+
 ## [1.0.0](https://github.com/zivavu/OpenMosh/compare/v0.9.27...v1.0.0) (2026-10-31)
 
 This is OpenMosh 1.0. The editor can now pull in your other work: a saved slideshow or single edit goes onto the timeline as one clip, and Update brings in what you change in it later. Datamosh is a new effect whose keyframes land on the beat. You can record your microphone onto an audio lane while the project plays, and resize text by dragging its box on the preview. The library drawer has a search box and stays open after you pick something.
