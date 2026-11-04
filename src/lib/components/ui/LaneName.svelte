@@ -84,7 +84,7 @@
 		min-width: 0;
 		font-family: inherit;
 		font-size: 0.65rem;
-		color: var(--text-3);
+		color: var(--text-2);
 	}
 
 	.lane-name {
