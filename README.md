@@ -2,17 +2,59 @@
 
 ![OpenMosh in glitched chrome lettering](assets/screenshots/banner.webp)
 
-A browser-based glitch art studio, inspired by PhotoMosh. Drop in a photo or a video, pile on effects until it falls apart, hook the whole mess up to a song, and save the result. Nothing is uploaded anywhere, it all runs in your browser.
+A browser-based glitch art studio, inspired by PhotoMosh. Drop in a photo or a video, pile on effects until it falls apart, hook the whole mess up to a song and export the result. It all runs in your browser, and nothing is uploaded.
 
-**[openmosh.com](https://openmosh.com/)**
+**[Open the app](https://openmosh.com/)** · [About](https://openmosh.com/about) · [Changelog](CHANGELOG.md)
 
 ![The OpenMosh upload screen](assets/screenshots/upload.webp)
 
----
+## How to use it
 
-## Getting started
+Pick a mode on the upload screen.
 
-OpenMosh uses [bun](https://bun.sh) as its package manager and runtime.
+**Single** takes one image, video, GIF or SVG. Hit Mosh for a random stack of effects, then tweak them one by one, or lock the good ones and re-roll the rest. The Curated mosh style picks effects that work together. Add a track and any effect parameter can follow a frequency band of the song.
+
+![Single mode with a moshed image and its signal chain](assets/screenshots/single.webp)
+
+**Editor** is a timeline built around a song. Lay clips out on media layers, each with its own mosh, and run effect lanes over the whole frame, with text on a timeline of its own. Any piece of media can be cropped, keyed, erased by hand and run at its own speed. 3D models go on layers too (OBJ, STL, GLB, FBX, PLY), and animated GLB and FBX files play. An FBX needs its textures embedded.
+
+![Editor mode, media layers and effect lanes on the timeline](assets/screenshots/editor.webp)
+
+**Slideshow** is the fast one. Throw in a pile of images or videos and it cuts between them on the beat, with effects firing on the grid. It detects your track's BPM, or you can set the tempo and length yourself.
+
+There are 70 effects, from tame ones (pixelate, posterize, blur) through the usual glitch vocabulary (data bend, pixel sort, VHS, channel split) to ones that follow motion. A Mask effect limits the effects above it to a shape, a gradient, the bright parts of the picture, colors you pick, a painted area or an image you load. Anything with a clock can run free or lock to the beat.
+
+Export is WebM or MP4 with audio. There's no GIF export, on purpose. Keyboard shortcuts live behind the shortcuts button in the app.
+
+## Saving your work
+
+Your work is kept in the browser's storage, and browsers can clear it, so save a file now and then.
+
+- A project file holds one project with its media, song and fonts, and opens in the mode it came from: `.openmosh` (editor), `.openmosh-single` or `.openmosh-slideshow`.
+- A backup (`.openmosh-backup`, from the storage dialog) holds everything the app has stored in this browser. Loading one merges it into what's already there.
+
+## Requirements
+
+OpenMosh is built and tested on recent Chromium browsers (Chrome, Edge, Brave, Arc). Firefox works, with a lower frame rate and slower exports. Safari may load it, but its support for the video encoder that export needs is newer and patchier. Touch devices only get Single mode.
+
+- WebGL2 is required.
+- WebCodecs handles video. Without a video encoder you can still edit, but not export. MP4 needs an H.264 encoder.
+- Float render targets and 4096px textures are expected. Without them, glow and bloom look flatter and large media may not show right.
+
+Any GPU from the last decade previews fine, and each live effect adds a shader pass. Video above 1080p gets a preview proxy, which you can turn off per file or with Optimize large videos in Settings. Export uses a hardware encoder when it finds one; otherwise WebM encodes across worker threads, so more cores finish sooner. 8 GB of RAM is comfortable, and 4K sources are what's most likely to make a machine struggle.
+
+## Privacy
+
+There's no backend, no account and no upload. Files are read straight off disk, everything renders locally and your browser writes the export. Your work stays on your device, and after the first visit the app runs offline too.
+
+Two things go over the network, and only when you use them:
+
+- The feedback form sends your message, your email if you give one, the screen you were on, your browser and screen size, and your effect chain with any caption text in it. It goes through [Web3Forms](https://web3forms.com/), which emails it to me. A report from the crash screen also carries the error and where in the code it happened, which can include a file name.
+- A custom font added from a link is downloaded once from where the link points (Google Fonts, or the site hosting the file), then kept on your device. Project files carry their fonts inside, so opening one downloads nothing, except a Google Fonts link in a file saved by an older version.
+
+## Development
+
+Uses [bun](https://bun.sh), Svelte 5, Vite, TypeScript and WebGL2. BPM detection is our own, with no dependencies.
 
 ```bash
 bun install        # Install dependencies
@@ -21,86 +63,23 @@ bun run build      # Production build
 bun preview        # Preview the production build
 bun check          # TypeScript + Svelte type-check
 bun test           # Unit suite (bun:test)
-bun test:e2e       # End-to-end suite (Playwright, tests/e2e)
+bun run test:e2e   # End-to-end suite (Playwright, tests/e2e)
 ```
-
-Built with Svelte 5, Vite, TypeScript and WebGL2. `mediabunny` handles WebM and MP4 muxing; BPM detection is our own, with no dependencies.
-
----
-
-## How to use it
-
-Pick one of three modes on the upload screen.
-
-**Single** takes one image or video. Animated GIFs count as video: they come in as a short clip, so they play, scrub and loop like any other one. SVGs are redrawn at the output size, so a logo stays sharp. Hit Mosh and you get a random stack of glitch effects, which you can then tweak one by one, or lock the good ones and re-roll the rest. Set the mosh style to Curated and a roll picks effects that work together instead: it runs them in a sensible order, lets one of them carry the look, and rolls again when the frame comes out blank. Add a track and any effect parameter can be wired to a frequency band of the song, so the distortion moves with the music.
-
-![Single mode with a moshed image and its signal chain](assets/screenshots/single.webp)
-
-**Editor** is a timeline. You upload a batch of media, drop the song in as the master track, then lay clips out on media layers, each with its own mosh: a preset, a fixed mosh, or a re-roll that fires on an interval. Stacked effect lanes run over the whole frame, and a text timeline sits alongside the layers. Any piece of media can be cropped, keyed, erased by hand and run at its own speed, and a layer clip pasted onto another brings its chain along. 3D models go on layers too: OBJ, STL, GLB (Draco and meshopt compressed ones included), FBX and PLY (point clouds and Gaussian splats too). Animated GLB and FBX files play their animation, GLB blend shapes included, and a file with several animations lets each clip pick one (an FBX needs its textures embedded). A 3D Transform on a model's clip turns the model itself, not a flat picture of it. The timeline is yours to size — drag the split along its top edge, or double-click it to hand the room back — and any lane you are not working on folds to a strip, one at a time or all at once. Save the whole project as a `.openmosh` file from the project menu, and open it back anywhere: the timeline, the media pool, the song and any custom fonts travel with it.
-
-![Editor mode, media layers and effect lanes on the timeline](assets/screenshots/editor.webp)
-
-**Slideshow** is the fast one. Throw in a pile of images or videos, let it detect the BPM of your track (or set the tempo and length yourself), and it cuts between them on the beat with effects firing on the grid. Single edits and slideshows save to their own project files too (`.openmosh-single` and `.openmosh-slideshow`), with their media and song, and each one opens in the mode it came from.
-
-There are 70 effects, from the tame ones (pixelate, posterize, blur) through the usual glitch vocabulary (data bend, pixel sort, VHS, channel split) to things that follow motion or the salient region of the frame. A Mask effect limits the effects above it to an ellipse, a rectangle, a gradient, the bright parts of the picture, colors you pick from it, a shape you paint or an image you load. Anything with a clock — strobes, rolls, pulses, re-rolls — can run free or lock to the beat of the track. Everything renders in WebGL2 and exports to WebM or MP4 with audio. No GIF.
-
-Keyboard shortcuts live behind the shortcuts button in the app.
-
-## Requirements
-
-A recent Chromium browser (Chrome, Edge, Brave, Arc) is what OpenMosh is built and tested against. Firefox and Safari may load it, but export is the wall: it needs `VideoEncoder`, and support there is newer and patchier.
-
-The browser has to give you:
-
-- WebGL2 with `EXT_color_buffer_float` and a max texture size of at least 4096 — the chain renders through float textures
-- WebCodecs (`VideoDecoder` / `VideoEncoder`) with VP8 or VP9 encode, for video sources and for export
-- Web Workers, IndexedDB and localStorage
-
-Hardware-wise, anything with a GPU from the last decade previews fine. Export is software VP8 across a worker pool sized off your core count, so a fast multi-core CPU is what makes long exports finish quickly. 8 GB of RAM is comfortable; 4K video sources are the thing most likely to make a machine struggle.
-
----
-
-## Performance
-
-The chain runs one full-screen shader pass per enabled effect, so cost scales with how many effects are live and with the resolution they run at.
-
-- The preview renders at the size it's displayed, not at the output size. Export switches the renderer to full output resolution for the duration of the capture.
-- Video above 1080p gets transcoded to a preview proxy in a worker. OpenMosh times the decode first and picks a 1920 or 1280 long edge depending on how the machine coped. You can turn the proxy off per file when you need to judge the original, or for every video by unticking Optimize large videos in Settings.
-- Export encodes in parallel across worker threads. Chromium runs one software encoder mostly single-pipeline, so more cores means a faster export.
-
----
-
-## Privacy
-
-Your media never leaves the machine. There's no backend, no account and no upload: files are read straight off disk into the page, everything renders locally, and your own browser writes the export. Sessions, saved sequences and your track library live in IndexedDB and localStorage on your device. After the first visit the app keeps a copy of itself, so it opens and runs offline too. Project files are yours: saving one writes a `.openmosh` file to your disk, and nothing leaves the machine unless you send the file yourself.
-
-Two things do go over the network, and only when you use them. The feedback form sends your message, your email if you give one, the screen you were on, your browser and screen size, and the effect chain you had on, with any caption text in it, through [Web3Forms](https://web3forms.com/), which emails it to me. A report sent from the crash screen also carries the error and where in the code it happened, which can include a file name. A custom font added from a link is downloaded once from wherever the link points (Google Fonts, or the site hosting a font file you pasted), then kept on your device. Project files carry their fonts inside, so opening one downloads nothing, except a Google Fonts link in a file saved by an older version.
-
----
-
-## Status
-
-<!-- x-release-please-start-version -->
-
-Version 1.0.2. Single and slideshow modes are more or less settled. The editor is still moving, but every past save format is tested on load, so updates bring old projects along. Save a project file now and then anyway: browsers can clear site data, and the file is your backup. See [CHANGELOG.md](CHANGELOG.md) for what each version changed.
-
-<!-- x-release-please-end -->
-
-GIF export was removed on purpose and isn't coming back.
-
----
 
 ## Contributing
 
 Issues and pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) has the setup, the conventions and how a change gets released. Security problems go in a regular issue too; see [SECURITY.md](SECURITY.md).
 
----
-
 ## Credits
 
-[PhotoMosh](https://photomosh.com/) is what this is chasing. A number of effects are ports: from [X-PostProcessing-Library](https://github.com/QianMo/X-PostProcessing-Library) (RGB Burst, Screen Jump, Sobel Neon) and [Vidvox's ISF-Files](https://github.com/Vidvox/ISF-Files) (HSV Swap, RGB Strobe, Trio Tone, Circle Warp, Pixel Shifter, Ring Warp, Shockwave, Ghosting, Fast Mosh, Resize Glitch, Stylize Glitch, Motion Mask), and the crosswarp, cross zoom and cube transitions in the upload-screen demo come from [gl-transitions](https://gl-transitions.com/), all MIT. [mediabunny](https://github.com/Vanilagy/mediabunny) does the muxing and the proxy transcodes, [Draco](https://github.com/google/draco) (Apache 2.0) and [meshoptimizer](https://github.com/zeux/meshoptimizer) (MIT) unpack compressed models, and [lucide](https://lucide.dev/) does the icons. Type is Archivo and JetBrains Mono via [Fontsource](https://fontsource.org/), plus the display faces in `public/fonts`, all under the SIL Open Font License.
+[PhotoMosh](https://photomosh.com/) is what this is chasing.
 
----
+- Effects ported from [X-PostProcessing-Library](https://github.com/QianMo/X-PostProcessing-Library) (RGB Burst, Screen Jump, Sobel Neon) and [Vidvox's ISF-Files](https://github.com/Vidvox/ISF-Files) (HSV Swap, RGB Strobe, Trio Tone, Circle Warp, Pixel Shifter, Ring Warp, Shockwave, Ghosting, Fast Mosh, Resize Glitch, Stylize Glitch, Motion Mask), both MIT.
+- The crosswarp, cross zoom and cube transitions in the upload-screen demo come from [gl-transitions](https://gl-transitions.com/) (MIT).
+- [mediabunny](https://github.com/Vanilagy/mediabunny) does the muxing and the proxy transcodes.
+- [Draco](https://github.com/google/draco) (Apache 2.0) and [meshoptimizer](https://github.com/zeux/meshoptimizer) (MIT) unpack compressed models.
+- [lucide](https://lucide.dev/) does the icons.
+- Type is Archivo and JetBrains Mono via [Fontsource](https://fontsource.org/), plus the display faces in `public/fonts`, all under the SIL Open Font License.
 
 ## License
 
