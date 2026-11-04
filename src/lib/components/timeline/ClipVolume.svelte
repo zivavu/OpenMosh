@@ -33,7 +33,6 @@
 <style>
 	.clip-gain {
 		width: 6rem;
-		accent-color: var(--live);
 	}
 
 	.clip-gain.mixed {

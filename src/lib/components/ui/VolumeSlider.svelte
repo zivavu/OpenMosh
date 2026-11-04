@@ -42,11 +42,6 @@
 <style>
 	.volume-slider {
 		width: 60px;
-		height: 4px;
-		appearance: none;
-		background: rgba(255, 255, 255, 0.07);
-		border-radius: 2px;
-		cursor: pointer;
 		flex-shrink: 0;
 	}
 
@@ -54,29 +49,6 @@
 		flex: 1;
 		width: auto;
 		min-width: 28px;
-	}
-
-	.volume-slider::-webkit-slider-thumb {
-		appearance: none;
-		width: 9px;
-		height: 13px;
-		border-radius: 4px;
-		background: var(--text-2);
-		cursor: pointer;
-	}
-	.volume-slider::-moz-range-thumb {
-		width: 9px;
-		height: 13px;
-		border-radius: 4px;
-		background: var(--text-2);
-		border: none;
-		cursor: pointer;
-	}
-	.volume-slider:hover::-webkit-slider-thumb {
-		background: var(--text);
-	}
-	.volume-slider:hover::-moz-range-thumb {
-		background: var(--text);
 	}
 
 	@media (max-width: 800px) {

@@ -45,38 +45,7 @@
 
 	.speed-slider {
 		width: 60px;
-		height: 4px;
-		appearance: none;
-		background: rgba(255, 255, 255, 0.07);
-		border-radius: 2px;
-		cursor: pointer;
 		flex-shrink: 0;
-	}
-
-	.speed-slider::-webkit-slider-thumb {
-		appearance: none;
-		width: 12px;
-		height: 12px;
-		border-radius: 50%;
-		background: var(--text-2);
-		cursor: pointer;
-	}
-
-	.speed-slider::-moz-range-thumb {
-		width: 12px;
-		height: 12px;
-		border-radius: 50%;
-		background: var(--text-2);
-		border: none;
-		cursor: pointer;
-	}
-
-	.speed-slider:hover::-webkit-slider-thumb {
-		background: var(--text);
-	}
-
-	.speed-slider:hover::-moz-range-thumb {
-		background: var(--text);
 	}
 
 	@media (max-width: 800px) {

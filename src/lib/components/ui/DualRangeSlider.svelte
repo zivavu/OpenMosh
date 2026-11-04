@@ -90,7 +90,7 @@
 	.slider-area {
 		position: relative;
 		width: 100%;
-		height: 18px;
+		height: var(--slider-hit);
 		display: flex;
 		align-items: center;
 	}
@@ -99,9 +99,8 @@
 		position: absolute;
 		left: 0;
 		right: 0;
-		height: 3px;
-		background: var(--sunken);
-		box-shadow: inset 0 0 0 1px var(--line);
+		height: 4px;
+		background: var(--slider-track);
 		border-radius: 2px;
 		pointer-events: none;
 	}
@@ -110,7 +109,7 @@
 		position: absolute;
 		top: 0;
 		bottom: 0;
-		background: var(--live-dim);
+		background: var(--live);
 		border-radius: 2px;
 	}
 
@@ -118,8 +117,6 @@
 		position: absolute;
 		left: 0;
 		width: 100%;
-		appearance: none;
-		-webkit-appearance: none;
 		background: transparent;
 		pointer-events: none;
 		margin: 0;
@@ -129,38 +126,15 @@
 	}
 
 	.thumb::-webkit-slider-thumb {
-		-webkit-appearance: none;
-		appearance: none;
-		width: 9px;
-		height: 13px;
-		border-radius: 4px;
-		background: var(--text-2);
-		cursor: pointer;
 		pointer-events: all;
 		position: relative;
 		z-index: 2;
-		transition: background var(--t-fast);
-	}
-
-	.thumb::-webkit-slider-thumb:hover {
-		background: var(--text);
 	}
 
 	.thumb::-moz-range-thumb {
-		width: 9px;
-		height: 13px;
-		border-radius: 4px;
-		background: var(--text-2);
-		cursor: pointer;
 		pointer-events: all;
-		border: none;
 		position: relative;
 		z-index: 2;
-		transition: background var(--t-fast);
-	}
-
-	.thumb::-moz-range-thumb:hover {
-		background: var(--text);
 	}
 
 	.thumb-high {
