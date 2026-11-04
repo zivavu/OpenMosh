@@ -492,6 +492,31 @@ select option:disabled {
 	outline-offset: 2px;
 }
 
+:root[data-contrast="high"] {
+	--ink: #000;
+	--surface: #060608;
+	--raised: #131318;
+	--sunken: #000;
+
+	--line: rgba(255, 255, 255, 0.22);
+	--line-strong: rgba(255, 255, 255, 0.38);
+
+	--text: #fff;
+	--text-2: #e2e2e8;
+	--text-3: #c4c4ce;
+	--text-4: #a0a0ac;
+
+	--slider-track: #a8a8b4;
+	--slider-thumb: #fff;
+
+	--live-dim: #4fae94;
+	--mosh-dim: #9a7cb8;
+	--rec-dim: #b85049;
+	--start-dim: #b8915a;
+
+	--glass: rgba(0, 0, 0, 0.85);
+}
+
 /* A slim rail drawn inside a tall input, so the whole height takes a click. */
 input[type="range"] {
 	height: var(--slider-hit);

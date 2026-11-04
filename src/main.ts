@@ -6,6 +6,7 @@ import "./lib/select-arrows";
 import App from "./App.svelte";
 import { showToast } from "./lib/components/ui/toast.svelte";
 import { clearStaleExports } from "./lib/export-files";
+import { applyUiPrefs } from "./lib/ui-prefs.svelte";
 
 // A deploy renames every chunk, so an open tab 404s on its next lazy import. Reload
 // once to pick up the new build; a second failure soon after is a real outage and
@@ -60,6 +61,8 @@ if (import.meta.env.PROD && "serviceWorker" in navigator) {
 		navigator.serviceWorker.register("/sw.js").catch(() => {});
 	});
 }
+
+applyUiPrefs();
 
 mount(App, {
 	target: document.getElementById("app")!,
