@@ -44,7 +44,7 @@
 		background: none;
 		border: none;
 		border-right: 1px solid var(--line);
-		color: var(--text-3);
+		color: var(--text-2);
 		cursor: pointer;
 		width: 100%;
 		transition:
@@ -62,6 +62,6 @@
 	}
 
 	.option:hover:not(.active) {
-		color: var(--text-2);
+		color: var(--text);
 	}
 </style>

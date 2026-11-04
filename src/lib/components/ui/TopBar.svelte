@@ -75,7 +75,7 @@
 		backdrop-filter: var(--blur);
 		-webkit-backdrop-filter: var(--blur);
 		border: 1.5px solid var(--line-strong);
-		color: var(--text-3);
+		color: var(--text-2);
 		cursor: pointer;
 		flex-shrink: 0;
 		padding: 0;
@@ -86,7 +86,7 @@
 	}
 
 	.toolbar :global(.help-btn:hover) {
-		border-color: var(--text-3);
+		border-color: var(--text-2);
 		color: var(--text);
 	}
 
