@@ -106,6 +106,10 @@
 	--text-3: #62626e;
 	--text-4: #43434d;
 
+	--slider-track: #6e6e7a;
+	--slider-thumb: #c8c8d2;
+	--slider-hit: 18px;
+
 	/* State colors: each one means something, none are decorative */
 	--live: #6ee7c0; /* anything live: lit effects, active toggles, clocks, timelines */
 	--live-dim: #2f6a5b;
@@ -486,6 +490,66 @@ select option:disabled {
 :focus-visible {
 	outline: 1.5px solid var(--live);
 	outline-offset: 2px;
+}
+
+/* A slim rail drawn inside a tall input, so the whole height takes a click. */
+input[type="range"] {
+	height: var(--slider-hit);
+	appearance: none;
+	-webkit-appearance: none;
+	background: linear-gradient(var(--slider-track), var(--slider-track)) center /
+		100% 4px no-repeat;
+	cursor: pointer;
+}
+
+input[type="range"]:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+	appearance: none;
+	-webkit-appearance: none;
+	width: 9px;
+	height: 13px;
+	border-radius: 4px;
+	background: var(--slider-thumb);
+	cursor: pointer;
+	transition: background var(--t-fast);
+}
+
+input[type="range"]::-moz-range-thumb {
+	width: 9px;
+	height: 13px;
+	border: none;
+	border-radius: 4px;
+	background: var(--slider-thumb);
+	cursor: pointer;
+	transition: background var(--t-fast);
+}
+
+input[type="range"]:hover:not(:disabled)::-webkit-slider-thumb {
+	background: var(--text);
+}
+
+input[type="range"]:hover:not(:disabled)::-moz-range-thumb {
+	background: var(--text);
+}
+
+@media (max-width: 800px) {
+	:root {
+		--slider-hit: 24px;
+	}
+
+	input[type="range"]::-webkit-slider-thumb {
+		width: 14px;
+		height: 20px;
+	}
+
+	input[type="range"]::-moz-range-thumb {
+		width: 14px;
+		height: 20px;
+	}
 }
 
 /* Sliders drop the outline and light the thumb instead. */

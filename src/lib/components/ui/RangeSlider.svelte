@@ -81,54 +81,5 @@
 		flex: 1;
 		width: 0;
 		min-width: 0;
-		height: 3px;
-		appearance: none;
-		-webkit-appearance: none;
-		background: var(--sunken);
-		box-shadow: inset 0 0 0 1px var(--line);
-		border-radius: 2px;
-		outline: none;
-		cursor: pointer;
-	}
-
-	input[type="range"]::-webkit-slider-thumb {
-		appearance: none;
-		-webkit-appearance: none;
-		width: 9px;
-		height: 13px;
-		border-radius: 4px;
-		background: var(--text-2);
-		cursor: pointer;
-		transition: background var(--t-fast);
-	}
-
-	input[type="range"]::-webkit-slider-thumb:hover {
-		background: var(--text);
-	}
-
-	input[type="range"]::-moz-range-thumb {
-		width: 9px;
-		height: 13px;
-		border-radius: 4px;
-		background: var(--text-2);
-		border: none;
-		cursor: pointer;
-		transition: background var(--t-fast);
-	}
-
-	input[type="range"]::-moz-range-thumb:hover {
-		background: var(--text);
-	}
-
-	@media (max-width: 800px) {
-		input[type="range"]::-webkit-slider-thumb {
-			width: 14px;
-			height: 20px;
-		}
-
-		input[type="range"]::-moz-range-thumb {
-			width: 14px;
-			height: 20px;
-		}
 	}
 </style>
