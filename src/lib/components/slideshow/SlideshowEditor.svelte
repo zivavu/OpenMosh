@@ -50,7 +50,10 @@
 		SlideshowMoshMode,
 		SlideshowSlide,
 	} from "../../slideshow/types";
-	import { DEFAULT_SLIDESHOW_CONFIG } from "../../slideshow/types";
+	import {
+		BEAT_LANE_ID,
+		DEFAULT_SLIDESHOW_CONFIG,
+	} from "../../slideshow/types";
 	import {
 		probeSlideVideo,
 		SlideVideoSampler,
@@ -1878,6 +1881,13 @@
 			e.preventDefault();
 			if (timelineAxis)
 				timelineAxis.followPlayhead = !timelineAxis.followPlayhead;
+		} else if (key === "s" && !e.altKey && !e.shiftKey) {
+			e.preventDefault();
+			if (!timelineAxis) return;
+			// No lane touched yet, or the last one is gone: cut the beat lane.
+			if (!timelineAxis.activeLaneSplitAt)
+				timelineAxis.markLaneUsed(BEAT_LANE_ID);
+			timelineAxis.activeLaneSplitAt?.(timelineAxis.currentTime);
 		} else if (e.key === "+" || e.key === "=") {
 			// "=" as well as "+": on most layouts the latter needs Shift.
 			e.preventDefault();
