@@ -20,15 +20,9 @@ import {
 	wildColors,
 } from "./palette";
 import { mulberry32, type Rand } from "../rng";
-import type {
-	BatchOptions,
-	GeneratedSpec,
-	GeneratorKind,
-	Variety,
-} from "./types";
+import type { BatchOptions, GeneratedSpec, OneKind, Variety } from "./types";
 
 type Texture = Omit<GeneratedSpec, "colors">;
-export type OneKind = Exclude<GeneratorKind, "mix">;
 
 /** Every single-generator kind, in the order a mix plans them. */
 export const ONE_KINDS: OneKind[] = [
@@ -101,18 +95,33 @@ function planSlots(
 
 const isDrawn = (k: OneKind) => DRAWN_KINDS.includes(k);
 
+/** In `ONE_KINDS` order, so a seed plans the same whatever order they were picked in. */
+const evenWeights = (picked: OneKind[]): [OneKind, number][] =>
+	ONE_KINDS.filter((k) => picked.includes(k)).map((k) => [k, 1]);
+
 export function planBatch(seed: number, opts: BatchOptions): GeneratedSpec[] {
 	const rng = mulberry32(seed);
 	const count = Math.max(1, opts.count);
 	const n = Math.max(count, opts.nest ?? 0);
 	const preset = opts.palette ? PALETTES[opts.palette] : undefined;
 
+	const weights: [OneKind, number][] =
+		opts.kind === "mix"
+			? MIX_WEIGHTS
+			: Array.isArray(opts.kind)
+				? evenWeights(opts.kind)
+				: [];
+	// Only a mix narrows to one generator: a picked list was asked for by name.
+	const dealKinds = (from: Rand, slots: number, by: [OneKind, number][]) =>
+		opts.kind === "mix" && opts.variety === "cohesive"
+			? Array<OneKind>(slots).fill(pickWeighted(from, by))
+			: deal(from, slots, by);
+
 	// Which generator fills each slot.
-	let kinds: OneKind[];
-	if (opts.kind !== "mix") kinds = Array<OneKind>(n).fill(opts.kind);
-	else if (opts.variety === "cohesive")
-		kinds = Array<OneKind>(n).fill(pickWeighted(rng, MIX_WEIGHTS));
-	else kinds = deal(rng, n, MIX_WEIGHTS);
+	const kinds =
+		typeof opts.kind === "string" && opts.kind !== "mix"
+			? Array<OneKind>(n).fill(opts.kind)
+			: dealKinds(rng, n, weights);
 
 	const bySlot: Texture[] = new Array(n);
 	planSlots(rng, kinds, opts.variety, bySlot);
@@ -124,10 +133,7 @@ export function planBatch(seed: number, opts: BatchOptions): GeneratedSpec[] {
 		const swap = mulberry32(seed ^ 0x5bd1e995);
 		const drawnWeights = MIX_WEIGHTS.filter(([k]) => isDrawn(k));
 		const swapped = kinds.flatMap((k, i) => (isDrawn(k) ? [] : [i]));
-		const fresh =
-			opts.variety === "cohesive"
-				? Array<OneKind>(swapped.length).fill(pickWeighted(swap, drawnWeights))
-				: deal(swap, swapped.length, drawnWeights);
+		const fresh = dealKinds(swap, swapped.length, drawnWeights);
 		const replaced: Texture[] = new Array(swapped.length);
 		planSlots(swap, fresh, opts.variety, replaced);
 		swapped.forEach((slot, j) => {

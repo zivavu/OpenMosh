@@ -190,6 +190,64 @@ describe("planBatch", () => {
 		expect(count(of("ink").map((s) => s.gen === "ink" && s.style))).toBe(2);
 	});
 
+	describe("a picked list of kinds", () => {
+		const kinds = (specs: Parameters<typeof specKind>[0][]) =>
+			new Set(specs.map(specKind));
+
+		it("deals evenly across exactly those kinds, cohesive too", () => {
+			for (const variety of ["wild", "cohesive"] as const) {
+				const specs = planBatch(
+					30,
+					wild({ count: 32, variety, kind: ["plasma", "ink"] }),
+				);
+				expect(kinds(specs)).toEqual(new Set(["plasma", "ink"]));
+				const ink = specs.filter((s) => specKind(s) === "ink").length;
+				expect(Math.abs(ink - 16)).toBeLessThanOrEqual(1);
+			}
+		});
+
+		it("shows every kind in a small preview of a nested batch", () => {
+			const specs = planBatch(
+				31,
+				wild({ count: 6, nest: 64, kind: ["rings", "cutout", "attractor"] }),
+			);
+			expect(kinds(specs).size).toBe(3);
+		});
+
+		it("plans the same whatever order they were picked in", () => {
+			expect(planBatch(32, wild({ kind: ["ink", "gradient"] }))).toEqual(
+				planBatch(32, wild({ kind: ["gradient", "ink"] })),
+			);
+		});
+
+		it("keeps its fields solid when transparent, clearing only drawn kinds", () => {
+			const picked = ["gradient", "rings", "cutout"] as const;
+			for (const variety of ["wild", "cohesive"] as const) {
+				const specs = planBatch(
+					33,
+					wild({
+						count: 16,
+						variety,
+						kind: [...picked],
+						transparent: true,
+					}),
+				);
+				expect(kinds(specs)).toEqual(new Set(picked));
+				for (const s of specs)
+					expect(isTransparentSpec(s)).toBe(specKind(s) === "cutout");
+			}
+		});
+
+		it("stays opaque when it has no drawn kind", () => {
+			const specs = planBatch(
+				34,
+				wild({ kind: ["plasma", "rings"], transparent: true }),
+			);
+			expect(kinds(specs)).toEqual(new Set(["plasma", "rings"]));
+			expect(specs.some(isTransparentSpec)).toBe(false);
+		});
+	});
+
 	it("keeps a smaller nested batch as the start of a larger one", () => {
 		const ids = (specs: object[]) => specs.map((s) => JSON.stringify(s)).sort();
 		for (const kind of ["mix", ...ONE_KINDS] as const)

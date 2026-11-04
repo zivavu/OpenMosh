@@ -13,6 +13,7 @@ export type {
 	BatchOptions,
 	GeneratedSpec,
 	GeneratorKind,
+	OneKind,
 	Variety,
 } from "./types";
 
