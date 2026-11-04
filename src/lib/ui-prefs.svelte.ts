@@ -15,6 +15,10 @@ let previewProxies = $state<boolean>(
 	loadSettings().previewProxies ?? DEFAULT_SETTINGS.previewProxies,
 );
 
+let showSpectrum = $state<boolean>(
+	loadSettings().showSpectrum ?? DEFAULT_SETTINGS.showSpectrum,
+);
+
 function applyContrast() {
 	if (highContrast) document.documentElement.dataset.contrast = "high";
 	else delete document.documentElement.dataset.contrast;
@@ -49,5 +53,12 @@ export const uiPrefs = {
 	set previewProxies(on: boolean) {
 		previewProxies = on;
 		updateSettings({ previewProxies: on });
+	},
+	get showSpectrum(): boolean {
+		return showSpectrum;
+	},
+	set showSpectrum(on: boolean) {
+		showSpectrum = on;
+		updateSettings({ showSpectrum: on });
 	},
 };
