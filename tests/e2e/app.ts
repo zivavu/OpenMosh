@@ -130,6 +130,17 @@ export async function waitForSaved(page: Page): Promise<void> {
 	await expect(page.locator(".save-indicator .label")).toHaveText("Saved");
 }
 
+/** The slideshow's beat lane, once it's laid out. */
+export async function beatLaneBox(page: Page) {
+	const lane = page.locator("svg:has(line.seg)");
+	// It remounts when the song gets its library id.
+	await waitForSaved(page);
+	await expect(lane).toBeVisible();
+	const box = await lane.boundingBox();
+	if (!box) throw new Error("no beat lane");
+	return box;
+}
+
 export interface OpenEditorOptions {
 	/** Pool sources, as [name, colour] pairs. `"pattern"` gives that source the detailed
 	 * test image instead of a flat fill, which a spec needs to assert the preview changed. */
