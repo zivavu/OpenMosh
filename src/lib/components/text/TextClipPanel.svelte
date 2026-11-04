@@ -21,6 +21,7 @@
 	import FontSelect from "../ui/FontSelect.svelte";
 	import FontCycleRows from "./FontCycleRows.svelte";
 	import RangeSlider from "../ui/RangeSlider.svelte";
+	import { hundredths, percent } from "../../value-field";
 	import ClipChainSection from "../timeline/ClipChainSection.svelte";
 	import ClipPanel from "../timeline/ClipPanel.svelte";
 	import FadeRows from "../timeline/FadeRows.svelte";
@@ -236,6 +237,7 @@
 					max={TEXT_SIZE_MAX}
 					step={0.005}
 					oninput={(v) => setStyle("size", v, `tc-size-${clip.id}`)}
+					display={percent}
 				/>
 				<span class="val">{Math.round(lane.style.size * 100)}%</span>
 			</div>
@@ -276,6 +278,7 @@
 					max={1}
 					step={0.01}
 					oninput={(v) => setPosition("x", v, `tc-x-${clip.id}`)}
+					display={hundredths}
 				/>
 				<span class="val">{Math.round(position.x * 100)}</span>
 			</div>
@@ -294,6 +297,7 @@
 					max={1}
 					step={0.01}
 					oninput={(v) => setPosition("y", v, `tc-y-${clip.id}`)}
+					display={hundredths}
 				/>
 				<span class="val">{Math.round(position.y * 100)}</span>
 			</div>

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { BLEND_MODES, type TextOverlayBlendMode } from "../../text-overlay";
 	import RangeSlider from "../ui/RangeSlider.svelte";
+	import { percent } from "../../value-field";
 
 	/** How a layer meets the frame: opacity and blend, the tail every layer
 	 * kind's panel ends on. */
@@ -34,6 +35,7 @@
 		max={1}
 		step={0.01}
 		oninput={(v) => onStyle("opacity", v, `${idPrefix}-op`)}
+		display={percent}
 	/>
 	<span class="val">{Math.round(style.opacity * 100)}%</span>
 </div>

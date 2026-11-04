@@ -1,5 +1,6 @@
 <script lang="ts">
 	import RangeSlider from "../ui/RangeSlider.svelte";
+	import { seconds } from "../../value-field";
 
 	/** Fade in / fade out for a layer clip, each edge on its own. */
 	interface Props {
@@ -30,6 +31,7 @@
 		step={0.05}
 		curve={2}
 		oninput={(v) => onFade("fadeInSec", v)}
+		display={seconds}
 	/>
 	<span class="val">
 		{#if clip.fadeInSec}{clip.fadeInSec.toFixed(2)}s{:else}none{/if}
@@ -51,6 +53,7 @@
 		step={0.05}
 		curve={2}
 		oninput={(v) => onFade("fadeOutSec", v)}
+		display={seconds}
 	/>
 	<span class="val">
 		{#if clip.fadeOutSec}{clip.fadeOutSec.toFixed(2)}s{:else}none{/if}

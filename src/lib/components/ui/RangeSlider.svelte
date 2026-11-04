@@ -1,4 +1,8 @@
 <script lang="ts">
+	import { uiPrefs } from "../../ui-prefs.svelte";
+	import type { FieldDisplay } from "../../value-field";
+	import ValueField from "./ValueField.svelte";
+
 	interface Props {
 		value: number;
 		min: number;
@@ -6,6 +10,10 @@
 		step?: number;
 		/** Exponent (>1) for a non-linear slider: low end of [min, max] spans more of the track. */
 		curve?: number;
+		/** How the value reads when typed; the row's read-out hides in favor of the field. */
+		display?: FieldDisplay;
+		/** Stays a track with number inputs on: a seek bar, where scrubbing is the point. */
+		sliderOnly?: boolean;
 		id?: string;
 		disabled?: boolean;
 		oninput?: (value: number) => void;
@@ -18,6 +26,8 @@
 		max,
 		step = 1,
 		curve = 1,
+		display,
+		sliderOnly = false,
 		id,
 		disabled,
 		oninput,
@@ -46,7 +56,21 @@
 	});
 </script>
 
-{#if curve === 1}
+{#if uiPrefs.numberInputs && !sliderOnly}
+	<ValueField
+		{id}
+		{value}
+		{min}
+		{max}
+		{step}
+		{display}
+		{disabled}
+		onCommit={(v) => {
+			value = v;
+			oninput?.(v);
+		}}
+	/>
+{:else if curve === 1}
 	<input
 		{id}
 		type="range"

@@ -1,4 +1,8 @@
 <script lang="ts">
+	import { uiPrefs } from "../../ui-prefs.svelte";
+	import type { FieldDisplay } from "../../value-field";
+	import ValueField from "./ValueField.svelte";
+
 	interface Props {
 		min: number;
 		max: number;
@@ -8,6 +12,7 @@
 		onChangeLow: (v: number) => void;
 		onChangeHigh: (v: number) => void;
 		formatValue?: (v: number) => string;
+		display?: FieldDisplay;
 	}
 
 	let {
@@ -19,6 +24,7 @@
 		onChangeLow,
 		onChangeHigh,
 		formatValue,
+		display,
 	}: Props = $props();
 
 	const range = $derived(max - min || 1);
@@ -48,39 +54,74 @@
 	}
 </script>
 
-<div class="dual-range">
-	<div class="slider-area">
-		<div class="track">
-			<div class="filled" style="left:{leftPct}%;right:{rightPct}%"></div>
-		</div>
-		<input
-			type="range"
-			{min}
-			{max}
-			{step}
+{#if uiPrefs.numberInputs}
+	<div class="fields">
+		<ValueField
 			value={valueLow}
-			aria-label="Minimum"
-			oninput={handleLow}
-			class="thumb thumb-low"
-		/>
-		<input
-			type="range"
 			{min}
+			max={valueHigh}
+			{step}
+			{display}
+			label="Minimum"
+			onCommit={onChangeLow}
+		/>
+		<ValueField
+			value={valueHigh}
+			min={valueLow}
 			{max}
 			{step}
-			value={valueHigh}
-			aria-label="Maximum"
-			oninput={handleHigh}
-			class="thumb thumb-high"
+			{display}
+			label="Maximum"
+			onCommit={onChangeHigh}
 		/>
 	</div>
-	<div class="labels">
-		<span class="val">{formatValue ? formatValue(valueLow) : valueLow}</span>
-		<span class="val">{formatValue ? formatValue(valueHigh) : valueHigh}</span>
+{:else}
+	<div class="dual-range">
+		<div class="slider-area">
+			<div class="track">
+				<div class="filled" style="left:{leftPct}%;right:{rightPct}%"></div>
+			</div>
+			<input
+				type="range"
+				{min}
+				{max}
+				{step}
+				value={valueLow}
+				aria-label="Minimum"
+				oninput={handleLow}
+				class="thumb thumb-low"
+			/>
+			<input
+				type="range"
+				{min}
+				{max}
+				{step}
+				value={valueHigh}
+				aria-label="Maximum"
+				oninput={handleHigh}
+				class="thumb thumb-high"
+			/>
+		</div>
+		<div class="labels">
+			<span class="val">{formatValue ? formatValue(valueLow) : valueLow}</span>
+			<span class="val">{formatValue ? formatValue(valueHigh) : valueHigh}</span
+			>
+		</div>
 	</div>
-</div>
+{/if}
 
 <style>
+	.fields {
+		display: flex;
+		gap: 0.25rem;
+		width: 100%;
+	}
+
+	.fields :global(.value-field) {
+		flex: 1 1 0;
+		margin-left: 0;
+	}
+
 	.dual-range {
 		width: 100%;
 		display: flex;

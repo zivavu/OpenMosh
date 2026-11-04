@@ -14,6 +14,7 @@
 		sub?: string;
 		/** While busy the overlay and close button refuse to close. */
 		busy?: boolean;
+		width?: string;
 		onClose: () => void;
 		icon?: Snippet;
 		children: Snippet;
@@ -24,6 +25,7 @@
 		label,
 		sub,
 		busy = false,
+		width,
 		onClose,
 		icon,
 		children,
@@ -35,6 +37,7 @@
 <div class="overlay" {@attach backdropClose(() => !busy && onClose())}>
 	<div
 		class="panel"
+		style:width
 		role="dialog"
 		aria-modal="true"
 		aria-label={label ?? title}

@@ -41,6 +41,8 @@ export interface EditorSettings {
 	/** Whether the upload screen's demo keeps moshing behind the UI. */
 	demoBackground: boolean;
 	projectSong: ProjectSongChoice;
+	/** Slider panels show typed number fields instead of tracks. */
+	numberInputs: boolean;
 }
 
 /** What a fresh editor starts from, and what double-clicking a control restores. */
@@ -66,6 +68,7 @@ export const DEFAULT_SETTINGS: EditorSettings = {
 	previewProxies: true,
 	demoBackground: true,
 	projectSong: "ask",
+	numberInputs: false,
 };
 
 export function loadSettings(): Partial<EditorSettings> {

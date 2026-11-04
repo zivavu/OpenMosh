@@ -81,6 +81,7 @@
 	import { SlideVideoSampler } from "../../slideshow/video-sampler";
 	import ColorPicker from "../ui/ColorPicker.svelte";
 	import RangeSlider from "../ui/RangeSlider.svelte";
+	import { percent, percentOf, speedFactor } from "../../value-field";
 	import SourceKeyframes, { type KeyTrackView } from "./SourceKeyframes.svelte";
 	import SourceTrim from "./SourceTrim.svelte";
 	import KeyPicker, {
@@ -1453,6 +1454,7 @@
 							</button>
 						</div>
 						<RangeSlider
+							sliderOnly
 							value={Math.min(currentTime, duration)}
 							min={0}
 							max={duration}
@@ -1474,6 +1476,7 @@
 									min={Math.log2(SPEED_MIN)}
 									max={Math.log2(SPEED_MAX)}
 									step={0.05}
+									display={speedFactor}
 									oninput={setSpeedFromTrack}
 								/>
 							</div>
@@ -1662,6 +1665,7 @@
 								step={0.001}
 								disabled={!key.enabled}
 								oninput={(v) => setTune("range", v, true)}
+								display={percentOf(KEY_RANGE_MAX)}
 							/>
 							<span class="val">{keyPct(point.range / KEY_RANGE_MAX)}</span>
 						</div>
@@ -1681,6 +1685,7 @@
 								step={0.001}
 								disabled={!key.enabled}
 								oninput={(v) => setTune("softness", v, true)}
+								display={percentOf(KEY_SOFTNESS_MAX)}
 							/>
 							<span class="val"
 								>{keyPct(point.softness / KEY_SOFTNESS_MAX)}</span
@@ -1696,6 +1701,7 @@
 								max={1}
 								step={0.005}
 								oninput={(v) => setCropSize("w", v)}
+								display={percent}
 							/>
 							<span class="val">{Math.round(crop.w * 100)}%</span>
 						</div>
@@ -1709,6 +1715,7 @@
 								max={1}
 								step={0.005}
 								oninput={(v) => setCropSize("h", v)}
+								display={percent}
 							/>
 							<span class="val">{Math.round(crop.h * 100)}%</span>
 						</div>
@@ -1727,6 +1734,7 @@
 								max={0.5}
 								step={0.01}
 								oninput={(v) => (brush = v)}
+								display={percent}
 							/>
 							<span class="val">{Math.round(brush * 100)}%</span>
 						</div>
@@ -1745,6 +1753,7 @@
 								max={1}
 								step={0.01}
 								oninput={(v) => (softness = v)}
+								display={percent}
 							/>
 							<span class="val">{Math.round(softness * 100)}%</span>
 						</div>
@@ -1780,6 +1789,7 @@
 										beforeEdit("mask-x");
 										setMaskTransform({ ...maskXform, x: v });
 									}}
+									display={percent}
 								/>
 								<span class="val">{Math.round(maskXform.x * 100)}%</span>
 							</div>
@@ -1804,6 +1814,7 @@
 										beforeEdit("mask-y");
 										setMaskTransform({ ...maskXform, y: v });
 									}}
+									display={percent}
 								/>
 								<span class="val">{Math.round(maskXform.y * 100)}%</span>
 							</div>
@@ -1828,6 +1839,7 @@
 										beforeEdit("mask-scale");
 										setMaskTransform({ ...maskXform, scale: v });
 									}}
+									display={percent}
 								/>
 								<span class="val">{Math.round(maskXform.scale * 100)}%</span>
 							</div>

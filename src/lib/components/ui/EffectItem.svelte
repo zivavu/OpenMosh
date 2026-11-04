@@ -38,6 +38,7 @@
 	import FontSelect from "./FontSelect.svelte";
 	import DualRangeSlider from "./DualRangeSlider.svelte";
 	import RangeSlider from "./RangeSlider.svelte";
+	import type { FieldDisplay } from "../../value-field";
 	import SpectrumDisplay from "./SpectrumDisplay.svelte";
 	import {
 		DEFAULT_AUDIO_RESPONSE,
@@ -80,6 +81,12 @@
 		if (hz <= 8000) return ((hz - 20) / (8000 - 20)) * 750;
 		return 750 + ((hz - 8000) / (20000 - 8000)) * 250;
 	}
+
+	const hertz: FieldDisplay = {
+		toField: (s) => Math.round(sliderToFreq(s)),
+		fromField: freqToSlider,
+		unit: "Hz",
+	};
 
 	interface Props {
 		effect: EffectInstance;
@@ -658,6 +665,7 @@
 																	})}
 																formatValue={(v) =>
 																	`${Math.round(sliderToFreq(v))} Hz`}
+																display={hertz}
 															/>
 														</div>
 													</div>
