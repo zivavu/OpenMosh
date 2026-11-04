@@ -471,6 +471,9 @@ export class TimelineStackState {
 	readonly #getCurrentTime: () => number;
 	readonly #seek: (time: number) => void;
 
+	/** A plain wheel over a lane scrolls the lane list instead of zooming. */
+	wheelScrollsLanes = false;
+
 	constructor(
 		getDuration: () => number,
 		getCurrentTime: () => number,
@@ -577,9 +580,14 @@ export class TimelineStackState {
 		};
 		el.addEventListener("pointermove", hover);
 		el.addEventListener("pointerleave", leave);
-		const detachWheel = this.vp.attachWheel(node, () => {
-			this.followPlayhead = false;
-		});
+		const detachWheel = this.vp.attachWheel(
+			node,
+			() => {
+				this.followPlayhead = false;
+			},
+			// Only named lanes sit in the scrolling list; the ruler and transports don't.
+			() => this.wheelScrollsLanes && !!laneId,
+		);
 		return {
 			destroy: () => {
 				el.removeEventListener("pointerdown", markUsed, true);
