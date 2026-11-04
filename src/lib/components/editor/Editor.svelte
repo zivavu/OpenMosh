@@ -105,7 +105,6 @@
 		type ProjectSongChoice,
 	} from "../../editor/settings";
 	import { linkBand } from "../../editor/link-band.svelte";
-	import { showSpectrum } from "../../editor/show-spectrum.svelte";
 	import { layerHighlight } from "../../editor/layer-highlight.svelte";
 	import {
 		cloneEffectInstance,
@@ -1198,7 +1197,6 @@
 		audioSmoothing;
 		audioPunch;
 		showFps;
-		showSpectrum.value;
 		layerHighlight.value;
 		const outputVolume = isSequenceMode
 			? mixer.outputVolume
@@ -1218,7 +1216,6 @@
 			audioSmoothing,
 			audioPunch,
 			showFps,
-			showSpectrum: showSpectrum.value,
 			layerHighlight: layerHighlight.value,
 			outputVolume,
 			loopAudio,
@@ -5622,15 +5619,6 @@
 					<div class="mosh-setting-row">
 						<label for="show-fps">Show FPS</label>
 						<Checkbox id="show-fps" bind:checked={showFps} />
-					</div>
-					<div class="mosh-setting-row">
-						<label
-							for="show-spectrum"
-							title="Draw the live spectrum under each audio link"
-						>
-							Show spectrum
-						</label>
-						<Checkbox id="show-spectrum" bind:checked={showSpectrum.value} />
 					</div>
 					{#if isSequenceMode}
 						<div class="mosh-setting-row">

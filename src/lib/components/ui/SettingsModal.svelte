@@ -42,6 +42,16 @@
 			>
 		</span>
 	</label>
+	<label class="setting">
+		<Checkbox
+			checked={uiPrefs.showSpectrum}
+			onchange={(e) => (uiPrefs.showSpectrum = e.currentTarget.checked)}
+		/>
+		<span class="text">
+			<span class="name">Show spectrum</span>
+			<span class="hint">Draw the live spectrum under each audio link.</span>
+		</span>
+	</label>
 </PanelModal>
 
 <style>

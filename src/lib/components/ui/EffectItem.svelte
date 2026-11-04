@@ -33,7 +33,7 @@
 	} from "../../effects/link-bands";
 	import type { SpectrumData } from "../../types";
 	import { linkBand } from "../../editor/link-band.svelte";
-	import { showSpectrum } from "../../editor/show-spectrum.svelte";
+	import { uiPrefs } from "../../ui-prefs.svelte";
 	import ColorPicker from "./ColorPicker.svelte";
 	import FontSelect from "./FontSelect.svelte";
 	import DualRangeSlider from "./DualRangeSlider.svelte";
@@ -632,7 +632,7 @@
 											</div>
 											{#if link.freqMin != null && link.freqMax != null && spectrumData}
 												<div class="spectrum-wrap">
-													{#if showSpectrum.value}
+													{#if uiPrefs.showSpectrum}
 														<SpectrumDisplay
 															data={spectrumData.data}
 															sampleRate={spectrumData.sampleRate}
