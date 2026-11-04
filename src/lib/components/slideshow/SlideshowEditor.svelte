@@ -1026,13 +1026,6 @@
 	});
 	$effect(() => () => publishSongProfile(null));
 
-	$effect(() => {
-		if (initialAudioFile && !audio.trackFile) {
-			audio.trackFile = initialAudioFile;
-			if (initialTrackId) restoreSessionTrack(initialTrackId);
-		}
-	});
-
 	let trackInput: HTMLInputElement;
 
 	function openTrackPicker() {
@@ -1129,6 +1122,13 @@
 	let bpmEpoch = 0;
 	let autoBpmFor: File | null = null;
 	let bpmRestoredFor: string | null = null;
+
+	// Before the first render: the timeline fits its cuts to the export length until a song is set.
+	untrack(() => {
+		if (!initialAudioFile) return;
+		audio.trackFile = initialAudioFile;
+		if (initialTrackId) restoreSessionTrack(initialTrackId);
+	});
 
 	// A new track detects its own tempo: everything here is cut to the beat.
 	$effect(() => {
