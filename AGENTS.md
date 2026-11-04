@@ -156,6 +156,12 @@ Outside CI a run reuses whatever already serves its port, so when my dev server 
 - `/about` (`about/index.html`) is plain HTML, so crawlers read it without running JS; the app
   stays hash-routed on `/`. A new static page goes in `PAGES` in `vite.config.ts`, the build
   inputs and `public/sitemap.xml`. A test holds the effect count in it and the README.
+- App-wide preferences live in the Settings modal (top bar) and `lib/ui-prefs.svelte.ts`. Number
+  inputs swap `RangeSlider` and `DualRangeSlider` for a typed `ValueField` that commits on
+  Enter or blur, in the units the row's read-out shows (`display`, `lib/value-field.ts`); a new
+  slider with a converted read-out needs a `display`. Seek bars and the transport and lane
+  volume sliders stay sliders. High contrast only overrides color tokens on
+  `html[data-contrast]`, so new UI should use the tokens.
 - Chrome never grants `navigator.storage.persist()` on `localhost`, and code can't fix that. Use
   `127.0.0.1`.
 
