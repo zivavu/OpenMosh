@@ -41,6 +41,10 @@
 		feedbackPrefill,
 		isFeedbackOpen,
 	} from "./lib/components/ui/feedback.svelte";
+	import {
+		closeSettings,
+		isSettingsOpen,
+	} from "./lib/components/ui/settings-modal.svelte";
 	import { loadCustomFonts } from "./lib/text-overlay";
 	import { probeCapabilities } from "./lib/capabilities.svelte";
 	import { onLoadLosses, type LoadLosses } from "./lib/effects/load-report";
@@ -57,6 +61,9 @@
 	);
 	const loadFeedbackModal = lazy(
 		() => import("./lib/components/ui/FeedbackModal.svelte"),
+	);
+	const loadSettingsModal = lazy(
+		() => import("./lib/components/ui/SettingsModal.svelte"),
 	);
 	const loadLossesDialog = lazy(
 		() => import("./lib/components/ui/LoadLossesDialog.svelte"),
@@ -670,6 +677,14 @@
 		{/key}
 	{:catch}
 		<LoadFailed onclose={closeFeedback} />
+	{/await}
+{/if}
+
+{#if isSettingsOpen()}
+	{#await loadSettingsModal() then SettingsModal}
+		<SettingsModal />
+	{:catch}
+		<LoadFailed onclose={closeSettings} />
 	{/await}
 {/if}
 

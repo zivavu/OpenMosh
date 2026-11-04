@@ -552,6 +552,12 @@ input[type="range"]:hover:not(:disabled)::-moz-range-thumb {
 	}
 }
 
+/* A typed field shows the value itself, so the row's read-out would repeat it. */
+.value-field + :is(.val, .param-value),
+.val:has(+ .value-field) {
+	display: none;
+}
+
 /* Sliders drop the outline and light the thumb instead. */
 input[type="range"]:focus-visible {
 	outline: none;

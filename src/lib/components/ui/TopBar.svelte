@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from "svelte";
-	import { Home } from "lucide-svelte";
+	import { Home, Settings } from "lucide-svelte";
+	import { openSettings } from "./settings-modal.svelte";
 	import GithubLink from "./GithubLink.svelte";
 	import YoutubeLink from "./YoutubeLink.svelte";
 	import InstagramLink from "./InstagramLink.svelte";
@@ -29,6 +30,14 @@
 		<YoutubeLink />
 		<InstagramLink />
 		<FeedbackButton />
+		<button
+			class="help-btn"
+			onclick={openSettings}
+			title="Settings"
+			aria-label="Settings"
+		>
+			<Settings size={14} />
+		</button>
 		<div class="bar-sep"></div>
 		{@render status?.()}
 		{@render children()}

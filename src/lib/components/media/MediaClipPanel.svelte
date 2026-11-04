@@ -30,6 +30,13 @@
 	} from "../../mix/types";
 	import Checkbox from "../ui/Checkbox.svelte";
 	import RangeSlider from "../ui/RangeSlider.svelte";
+	import {
+		degrees,
+		hundredths,
+		percent,
+		seconds,
+		speedFactor,
+	} from "../../value-field";
 	import ClipChainSection from "../timeline/ClipChainSection.svelte";
 	import ClipPanel from "../timeline/ClipPanel.svelte";
 	import FadeRows from "../timeline/FadeRows.svelte";
@@ -264,6 +271,7 @@
 			max={Math.log2(SPEED_MAX)}
 			step={0.05}
 			oninput={setSpeedFromTrack}
+			display={speedFactor}
 		/>
 		<span class="val">
 			{speed >= 1 ? speed.toFixed(1) : speed.toFixed(2)}×
@@ -416,6 +424,7 @@
 						max={length}
 						step={0.05}
 						oninput={setSourceStart}
+						display={seconds}
 					/>
 					<span class="val">{(clip.sourceStart % length).toFixed(1)}s</span>
 				</div>
@@ -444,6 +453,7 @@
 						max={span.end}
 						step={0.05}
 						oninput={setSourceStart}
+						display={seconds}
 					/>
 					<span class="val">{clip.sourceStart.toFixed(1)}s</span>
 				</div>
@@ -524,6 +534,7 @@
 								max={MAX_GAIN}
 								step={0.01}
 								oninput={setClipGain}
+								display={percent}
 							/>
 							<span class="val">{Math.round((clip.gain ?? 1) * 100)}%</span>
 						</div>
@@ -594,6 +605,7 @@
 					max={3}
 					step={0.01}
 					oninput={(v) => setStyle("scale", v, `mc-scale-${lane.id}`)}
+					display={percent}
 				/>
 				<span class="val">{Math.round(lane.style.scale * 100)}%</span>
 			</div>
@@ -612,6 +624,7 @@
 					max={3}
 					step={0.01}
 					oninput={(v) => setStyle("scaleX", v, `mc-scale-x-${lane.id}`)}
+					display={percent}
 				/>
 				<span class="val">{Math.round(lane.style.scaleX * 100)}%</span>
 			</div>
@@ -630,6 +643,7 @@
 					max={3}
 					step={0.01}
 					oninput={(v) => setStyle("scaleY", v, `mc-scale-y-${lane.id}`)}
+					display={percent}
 				/>
 				<span class="val">{Math.round(lane.style.scaleY * 100)}%</span>
 			</div>
@@ -648,6 +662,7 @@
 					max={1}
 					step={0.01}
 					oninput={(v) => setStyle("bleed", v, `mc-bleed-${lane.id}`)}
+					display={percent}
 				/>
 				<span class="val">{Math.round(lane.style.bleed * 100)}%</span>
 			</div>
@@ -668,6 +683,7 @@
 						max={1}
 						step={0.01}
 						oninput={(v) => setStyle("bleedFade", v, `mc-bleedfade-${lane.id}`)}
+						display={percent}
 					/>
 					<span class="val">{Math.round(lane.style.bleedFade * 100)}%</span>
 				</div>
@@ -687,6 +703,7 @@
 					max={1.5}
 					step={0.005}
 					oninput={(v) => setStyle("x", v, `mc-x-${lane.id}`)}
+					display={hundredths}
 				/>
 				<span class="val">{Math.round(lane.style.x * 100)}</span>
 			</div>
@@ -705,6 +722,7 @@
 					max={1.5}
 					step={0.005}
 					oninput={(v) => setStyle("y", v, `mc-y-${lane.id}`)}
+					display={hundredths}
 				/>
 				<span class="val">{Math.round(lane.style.y * 100)}</span>
 			</div>
@@ -723,6 +741,7 @@
 					max={180}
 					step={1}
 					oninput={(v) => setStyle("rotation", v, `mc-rot-${lane.id}`)}
+					display={degrees}
 				/>
 				<span class="val">{Math.round(lane.style.rotation)}°</span>
 			</div>

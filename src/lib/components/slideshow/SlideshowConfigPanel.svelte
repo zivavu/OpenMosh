@@ -2,6 +2,7 @@
 	import BpmControl from "../ui/BpmControl.svelte";
 	import Checkbox from "../ui/Checkbox.svelte";
 	import RangeSlider from "../ui/RangeSlider.svelte";
+	import { percent } from "../../value-field";
 	import type { BeatSubdivision, SlideshowConfig } from "../../slideshow/types";
 
 	interface Props {
@@ -181,6 +182,7 @@
 					max={1}
 					step={0.05}
 					oninput={(v) => set("moshAudioLinkStrength", v)}
+					display={percent}
 				/>
 				<span class="val"
 					>{Math.round(config.moshAudioLinkStrength * 100)}%</span

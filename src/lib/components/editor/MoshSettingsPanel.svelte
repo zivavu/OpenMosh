@@ -6,6 +6,7 @@
 	import { RotateCcw } from "lucide-svelte";
 	import BpmControl from "../ui/BpmControl.svelte";
 	import RangeSlider from "../ui/RangeSlider.svelte";
+	import { percent } from "../../value-field";
 
 	/** Mirrors the per-param Freq row on a linked effect. */
 	const BANDS = [
@@ -282,6 +283,7 @@
 					min={0}
 					max={1}
 					step={0.05}
+					display={percent}
 				/>
 				<span class="val">{Math.round(moshAudioLinkStrength * 100)}%</span>
 			{/snippet}
@@ -325,6 +327,7 @@
 				min={0}
 				max={1}
 				step={0.05}
+				display={percent}
 			/>
 			<span class="val">{Math.round(audioSmoothing * 100)}%</span>
 		{/snippet}
@@ -343,6 +346,7 @@
 				min={0}
 				max={1}
 				step={0.05}
+				display={percent}
 			/>
 			<span class="val">{Math.round(audioPunch * 100)}%</span>
 		{/snippet}
