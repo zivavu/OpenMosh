@@ -28,6 +28,20 @@
 			>
 		</span>
 	</label>
+	<label class="setting">
+		<Checkbox
+			checked={uiPrefs.previewProxies}
+			onchange={(e) => (uiPrefs.previewProxies = e.currentTarget.checked)}
+		/>
+		<span class="text">
+			<span class="name">Optimize large videos</span>
+			<span class="hint"
+				>Videos over 1080p preview from a smaller copy made in the background.
+				Export always uses the original. Clicking a video's badge overrides this
+				for that one file.</span
+			>
+		</span>
+	</label>
 </PanelModal>
 
 <style>
