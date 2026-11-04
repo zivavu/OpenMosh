@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.0.3](https://github.com/zivavu/OpenMosh/compare/v1.0.2...v1.0.3) (2026-11-04)
+
+Reopening a slideshow whose song ran longer than its export length no longer cuts its segments down to that length and saves over them, which made edits seem to vanish. Renaming a song no longer wipes a slideshow's cuts or adds a second copy of the song to the library. In slideshow mode, S now splits the segment under the playhead, as it does in the editor.
+
+Saved projects open as before, and nothing they store has changed. Cuts already lost to this bug don't come back, and copies of a song that a rename already added stay in the library until you remove them.
+
+
+### Added
+
+* Split slideshow segments at the playhead with S ([814e342](https://github.com/zivavu/OpenMosh/commit/814e34207bd1295e1502303083d53780df09931b))
+
+
+### Fixed
+
+* Keep a slideshow's cuts when you reopen it, and a project's work when its song is renamed ([3cef18a](https://github.com/zivavu/OpenMosh/commit/3cef18a306cf4d0de8ec88c6fc17bbda8d394aca), [577187a](https://github.com/zivavu/OpenMosh/commit/577187ad0f3cad736bb8e42969d22c0f7a14beef))
+
 ## [1.0.2](https://github.com/zivavu/OpenMosh/compare/v1.0.1...v1.0.2) (2026-11-04)
 
 There's a new Settings window in the top bar. It can swap sliders for number fields, so you can type an exact value, and it has a high contrast mode with brighter text and lines on a darker background. Optimize large videos and Show spectrum moved there from the Mosh settings. Without changing any setting, sliders are brighter and easier to grab, and the top bar and lane names are easier to read. The editor's lanes also scroll with the mouse wheel now.
