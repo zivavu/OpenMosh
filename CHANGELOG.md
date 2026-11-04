@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.0.2](https://github.com/zivavu/OpenMosh/compare/v1.0.1...v1.0.2) (2026-11-04)
+
+There's a new Settings window in the top bar. It can swap sliders for number fields, so you can type an exact value, and it has a high contrast mode with brighter text and lines on a darker background. Optimize large videos and Show spectrum moved there from the Mosh settings. Without changing any setting, sliders are brighter and easier to grab, and the top bar and lane names are easier to read. The editor's lanes also scroll with the mouse wheel now.
+
+Saved projects open as before, and nothing they store has changed.
+
+
+### Added
+
+* Add a Settings window with number inputs in place of sliders and a high contrast mode, and move Optimize large videos and Show spectrum into it ([88e14b6](https://github.com/zivavu/OpenMosh/commit/88e14b6b86f1a6c78740631b825e97497d885726), [2f8eea9](https://github.com/zivavu/OpenMosh/commit/2f8eea9133c27f5d76569948e0cb3f1e82d4a4a3), [01082db](https://github.com/zivavu/OpenMosh/commit/01082dbc4ac1acbf4505fd793097ce38e0af644f), [7693009](https://github.com/zivavu/OpenMosh/commit/769300925400e46b43811a79c948ef39faf150ce))
+* Make sliders easier to see and grab, and raise the contrast of the top bar and lane names ([71d7035](https://github.com/zivavu/OpenMosh/commit/71d7035971d340150324a65e1966be2debadf323), [9535821](https://github.com/zivavu/OpenMosh/commit/9535821cdeaceef1447dd8265450a5e6aa69112e), [c5b6ef9](https://github.com/zivavu/OpenMosh/commit/c5b6ef9f2b9d4b7f7efc428e4e3e8ef6ff4c6482))
+* Scroll the editor's lanes with the mouse wheel ([a97674d](https://github.com/zivavu/OpenMosh/commit/a97674d29f390ce75000b8443319434e17d57874))
+
 ## [1.0.1](https://github.com/zivavu/OpenMosh/compare/v1.0.0...v1.0.1) (2026-11-03)
 
 Videos can now export as MP4 as well as WebM; pick one in Record's settings. MP4 plays in the iPhone Photos app and on Instagram, where WebM doesn't. Phones get the Record button too, and start on MP4. In the editor, Add a project shows what each project looks like, puts slideshows and single edits on their own tabs, and asks whether a project's song comes along. The shortcuts list is ordered by task, and fast slideshows stay on the beat in the editor preview.
