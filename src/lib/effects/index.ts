@@ -9,6 +9,7 @@ export {
 	deletePreset,
 	isPresetsChange,
 	applyPreset,
+	presetChainKey,
 	normalizePresetName,
 	PRESET_NAME_MAX_LENGTH,
 	presetsToFile,

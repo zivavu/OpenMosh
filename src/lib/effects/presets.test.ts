@@ -12,6 +12,7 @@ import {
 	normalizePresetName,
 	parsePresetFile,
 	PRESET_NAME_MAX_LENGTH,
+	presetChainKey,
 	presetFileName,
 	presetsToFile,
 	savePreset,
@@ -554,5 +555,45 @@ describe("preset files", () => {
 			"Crunch (2)",
 			"Crunch (3)",
 		]);
+	});
+});
+
+describe("presetChainKey", () => {
+	const def = EFFECT_DEFINITIONS.find((d) =>
+		d.params.some((p) => p.type === "range"),
+	)!;
+	const param = def.params.find((p) => p.type === "range")!;
+	const chain = (value: number, linked = false): EffectInstance[] => [
+		{
+			instanceId: String(value),
+			defId: def.id,
+			enabled: true,
+			locked: false,
+			expanded: false,
+			values: { [param.key]: value },
+			...(linked && {
+				volumeLinks: { [param.key]: { min: 0, max: 1 } },
+			}),
+		} as EffectInstance,
+	];
+
+	it("changes when a live value does, not with ids or view state", () => {
+		expect(presetChainKey(chain(1))).toBe(
+			presetChainKey([{ ...chain(1)[0], instanceId: "x", expanded: true }]),
+		);
+		expect(presetChainKey(chain(1))).not.toBe(presetChainKey(chain(2)));
+	});
+
+	it("ignores what the audio tick writes to a linked param", () => {
+		expect(presetChainKey(chain(1, true))).toBe(presetChainKey(chain(2, true)));
+	});
+
+	it("ignores a switched-off effect and a lock", () => {
+		expect(presetChainKey(chain(1))).toBe(
+			presetChainKey([
+				{ ...chain(1)[0], locked: true },
+				{ ...chain(9)[0], enabled: false },
+			]),
+		);
 	});
 });
