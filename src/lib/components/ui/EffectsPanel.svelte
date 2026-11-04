@@ -20,6 +20,7 @@
 		HIDDEN_EFFECTS_KEY,
 		LIVE_FIRST_KEY,
 		applyPreset,
+		presetChainKey,
 		cloneEffectInstance,
 		createEffectInstance,
 		deletePreset,
@@ -129,12 +130,19 @@
 	let presetName = $state("");
 	/** The preset the chain was last set from, lit until the chain is edited. */
 	let appliedIndex = $state<number | null>(null);
+	let appliedChainKey = "";
+	/** Compared rather than cleared, as a roll or a clear replaces the chain from outside. */
+	let litIndex = $derived(
+		appliedIndex !== null && presetChainKey(effects) === appliedChainKey
+			? appliedIndex
+			: null,
+	);
 
 	/** The picker is a disclosure: one line closed, a full-width list open. */
 	let presetsOpen = $state(false);
 
 	let activePresetName = $derived(
-		appliedIndex === null ? null : (presets[appliedIndex]?.name ?? null),
+		litIndex === null ? null : (presets[litIndex]?.name ?? null),
 	);
 
 	// Warn only near the cap, so the row stays quiet for ordinary short names.
@@ -165,6 +173,7 @@
 				expanded: false,
 			}));
 		effects = keepLockedInPreset([...applied, ...rest], effects);
+		appliedChainKey = presetChainKey(effects);
 		appliedIndex = index;
 		onEffectsReplaced?.();
 		onPresetApplied?.($state.snapshot(presets[index]) as Preset);
@@ -178,6 +187,7 @@
 			presets[index]?.name === seen.name
 				? index
 				: presets.findIndex((p) => p.name === seen.name);
+		appliedChainKey = presetChainKey(effects);
 		appliedIndex = at === -1 ? null : at;
 		if (at !== -1) onPresetUpdated?.($state.snapshot(presets[at]) as Preset);
 	}
@@ -835,12 +845,12 @@
 					{#if presetsOpen}
 						<ul class="preset-list">
 							{#each presets as preset, index (index)}
-								<li class="preset-row" class:active={appliedIndex === index}>
+								<li class="preset-row" class:active={litIndex === index}>
 									<button
 										class="preset-row-load"
 										onclick={() => handleLoadPreset(index)}
 										title={`Load ${preset.name}`}
-										aria-pressed={appliedIndex === index}
+										aria-pressed={litIndex === index}
 									>
 										<span class="preset-row-index readout">
 											{String(index + 1).padStart(2, "0")}

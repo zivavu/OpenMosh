@@ -75,6 +75,20 @@ function withoutPaint(e: EffectInstance): Record<string, number | string> {
 	return values;
 }
 
+/** Equal while a chain still runs what a preset set. Skips what the audio tick
+ * writes to linked params, which would change it on every frame of playback. */
+export function presetChainKey(effects: EffectInstance[]): string {
+	return JSON.stringify(
+		effects
+			.filter((e) => e.enabled)
+			.map((e) => {
+				const values = withoutPaint(e);
+				for (const key of Object.keys(e.volumeLinks ?? {})) delete values[key];
+				return [e.defId, values, e.volumeLinks];
+			}),
+	);
+}
+
 /** What a preset keeps of a live chain: no instance ids, no UI state. */
 function serializeEffects(effects: EffectInstance[]): Preset["effects"] {
 	return effects.map((e) => ({
