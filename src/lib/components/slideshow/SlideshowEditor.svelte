@@ -131,6 +131,7 @@
 		isProxyDisabled,
 		setProxyDisabled,
 	} from "../../video/proxy-preference";
+	import { uiPrefs } from "../../ui-prefs.svelte";
 
 	interface Props {
 		initialFiles: File[];
@@ -318,6 +319,11 @@
 		const s = slides.find((x) => x.id === id);
 		if (!s || s.kind !== "video") return;
 		setProxyDisabled(s.file, !enabled);
+		applySlideProxy(s, enabled);
+	}
+
+	function applySlideProxy(s: SlideshowSlide, enabled: boolean) {
+		const id = s.id;
 		proxyJobs.get(id)?.cancel();
 		proxyJobs.delete(id);
 		s.proxyFile = undefined;
@@ -334,6 +340,19 @@
 		s.proxyPending = wanted;
 		if (wanted) void makeSlideProxy(s.id, s.file);
 	}
+
+	// "Optimize large videos" changed: follow it wherever a file has no say.
+	$effect(() => {
+		uiPrefs.previewProxies;
+		untrack(() => {
+			for (const s of slides) {
+				if (s.kind !== "video" || !needsProxy(s.width ?? 0, s.height ?? 0))
+					continue;
+				const enabled = !isProxyDisabled(s.file);
+				if (enabled !== !s.proxyDisabled) applySlideProxy(s, enabled);
+			}
+		});
+	});
 
 	function retrySlideProxy(id: string) {
 		const s = slides.find((x) => x.id === id);

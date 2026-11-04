@@ -11,6 +11,10 @@ let highContrast = $state<boolean>(
 	loadSettings().highContrast ?? DEFAULT_SETTINGS.highContrast,
 );
 
+let previewProxies = $state<boolean>(
+	loadSettings().previewProxies ?? DEFAULT_SETTINGS.previewProxies,
+);
+
 function applyContrast() {
 	if (highContrast) document.documentElement.dataset.contrast = "high";
 	else delete document.documentElement.dataset.contrast;
@@ -37,5 +41,13 @@ export const uiPrefs = {
 		highContrast = on;
 		applyContrast();
 		updateSettings({ highContrast: on });
+	},
+	get previewProxies(): boolean {
+		return previewProxies;
+	},
+	/** Saved before the editors' effects refresh, which read it from settings. */
+	set previewProxies(on: boolean) {
+		previewProxies = on;
+		updateSettings({ previewProxies: on });
 	},
 };
