@@ -244,6 +244,11 @@ export function slideshowShortcutGroups(opts: {
 					keys: ["Ctrl/Cmd+Click"],
 					description: "Create or split a segment at the cursor",
 				},
+				{
+					keys: ["S"],
+					description:
+						"Split the segment under the playhead, or a text clip if you last touched a text lane",
+				},
 				{ keys: ["Ctrl/Cmd+C"], description: "Copy the selected boundaries" },
 				{
 					keys: ["Ctrl/Cmd+V"],

@@ -16,6 +16,7 @@
 		isTextEntryTarget,
 	} from "../../editor/shortcut-target";
 	import { getTimelineStack } from "../../editor/timeline-stack.svelte";
+	import { BEAT_LANE_ID } from "../../slideshow/types";
 	import type {
 		BeatSubdivision,
 		SlideshowConfig,
@@ -482,6 +483,38 @@
 		} catch {}
 	}
 
+	function splitAt(time: number) {
+		const sorted = [...config.segments].sort(
+			(a, b) => a.startTime - b.startTime,
+		);
+		const hit = sorted.find((s) => {
+			const end = s.endTime ?? trackDuration;
+			return time > s.startTime + 0.01 && time < end - 0.01;
+		});
+		if (!hit) return;
+		const end = hit.endTime ?? trackDuration;
+		emit({
+			segments: config.segments
+				.filter((s) => s.id !== hit.id)
+				.concat([
+					{
+						id: generateId(),
+						startTime: hit.startTime,
+						endTime: time,
+						subdivision: hit.subdivision,
+					},
+					{
+						id: generateId(),
+						startTime: time,
+						endTime: end,
+						subdivision: hit.subdivision,
+					},
+				]),
+		});
+	}
+
+	$effect(() => stack.registerSplitter(BEAT_LANE_ID, splitAt));
+
 	function onLanePointerDown(e: PointerEvent) {
 		if (e.button !== 0) return;
 		// If in paste mode, split segments at clipboard offsets from the clicked time
@@ -507,33 +540,7 @@
 				});
 				return;
 			}
-			const sorted = [...config.segments].sort(
-				(a, b) => a.startTime - b.startTime,
-			);
-			const hit = sorted.find((s) => {
-				const end = s.endTime ?? trackDuration;
-				return time > s.startTime + 0.01 && time < end - 0.01;
-			});
-			if (!hit) return;
-			const end = hit.endTime ?? trackDuration;
-			emit({
-				segments: config.segments
-					.filter((s) => s.id !== hit.id)
-					.concat([
-						{
-							id: generateId(),
-							startTime: hit.startTime,
-							endTime: time,
-							subdivision: hit.subdivision,
-						},
-						{
-							id: generateId(),
-							startTime: time,
-							endTime: end,
-							subdivision: hit.subdivision,
-						},
-					]),
-			});
+			splitAt(time);
 			return;
 		}
 		if (e.shiftKey) {
@@ -832,6 +839,7 @@
 			height={SVG_H}
 			class="step-svg"
 			style:cursor={svgCursor}
+			onpointerdowncapture={() => stack.markLaneUsed(BEAT_LANE_ID)}
 			onpointerdown={onLanePointerDown}
 		>
 			{#each SUBDIVISIONS as sub}
