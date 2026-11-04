@@ -169,8 +169,8 @@ Outside CI a run reuses whatever already serves its port, so when my dev server 
 
 Releases are cut by [release-please](https://github.com/googleapis/release-please)
 (`.github/workflows/release.yml`). Every merge to `main` updates an open "chore(main): release"
-PR that bumps `version` in `package.json`, writes the new `CHANGELOG.md` section from the commit
-messages merged since the last release and updates the README's Status version line. Merging that PR is the release: it tags
+PR that bumps `version` in `package.json` and writes the new `CHANGELOG.md` section from the commit
+messages merged since the last release. Merging that PR is the release: it tags
 `vX.Y.Z`, publishes the GitHub Release and moves the `production` branch to the tag, which is
 what Vercel serves. `main` itself only deploys as a Vercel preview.
 
@@ -191,7 +191,7 @@ what Vercel serves. `main` itself only deploys as a Vercel preview.
   `"versioning": "always-bump-patch"` in `release-please-config.json` holds it. Never use `!` or
   `BREAKING CHANGE` anyway; say what happens to old projects in the commit message or the release
   PR's changelog instead. A different version (as 1.0.0 was) is set by hand on the release PR:
-  its title, body, `package.json`, the manifest, `CHANGELOG.md` and the README's Status line.
+  its title, body, `package.json`, the manifest and `CHANGELOG.md`.
 - Keep the README current in the PR that changes it: the effect count under "How to use it" and
   any credits a port owes.
 - I merge release PRs. When a batch of work has landed, ask me whether it's time for one.
