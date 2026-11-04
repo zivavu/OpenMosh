@@ -118,10 +118,10 @@
 		gap: 0.35rem;
 		padding: 0.28rem 0.6rem;
 		white-space: nowrap;
-		border: 1px solid var(--line);
+		border: 1px solid var(--line-strong);
 		border-radius: var(--r-1);
 		background: none;
-		color: var(--text-3);
+		color: var(--text-2);
 		font-family: var(--font-mono);
 		font-size: 0.64rem;
 		letter-spacing: 0.06em;
@@ -133,7 +133,7 @@
 
 	.pool-btn:hover {
 		color: var(--text);
-		border-color: var(--line-strong);
+		border-color: var(--text-2);
 	}
 
 	.pool-btn.danger:hover {
@@ -151,7 +151,7 @@
 		font-size: 0.62rem;
 		letter-spacing: 0.1em;
 		text-transform: uppercase;
-		color: var(--text-3);
+		color: var(--text-2);
 		white-space: nowrap;
 		flex-shrink: 0;
 	}

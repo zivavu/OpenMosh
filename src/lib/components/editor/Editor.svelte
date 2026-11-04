@@ -6522,7 +6522,7 @@
 		border: 1px solid transparent;
 		border-radius: var(--r-1);
 		background: none;
-		color: var(--text-3);
+		color: var(--text-2);
 		cursor: pointer;
 		transition:
 			color var(--t-fast),

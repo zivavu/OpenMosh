@@ -104,7 +104,7 @@
 		align-items: center;
 		gap: 0.3rem;
 		flex-shrink: 0;
-		color: var(--text-3);
+		color: var(--text-2);
 		font-family: var(--font-mono);
 		font-size: 0.62rem;
 		letter-spacing: 0.06em;
