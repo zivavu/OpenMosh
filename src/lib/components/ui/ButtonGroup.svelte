@@ -1,19 +1,23 @@
 <script lang="ts" generics="T extends string">
 	interface Props {
 		buttons: { label: string; value: T }[];
-		value: T;
+		/** A list lights every button in it, for a group that picks several. */
+		value: T | T[];
 		onchange: (value: T) => void;
 	}
 
 	let { buttons, value, onchange }: Props = $props();
+
+	const isActive = (option: T) =>
+		Array.isArray(value) ? value.includes(option) : value === option;
 </script>
 
 <div class="btn-group">
 	{#each buttons as btn}
 		<button
 			class="option"
-			class:active={value === btn.value}
-			aria-pressed={value === btn.value}
+			class:active={isActive(btn.value)}
+			aria-pressed={isActive(btn.value)}
 			onclick={() => onchange(btn.value)}
 		>
 			{btn.label}

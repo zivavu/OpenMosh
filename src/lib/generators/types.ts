@@ -17,13 +17,17 @@ export type Variety = "wild" | "cohesive";
 export type GeneratorKind =
 	"mix" | "gradient" | PlannedField | "cutout" | "attractor" | "ink";
 
+export type OneKind = Exclude<GeneratorKind, "mix">;
+
 export interface BatchOptions {
 	count: number;
 	variety: Variety;
-	kind: GeneratorKind;
+	/** A non-empty list deals evenly across those kinds, even in a cohesive batch. */
+	kind: GeneratorKind | OneKind[];
 	/** A named palette to keep every image in, or null for random. */
 	palette: string | null;
-	/** Leave the ground clear. Only the drawn kinds can; a mix then deals only those. */
+	/** Leave the ground clear. Only the drawn kinds can: a mix then deals only those,
+	 * and a list keeps its other kinds solid. */
 	transparent?: boolean;
 	/** Plan this many and keep the first `count`, so with one seed a smaller batch
 	 * is the start of a larger one. */

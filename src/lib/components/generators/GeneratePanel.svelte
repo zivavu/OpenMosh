@@ -12,7 +12,7 @@
 		renderSpec,
 		specsToFiles,
 		type GeneratedSpec,
-		type GeneratorKind,
+		type OneKind,
 		type RatioLabel,
 		type Variety,
 	} from "../../generators";
@@ -39,16 +39,16 @@
 	];
 	// Mix deals kinds from both groups across a batch, so it sits apart from
 	// them; with one image it would just hide a random pick, so single mode drops it.
-	const MIX: { label: string; value: GeneratorKind }[] = [
+	const MIX: { label: string; value: "mix" }[] = [
 		{ label: "Mix", value: "mix" },
 	];
-	const FIELDS: { label: string; value: GeneratorKind }[] = [
+	const FIELDS: { label: string; value: OneKind }[] = [
 		{ label: "Gradient", value: "gradient" },
 		{ label: "Plasma", value: "plasma" },
 		{ label: "Rings", value: "rings" },
 	];
 	// Drawn rather than fields, so they get a group of their own.
-	const DRAWN: { label: string; value: GeneratorKind }[] = [
+	const DRAWN: { label: string; value: OneKind }[] = [
 		{ label: "Cutout", value: "cutout" },
 		{ label: "Attractor", value: "attractor" },
 		{ label: "Ink", value: "ink" },
@@ -70,14 +70,20 @@
 	let palette = $state<string>("");
 	let variety = $state<Variety>("wild");
 	let background = $state<"solid" | "transparent">("solid");
-	let kind = $state<GeneratorKind>(
-		untrack(() => (single ? "gradient" : "mix")),
-	);
+	/** Empty means Mix, so there's always something to generate. */
+	let picked = $state<OneKind[]>(untrack(() => (single ? ["gradient"] : [])));
+
+	function toggleKind(kind: OneKind) {
+		if (single) picked = [kind];
+		else if (picked.includes(kind)) picked = picked.filter((k) => k !== kind);
+		else picked = [...picked, kind];
+	}
 
 	let total = $derived(single ? 1 : Number(count));
-	// Only the drawn kinds have a ground to leave out; a mix then deals only those.
+	// Only the drawn kinds have a ground to leave out. A mix then deals only those;
+	// picked fields stay in the batch, solid.
 	let canClear = $derived(
-		kind === "mix" || DRAWN.some((d) => d.value === kind),
+		picked.length === 0 || picked.some((k) => DRAWN.some((d) => d.value === k)),
 	);
 	let transparent = $derived(canClear && background === "transparent");
 	// Planned as the biggest batch and cut down, so changing the count keeps the
@@ -86,7 +92,7 @@
 		planBatch(seed, {
 			count,
 			variety,
-			kind,
+			kind: picked.length > 0 ? [...picked] : "mix",
 			palette: palette || null,
 			transparent,
 			nest: single ? undefined : Number(COUNTS[COUNTS.length - 1].value),
@@ -194,16 +200,20 @@
 		{#if !single}
 			<div class="ctrl">
 				<span class="label">All</span>
-				<ButtonGroup buttons={MIX} value={kind} onchange={(v) => (kind = v)} />
+				<ButtonGroup
+					buttons={MIX}
+					value={picked.length > 0 ? [] : "mix"}
+					onchange={() => (picked = [])}
+				/>
 			</div>
 		{/if}
 		<div class="ctrl">
 			<span class="label">Field</span>
-			<ButtonGroup buttons={FIELDS} value={kind} onchange={(v) => (kind = v)} />
+			<ButtonGroup buttons={FIELDS} value={picked} onchange={toggleKind} />
 		</div>
 		<div class="ctrl">
 			<span class="label">Drawn</span>
-			<ButtonGroup buttons={DRAWN} value={kind} onchange={(v) => (kind = v)} />
+			<ButtonGroup buttons={DRAWN} value={picked} onchange={toggleKind} />
 		</div>
 		{#if !single}
 			<div class="ctrl">
