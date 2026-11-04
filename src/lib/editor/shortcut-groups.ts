@@ -37,7 +37,7 @@ const FULLSCREEN: ShortcutRow = {
 };
 
 /** The shared axis: every lane is the ruler, and the view is one viewport. */
-const TIMELINE: ShortcutGroup = {
+const timelineGroup = (wheelScrollsLanes: boolean): ShortcutGroup => ({
 	title: "Timeline",
 	shortcuts: [
 		{
@@ -49,19 +49,28 @@ const TIMELINE: ShortcutGroup = {
 			keys: ["Drag a song handle"],
 			description: "Trim the playback span; dbl-click a handle resets it",
 		},
-		{
-			keys: ["Scroll"],
-			description: "Zoom around the playhead, or the cursor",
-		},
+		...(wheelScrollsLanes
+			? [
+					{ keys: ["Scroll"], description: "Scroll the lanes up and down" },
+					{
+						keys: ["Ctrl/Cmd+Scroll", "Scroll over the ruler"],
+						description: "Zoom around the playhead, or the cursor",
+					},
+				]
+			: [
+					{
+						keys: ["Scroll"],
+						description: "Zoom around the playhead, or the cursor",
+					},
+				]),
 		{ keys: ["Shift+Scroll"], description: "Pan" },
 		{ keys: ["+", "-"], description: "Zoom one notch" },
 		{
 			keys: ["C"],
-			description:
-				"Follow the playhead, or stop; a scroll or scrub stops it too",
+			description: "Follow the playhead, or stop; a pan or scrub stops it too",
 		},
 	],
-};
+});
 
 /** Selection and editing that every clip lane answers the same way (text, media,
  * FX), so it is listed once. */
@@ -198,7 +207,7 @@ export function editorShortcutGroups(opts: {
 				SAVE_PROJECT,
 			],
 		},
-		TIMELINE,
+		timelineGroup(sequence),
 		...(sequence
 			? [{ title: "Clips", shortcuts: [CLIP_MOSH, ...CLIP_ROWS] }]
 			: text || media
@@ -224,7 +233,7 @@ export function slideshowShortcutGroups(opts: {
 				SAVE_PROJECT,
 			],
 		},
-		TIMELINE,
+		timelineGroup(false),
 		{
 			title: "Segments",
 			shortcuts: [

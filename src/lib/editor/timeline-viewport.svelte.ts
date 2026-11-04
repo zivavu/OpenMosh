@@ -3,6 +3,25 @@
 const MIN_ZOOM_FRACTION = 1 / 200;
 /** One notch of zoom, shared by the wheel and the keyboard. */
 const ZOOM_STEP = 1.2;
+/** Wheel pixels in one zoom notch: a mouse click passes it, a pinch's small deltas don't. */
+const PIXELS_PER_NOTCH = 40;
+
+/** What a wheel event does. A pinch arrives as Ctrl+wheel, so it zooms. */
+export function wheelGesture(
+	e: Pick<WheelEvent, "shiftKey" | "ctrlKey" | "metaKey" | "deltaX" | "deltaY">,
+	plainWheelScrolls: boolean,
+): "pan" | "zoom" | "scroll" {
+	if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return "pan";
+	if (e.ctrlKey || e.metaKey) return "zoom";
+	return plainWheelScrolls ? "scroll" : "zoom";
+}
+
+/** Zoom notches in a wheel event, at most one: positive zooms out. Lines and pages
+ * (`deltaMode` above 0) only come from wheels with clicks, so each is a full notch. */
+export function wheelZoomNotches(deltaY: number, deltaMode: number): number {
+	if (deltaMode !== 0) return Math.sign(deltaY);
+	return Math.max(-1, Math.min(1, deltaY / PIXELS_PER_NOTCH));
+}
 
 export class TimelineViewport {
 	viewStart = $state(0);
@@ -105,12 +124,16 @@ export class TimelineViewport {
 		this.zoomView(inward ? 1 / ZOOM_STEP : ZOOM_STEP, this.anchorFrac() ?? 0.5);
 	}
 
-	/** Attach the shared wheel behavior (shift/horizontal → pan, vertical → zoom) to `el`. */
+	/** Attach the shared wheel behavior (see `wheelGesture`) to `el`. */
 	attachWheel(
 		el: HTMLElement | SVGElement,
 		onPan: (() => void) | null = null,
+		plainWheelScrolls: () => boolean = () => false,
 	): () => void {
 		const handleWheel = (e: WheelEvent) => {
+			const gesture = wheelGesture(e, plainWheelScrolls());
+			// Left to the browser, which scrolls the lane list.
+			if (gesture === "scroll") return;
 			e.preventDefault();
 			e.stopPropagation();
 			if (this.#getDuration() <= 0) return;
@@ -119,16 +142,18 @@ export class TimelineViewport {
 				0,
 				Math.min(1, (e.clientX - r.left) / r.width),
 			);
-			if (e.shiftKey) {
+			if (gesture === "pan") {
 				onPan?.();
-				this.panView(this.viewDuration * 0.25 * Math.sign(e.deltaY));
-			} else if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
-				onPan?.();
-				this.panView((e.deltaX / 200) * this.viewDuration);
+				// Some browsers report Shift+wheel on the horizontal axis.
+				this.panView(
+					e.shiftKey
+						? this.viewDuration * 0.25 * Math.sign(e.deltaY || e.deltaX)
+						: (e.deltaX / 200) * this.viewDuration,
+				);
 			} else {
 				// Pin the playhead while zooming when it's on screen.
 				this.zoomView(
-					e.deltaY > 0 ? ZOOM_STEP : 1 / ZOOM_STEP,
+					ZOOM_STEP ** wheelZoomNotches(e.deltaY, e.deltaMode),
 					this.anchorFrac() ?? cursorFrac,
 				);
 			}

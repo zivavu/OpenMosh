@@ -5862,6 +5862,7 @@
 			<TimelineStack
 				height={timelineSplit.height}
 				bind:axis={timelineAxis}
+				wheelScrollsLanes={isSequenceMode}
 				trackDuration={textDuration}
 				currentTime={textTime}
 				isPlaying={textClockRunning}

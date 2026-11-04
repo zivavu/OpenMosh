@@ -22,6 +22,8 @@
 		/** Play is off (pausing still works), e.g. while media loads. */
 		playDisabled?: boolean;
 		onSeek?: ((time: number) => void) | null;
+		/** A plain wheel over a lane scrolls the lane list instead of zooming. */
+		wheelScrollsLanes?: boolean;
 		spanStart?: number;
 		loopEnabled?: boolean;
 		onToggleLoop?: (() => void) | null;
@@ -78,6 +80,7 @@
 		height = null,
 		children,
 		axis = $bindable(),
+		wheelScrollsLanes = false,
 	}: Props = $props();
 
 	const stack = new TimelineStackState(
@@ -88,6 +91,9 @@
 	setTimelineStack(stack);
 	axis = stack;
 
+	$effect(() => {
+		stack.wheelScrollsLanes = wheelScrollsLanes;
+	});
 	$effect(() => {
 		stack.bpm = bpm;
 		stack.beatOffset = beatOffset;
@@ -372,7 +378,7 @@
 				class:active={stack.followPlayhead}
 				onclick={() => (stack.followPlayhead = !stack.followPlayhead)}
 				title={stack.followPlayhead
-					? "Following the playhead (C) — scroll or drag the scrollbar to look elsewhere"
+					? "Following the playhead (C). Shift+scroll or drag the scrollbar to look elsewhere"
 					: "Follow the playhead again (C)"}
 			>
 				<Crosshair size={12} />
