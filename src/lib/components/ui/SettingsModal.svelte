@@ -16,6 +16,18 @@
 			<span class="hint">Type exact values instead of dragging sliders.</span>
 		</span>
 	</label>
+	<label class="setting">
+		<Checkbox
+			checked={uiPrefs.highContrast}
+			onchange={(e) => (uiPrefs.highContrast = e.currentTarget.checked)}
+		/>
+		<span class="text">
+			<span class="name">High contrast</span>
+			<span class="hint"
+				>Brighter text, lines and controls on a darker background.</span
+			>
+		</span>
+	</label>
 </PanelModal>
 
 <style>

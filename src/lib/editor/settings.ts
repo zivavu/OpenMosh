@@ -43,6 +43,8 @@ export interface EditorSettings {
 	projectSong: ProjectSongChoice;
 	/** Slider panels show typed number fields instead of tracks. */
 	numberInputs: boolean;
+	/** Swaps the color tokens for a brighter set, on `html[data-contrast]`. */
+	highContrast: boolean;
 }
 
 /** What a fresh editor starts from, and what double-clicking a control restores. */
@@ -69,6 +71,7 @@ export const DEFAULT_SETTINGS: EditorSettings = {
 	demoBackground: true,
 	projectSong: "ask",
 	numberInputs: false,
+	highContrast: false,
 };
 
 export function loadSettings(): Partial<EditorSettings> {
