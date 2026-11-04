@@ -227,7 +227,8 @@
 
 	$effect(() => {
 		const f = pendingTrack;
-		if (!f || !libraryLoaded) return;
+		// A song with an id keeps it: a rename or a same-sized copy would match wrongly.
+		if (!f || !libraryLoaded || activeTrackId) return;
 		const existing = tracks.find(
 			(t) => trackFileName(t) === f.name && t.blob.size === f.size,
 		);

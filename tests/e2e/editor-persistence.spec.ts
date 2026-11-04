@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import {
+	expectOnlySong,
 	poolCount,
 	liveEffectNames,
 	liveEffects,
@@ -7,6 +8,7 @@ import {
 	PREVIEW_CANVAS,
 	clipMoshButton,
 	mediaClips,
+	renameOnlySong,
 	saveProjectButton,
 	selectMode,
 	selectClip,
@@ -247,4 +249,19 @@ test("opening a file of a stored project offers that project back", async ({
 
 	await openFile();
 	await expect(prompt).toBeVisible();
+});
+
+test("renaming the song doesn't add a copy of it when the project reopens", async ({
+	page,
+}) => {
+	await openEditor(page, { sources: [["red.png", RED]] });
+	await waitForSaved(page);
+	const url = page.url();
+
+	await renameOnlySong(page, "Renamed");
+
+	await page.goto("/");
+	await page.goto(url);
+	await expect(page.locator(PREVIEW_CANVAS)).toBeVisible({ timeout: 30_000 });
+	await expectOnlySong(page, "Renamed");
 });
