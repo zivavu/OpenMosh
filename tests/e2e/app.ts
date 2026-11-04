@@ -130,6 +130,14 @@ export async function waitForSaved(page: Page): Promise<void> {
 	await expect(page.locator(".save-indicator .label")).toHaveText("Saved");
 }
 
+async function openSongsInDrawer(page: Page): Promise<void> {
+	const songs = page.getByRole("tab", { name: "Songs" });
+	// The drawer remembers being open across a reload.
+	if (!(await songs.isVisible()))
+		await page.getByTitle("Open projects and songs").click();
+	await songs.click();
+}
+
 /** The slideshow's beat lane, once it's laid out. */
 export async function beatLaneBox(page: Page) {
 	const lane = page.locator("svg:has(line.seg)");
@@ -139,6 +147,22 @@ export async function beatLaneBox(page: Page) {
 	const box = await lane.boundingBox();
 	if (!box) throw new Error("no beat lane");
 	return box;
+}
+
+/** Rename the library's one song from the drawer. */
+export async function renameOnlySong(page: Page, name: string): Promise<void> {
+	await openSongsInDrawer(page);
+	await page.locator(".track-row .rename-btn").click();
+	const input = page.getByLabel("Track name");
+	await input.fill(name);
+	await input.press("Enter");
+	await expect(page.locator(".track-row .name-btn")).toHaveText(name);
+}
+
+/** The drawer lists this song and no copy of it. */
+export async function expectOnlySong(page: Page, name: string): Promise<void> {
+	await openSongsInDrawer(page);
+	await expect(page.locator(".track-row .name-btn")).toHaveText([name]);
 }
 
 export interface OpenEditorOptions {
