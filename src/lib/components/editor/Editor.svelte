@@ -63,6 +63,7 @@
 	import { getDecodedAudioBuffer } from "../../audio/audio-buffer-cache";
 	import { songProfileOf } from "../../audio/build-song-profile";
 	import { publishSongProfile } from "../../audio/song-profile";
+	import { publishArcsSong } from "../../arcs/song";
 	import {
 		audioLanesEnd,
 		createAudioClip,
@@ -2143,6 +2144,26 @@
 		reportUnreadableImages,
 		keepAddsThroughPoolUndo,
 	);
+
+	// Arcs hears the same sound, but it's read apart and only for a project that has one.
+	let poolHasArcs = $derived(
+		isSequenceMode && sourceRegistry.sources.some((s) => s.kind === "arcs"),
+	);
+	$effect(() => {
+		if (!poolHasArcs) {
+			publishArcsSong(null);
+			return;
+		}
+		void mixer.plan;
+		void mixer.duration;
+		void audioBank.version;
+		const timer = setTimeout(
+			() => publishArcsSong(() => mixer.analyseArcs(), bumpSourceTick),
+			400,
+		);
+		return () => clearTimeout(timer);
+	});
+	$effect(() => () => publishArcsSong(null));
 
 	/** The pool has dropped these already; the lanes that drew them let go too. */
 	function reportUnreadableImages(sources: SequenceSource[]) {
