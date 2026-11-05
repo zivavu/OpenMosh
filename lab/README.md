@@ -69,3 +69,31 @@ from a seed, a five-ink palette and its own knobs (`generators/kit.ts`). The
 shortlisted ones (paper cutout, attractors, flow-field ink) render in WebGL2
 through the shared context in `generators/gl.ts`; reaction–diffusion has its
 own; the rest are still Canvas 2D or plain typed-array maths.
+
+# Music Lab
+
+Dev-only page for a visual computed from a song, to judge its look, its speed and
+how it follows the music before anything goes into the app.
+
+```
+bun dev   →   http://localhost:5173/lab/music/
+```
+
+Drop one or more audio files. Every lane is heard; ticked lanes drive the picture,
+through the same `renderDrive` the editor's Drives toggle feeds. With no driving
+lane there is no picture. **Copy settings** copies every knob as JSON, and **Reset**
+goes back to the defaults. Points are fixed at 1M: more made no visible difference.
+
+- `controls.ts` reads the song once into a table indexed by time: kick, bass, mids,
+  highs, energy, form changes. Only `analyzeDrive` touches the audio.
+- `shaders.ts` places each point from its index and the uniforms alone, with no
+  history, so the picture depends only on the timestamp and a seek needs no replay.
+- `arcs.ts` ports the stroke from arcDrawer (`paintStroke`, own repo) and fires it from
+  the song: volleys on kicks, stems on the bass, crackle on the highs, a knot of coils
+  at the centre, with optional subarcs. Each arc is seeded by its event, and its blur
+  is worked out per pixel, not as a pass per stroke.
+- `mood.ts` rolls what each section of the song favours: the form's fold and stretch,
+  the camera shot, the arcs' layout and stroke. **Variety** at 0 turns it all off.
+- `renderer.ts` runs the passes: points into a float buffer, fixed exposure, glints,
+  bloom, then edge and zoom blur. Exposure is fixed so loud moments stay brighter;
+  the attractor's peak scaling would normalize them away.
