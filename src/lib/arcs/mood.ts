@@ -1,7 +1,7 @@
 // What makes one section of the song look unlike the last: its shape, its camera shot
 // and the arcs it favours. Rolled from the seed and the section's number alone.
 
-import { mulberry32 } from "../../src/lib/rng";
+import { mulberry32 } from "../rng";
 import type { ControlFrame } from "./controls";
 
 export const PATTERN_COUNT = 6;

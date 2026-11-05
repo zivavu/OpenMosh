@@ -2,313 +2,32 @@
 // follows the music before anything goes into the app. Dev only:
 // localhost:5173/lab/music/ (`bun dev`).
 
-import { decodeAudioFile } from "../../src/lib/audio/offline-audio";
-import { PALETTES, type Colors } from "../../src/lib/generators/palette";
-import type { MixSegment } from "../../src/lib/mix/plan";
-import { renderDrive } from "../../src/lib/mix/render";
+import { analyzeDrive } from "../../src/lib/arcs/analyze";
 import {
-	analyzeDrive,
 	buildControls,
-	FORM_NAMES,
-	sampleControls,
 	type Controls,
 	type SongAudio,
-} from "./controls";
-import { MusicRenderer, type Look } from "./renderer";
+} from "../../src/lib/arcs/controls";
+import { FORM_NAMES } from "../../src/lib/arcs/forms";
+import {
+	ARCS_KNOBS,
+	ARCS_PALETTES,
+	arcsColors,
+	arcsLook,
+	type ArcsKnobGroup,
+} from "../../src/lib/arcs/look";
+import { ArcsPass } from "../../src/lib/arcs/pass";
+import { decodeAudioFile } from "../../src/lib/audio/offline-audio";
+import type { MixSegment } from "../../src/lib/mix/plan";
+import { renderDrive } from "../../src/lib/mix/render";
+import { GpuTimer } from "./gpu-timer";
 
-interface Knob {
-	key: keyof Look | "morphEvery";
-	label: string;
-	min: number;
-	max: number;
-	step: number;
-	value: number;
-}
-
-const KNOBS: Record<string, Knob[]> = {
-	Picture: [
-		{
-			key: "dust",
-			label: "Core dust",
-			min: 0,
-			max: 0.3,
-			step: 0.01,
-			value: 0.06,
-		},
-		{
-			key: "exposure",
-			label: "Exposure",
-			min: 0.1,
-			max: 4,
-			step: 0.05,
-			value: 1.1,
-		},
-		{
-			key: "gamma",
-			label: "Gamma",
-			min: 0.6,
-			max: 2.4,
-			step: 0.05,
-			value: 1.2,
-		},
-		{ key: "bloom", label: "Bloom", min: 0, max: 1, step: 0.01, value: 0.22 },
-		{ key: "glint", label: "Glints", min: 0, max: 20, step: 0.1, value: 8 },
-		{
-			key: "glintThreshold",
-			label: "Glint threshold",
-			min: 0.2,
-			max: 12,
-			step: 0.1,
-			value: 2.5,
-		},
-		{
-			key: "glintLength",
-			label: "Glint length",
-			min: 0.3,
-			max: 3,
-			step: 0.05,
-			value: 1,
-		},
-		{ key: "rays", label: "Rays", min: 2, max: 8, step: 2, value: 4 },
-		{
-			key: "focusBlur",
-			label: "Edge blur",
-			min: 0,
-			max: 6,
-			step: 0.1,
-			value: 2.5,
-		},
-		{
-			key: "dof",
-			label: "Depth of field",
-			min: 0,
-			max: 80,
-			step: 1,
-			value: 14,
-		},
-		{
-			key: "shutter",
-			label: "Shutter (s)",
-			min: 0,
-			max: 0.12,
-			step: 0.002,
-			value: 0.03,
-		},
-		{
-			key: "far",
-			label: "Far structure",
-			min: 0,
-			max: 0.4,
-			step: 0.01,
-			value: 0.1,
-		},
-	],
-	Arcs: [
-		{
-			key: "variety",
-			label: "Variety",
-			min: 0,
-			max: 1,
-			step: 0.01,
-			value: 1,
-		},
-		{
-			key: "arcCore",
-			label: "Core arcs",
-			min: 0,
-			max: 48,
-			step: 1,
-			value: 14,
-		},
-		{
-			key: "arcSub",
-			label: "Subarcs per arc (0 is off)",
-			min: 0,
-			max: 6,
-			step: 1,
-			value: 2,
-		},
-		{
-			key: "arcSubDepth",
-			label: "Subarc levels",
-			min: 1,
-			max: 3,
-			step: 1,
-			value: 2,
-		},
-		{
-			key: "arcSubLength",
-			label: "Subarc length",
-			min: 0.1,
-			max: 1.5,
-			step: 0.01,
-			value: 0.7,
-		},
-		{
-			key: "arcSubSpread",
-			label: "Subarc spread",
-			min: 0.1,
-			max: 2,
-			step: 0.01,
-			value: 0.8,
-		},
-		{ key: "arcAmount", label: "Arcs", min: 0, max: 3, step: 0.05, value: 1 },
-		{
-			key: "arcKick",
-			label: "Kick → arcs per hit",
-			min: 0,
-			max: 30,
-			step: 1,
-			value: 10,
-		},
-		{ key: "arcStems", label: "Stems", min: 0, max: 16, step: 1, value: 6 },
-		{
-			key: "arcCrackle",
-			label: "Highs → crackle",
-			min: 0,
-			max: 4,
-			step: 0.05,
-			value: 1,
-		},
-		{ key: "arcReach", label: "Reach", min: 0.2, max: 3, step: 0.05, value: 1 },
-		{ key: "arcLength", label: "Strokes", min: 4, max: 64, step: 1, value: 26 },
-		{
-			key: "arcWidth",
-			label: "Line width",
-			min: 0.4,
-			max: 8,
-			step: 0.1,
-			value: 2.2,
-		},
-		{
-			key: "arcDecay",
-			label: "Line decay",
-			min: 0,
-			max: 1,
-			step: 0.01,
-			value: 0.5,
-		},
-		{
-			key: "arcWander",
-			label: "Offset weight",
-			min: 0,
-			max: 0.5,
-			step: 0.005,
-			value: 0.1,
-		},
-		{
-			key: "arcMomentum",
-			label: "Previous offset multiplier",
-			min: 0,
-			max: 0.98,
-			step: 0.01,
-			value: 0.82,
-		},
-		{ key: "arcGlow", label: "Blur", min: 0.5, max: 16, step: 0.5, value: 4 },
-		{ key: "arcWrithe", label: "Writhe", min: 0, max: 4, step: 0.05, value: 1 },
-		{
-			key: "coreSpin",
-			label: "Core spin",
-			min: 0,
-			max: 4,
-			step: 0.05,
-			value: 1,
-		},
-	],
-	Music: [
-		{
-			key: "midWarp",
-			label: "Mids → warp",
-			min: 0,
-			max: 1.5,
-			step: 0.01,
-			value: 0.3,
-		},
-		{
-			key: "speed",
-			label: "Base speed",
-			min: 0,
-			max: 2,
-			step: 0.01,
-			value: 0.35,
-		},
-		{
-			key: "speedReact",
-			label: "Energy → speed",
-			min: 0,
-			max: 8,
-			step: 0.05,
-			value: 2,
-		},
-		{
-			key: "kickFlash",
-			label: "Kick → flash",
-			min: 0,
-			max: 4,
-			step: 0.05,
-			value: 0.6,
-		},
-		{
-			key: "kickZoom",
-			label: "Kick → zoom blur",
-			min: 0,
-			max: 0.6,
-			step: 0.01,
-			value: 0.14,
-		},
-		{
-			key: "kickPush",
-			label: "Kick → camera",
-			min: 0,
-			max: 1,
-			step: 0.01,
-			value: 0.3,
-		},
-		{
-			key: "kickRipple",
-			label: "Kick → ripple",
-			min: 0,
-			max: 1,
-			step: 0.01,
-			value: 0.25,
-		},
-		{
-			key: "bassSwell",
-			label: "Bass → swell",
-			min: 0,
-			max: 0.8,
-			step: 0.01,
-			value: 0.15,
-		},
-		{
-			key: "midTwist",
-			label: "Mids → twist",
-			min: 0,
-			max: 2,
-			step: 0.01,
-			value: 0.3,
-		},
-		{
-			key: "highSparkle",
-			label: "Highs → sparkle",
-			min: 0,
-			max: 3,
-			step: 0.01,
-			value: 1,
-		},
-		{
-			key: "morphEvery",
-			label: "Change form every (s)",
-			min: 4,
-			max: 60,
-			step: 1,
-			value: 8,
-		},
-	],
-};
-
-const ICE: Colors = ["#000208", "#061a4a", "#1f5fd0", "#7fc4ff", "#f2fbff"];
-const COLORS: Record<string, Colors> = { Ice: ICE, ...PALETTES };
+const GROUPS: [ArcsKnobGroup, string][] = [
+	["main", "Main"],
+	["picture", "Picture"],
+	["arcs", "Arcs"],
+	["music", "Music"],
+];
 const RATIOS: Record<string, [number, number]> = {
 	"4:5": [4, 5],
 	"9:16": [9, 16],
@@ -326,7 +45,7 @@ interface State {
 	values: Record<string, number>;
 }
 
-const allKnobs = Object.values(KNOBS).flat();
+const allKnobs = ARCS_KNOBS;
 const saved: Partial<State> = JSON.parse(localStorage.getItem(STORE) ?? "{}");
 const state: State = {
 	seed: saved.seed ?? 1,
@@ -357,7 +76,13 @@ const overlay = $("overlay");
 const hud = $("hud");
 const errorEl = $("error");
 
-const renderer = new MusicRenderer(canvas);
+const gl = canvas.getContext("webgl2", {
+	antialias: false,
+	alpha: false,
+	powerPreference: "high-performance",
+})!;
+const pass = new ArcsPass(gl);
+const timer = new GpuTimer(gl);
 const lanes: Lane[] = [];
 let song: SongAudio | null = null;
 let controls: Controls | null = null;
@@ -563,24 +288,26 @@ function size() {
 		: { w: state.short, h: Math.round((state.short * b) / a) & ~1 };
 }
 
-function look(): Look {
-	return { ...(state.values as unknown as Look), seed: state.seed };
+function spec() {
+	return {
+		seed: state.seed,
+		palette: state.palette,
+		values: state.values,
+		forms: state.forms,
+	};
 }
 
 /** The whole picture is a function of `t`: this is the only place time enters it. */
 function drawAt(t: number) {
 	if (!controls) return;
-	const l = look();
 	const { w, h } = size();
-	renderer.render(
-		controls,
-		sampleControls(controls, t),
-		sampleControls(controls, Math.max(0, t - l.shutter)),
-		l,
-		COLORS[state.palette] ?? ICE,
-		w,
-		h,
-	);
+	if (canvas.width !== w || canvas.height !== h) {
+		canvas.width = w;
+		canvas.height = h;
+	}
+	timer.begin();
+	pass.draw(controls, t, arcsLook(spec()), arcsColors(spec()), w, h, null);
+	timer.end();
 }
 
 const intervals: number[] = [];
@@ -597,10 +324,8 @@ function updateHud(stamp: number) {
 	const { w, h } = size();
 	hud.textContent = [
 		`${(1000 / mean).toFixed(0)} fps · worst 5% ${worst.toFixed(1)} ms`,
-		renderer.gpuMs === null
-			? "GPU time n/a"
-			: `GPU ${renderer.gpuMs.toFixed(1)} ms`,
-		`${w}×${h} · ${Math.floor(renderer.arcVertices / 6)} arc segments`,
+		timer.ms === null ? "GPU time n/a" : `GPU ${timer.ms.toFixed(1)} ms`,
+		`${w}×${h} · ${Math.floor(pass.arcVertices / 6)} arc segments`,
 		`read the song in ${(analyzeMs / 1000).toFixed(1)} s`,
 	].join("\n");
 }
@@ -657,11 +382,11 @@ function drawStrip() {
 function renderKnobs() {
 	const el = $("knobs");
 	el.replaceChildren();
-	for (const [group, knobs] of Object.entries(KNOBS)) {
+	for (const [group, name] of GROUPS) {
 		const title = document.createElement("h4");
-		title.textContent = group;
+		title.textContent = name;
 		el.append(title);
-		for (const knob of knobs) {
+		for (const knob of allKnobs.filter((k) => k.group === group)) {
 			const wrap = document.createElement("div");
 			wrap.className = "ctl";
 			const label = document.createElement("label");
@@ -721,7 +446,9 @@ function setSeed(seed: number) {
 
 function initPanel() {
 	const palette = $<HTMLSelectElement>("palette");
-	for (const name of Object.keys(COLORS)) palette.add(new Option(name, name));
+	for (const name of Object.keys(ARCS_PALETTES)) {
+		palette.add(new Option(name, name));
+	}
 	palette.value = state.palette;
 	palette.onchange = () => {
 		state.palette = palette.value;
@@ -779,7 +506,7 @@ function initPanel() {
 }
 
 try {
-	renderer.compile();
+	pass.compile();
 } catch (e) {
 	showError(e);
 }
@@ -797,6 +524,6 @@ requestAnimationFrame(loop);
 	drawAt,
 	controls: () => controls,
 	rebuild: rebuildControls,
-	renderer,
+	gl,
 	state,
 };

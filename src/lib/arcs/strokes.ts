@@ -2,9 +2,10 @@
 // of the last one's momentum, thinning as it goes. Seeded per event rather than by
 // Math.random, so an arc is a function of the timestamp like the rest of the picture.
 
-import type { Mat4 } from "../../src/lib/mesh/mat4";
-import { mulberry32, type Rand } from "../../src/lib/rng";
+import type { Mat4 } from "../mesh/mat4";
+import { mulberry32, type Rand } from "../rng";
 import { sampleControls, type ControlFrame, type Controls } from "./controls";
+import type { Look } from "./look";
 import { moodOf, PATTERN_COUNT, STROKE_COUNT, type Mood } from "./mood";
 
 /** Per vertex: x, y in clip space, then in pixels the distance across the arc, its half
@@ -44,29 +45,6 @@ const MAX_NEAR_SWELL = 2.5;
 const MIN_SUB_SPEED = 0.05;
 
 type Vec = [number, number, number];
-
-export interface ArcLook {
-	seed: number;
-	arcAmount: number;
-	arcWidth: number;
-	arcDecay: number;
-	arcWander: number;
-	arcMomentum: number;
-	arcGlow: number;
-	arcLength: number;
-	arcKick: number;
-	arcCrackle: number;
-	arcStems: number;
-	arcCore: number;
-	arcReach: number;
-	arcWrithe: number;
-	arcSub: number;
-	arcSubDepth: number;
-	arcSubLength: number;
-	arcSubSpread: number;
-	coreSpin: number;
-	variety: number;
-}
 
 interface Stroke {
 	momentum: number;
@@ -151,7 +129,7 @@ function rotate(v: Vec, axis: Vec, angle: number): Vec {
 }
 
 /** Four characters for the same walk, reached by moving the stroke's own settings. */
-function strokeOf(kind: number, rng: Rand, look: ArcLook): Stroke {
+function strokeOf(kind: number, rng: Rand, look: Look): Stroke {
 	const { arcMomentum: m, arcWander: w, variety } = look;
 	const curlRoll = rng();
 	const rolled: Stroke =
@@ -204,12 +182,7 @@ function lived(age: number, life: number, grow: number, steps: number) {
 
 /** The tangle at the middle: coils that close around the centre, with no point for
  * the light to pile up on. A kick snaps some of them to a new shape. */
-function collectKnot(
-	arcs: Arc[],
-	frame: ControlFrame,
-	mood: Mood,
-	look: ArcLook,
-) {
+function collectKnot(arcs: Arc[], frame: ControlFrame, mood: Mood, look: Look) {
 	const kickNear = Math.exp(-frame.kickAge * 6);
 	const radius = (0.2 + 0.45 * frame.bass + 0.35 * kickNear) * look.arcReach;
 	const spin = (frame.t * 0.25 + frame.energyTotal * 1.4) * look.coreSpin;
@@ -263,7 +236,7 @@ function collectStems(
 	frame: ControlFrame,
 	mood: Mood,
 	steps: number,
-	look: ArcLook,
+	look: Look,
 ) {
 	for (let s = 0; s < Math.round(look.arcStems); s++) {
 		const slot = mulberry32(arcSeed(look.seed, 0, s, 0));
@@ -306,7 +279,7 @@ function collectVolley(
 	age: number,
 	controls: Controls,
 	steps: number,
-	look: ArcLook,
+	look: Look,
 ) {
 	const strength = controls.onsetStrength[o];
 	const mood = moodOf(
@@ -392,7 +365,7 @@ function collectCrackle(
 	t: number,
 	controls: Controls,
 	steps: number,
-	look: ArcLook,
+	look: Look,
 ) {
 	const newest = Math.floor(t * CRACKLE_RATE);
 	const oldest = Math.ceil((t - CRACKLE_LIFE) * CRACKLE_RATE);
@@ -435,7 +408,7 @@ function collectCrackle(
 	}
 }
 
-function collectArcs(frame: ControlFrame, controls: Controls, look: ArcLook) {
+function collectArcs(frame: ControlFrame, controls: Controls, look: Look) {
 	const arcs: Arc[] = [];
 	const steps = Math.min(MAX_STEPS, Math.round(look.arcLength));
 	const mood = moodOf(look.seed, frame.sectionB, look.variety);
@@ -508,7 +481,7 @@ function traceArc(arc: Arc, phase: number, decay: number) {
 
 /** Branches read off the walk just traced. A subarc starts growing once its parent's
  * head has passed the branch, and dies with the part of the parent it hangs from. */
-function spawnSubarcs(arc: Arc, queue: Arc[], look: ArcLook) {
+function spawnSubarcs(arc: Arc, queue: Arc[], look: Look) {
 	const rng = mulberry32(arc.seed ^ 0x9e3779b9);
 	const count =
 		arc.depth === 0
@@ -606,7 +579,7 @@ export function buildArcs(
 	out: Float32Array,
 	frame: ControlFrame,
 	controls: Controls,
-	look: ArcLook,
+	look: Look,
 	viewProj: Mat4,
 	focus: number,
 	w: number,

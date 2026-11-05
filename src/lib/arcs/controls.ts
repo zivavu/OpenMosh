@@ -1,23 +1,17 @@
 // The song, read once into a table indexed by time. A frame depends only on its
 // timestamp, so seeking, replaying and exporting all land on the same picture.
 
-import { followerTaus } from "../../src/lib/audio/auto-range";
-import { analyzeFrames, FFT_SIZE } from "../../src/lib/audio/offline-audio";
+import { followerTaus } from "../audio/auto-range";
 import {
 	blendBand,
 	placeInRange,
 	PROFILE_FPS,
-	songBand,
 	type BandProfile,
 	type Range,
-	type SongProfile,
-} from "../../src/lib/audio/song-profile";
-import { mulberry32 } from "../../src/lib/rng";
+} from "../audio/song-profile";
+import { mulberry32 } from "../rng";
 
 const FPS = PROFILE_FPS;
-const LOW_BAND = [30, 140] as const;
-const MID_BAND = [250, 2500] as const;
-const HIGH_BAND = [5000, 14000] as const;
 
 /** A hit at least this strong, this far from the last, restarts the ripple. */
 const ONSET_LEVEL = 0.55;
@@ -29,17 +23,6 @@ const NOVELTY_CUT = 0.14;
 const MIN_FORM_HOLD = 4;
 const SNAP_TO_ONSET = 0.5;
 export const MORPH_SECONDS = 0.7;
-
-export const FORM_NAMES = [
-	"Lattice",
-	"Sponge",
-	"Globe",
-	"Burst",
-	"Towers",
-	"Helix",
-	"Rings",
-	"Sheet",
-] as const;
 
 export interface SongAudio {
 	duration: number;
@@ -91,31 +74,6 @@ export interface ControlFrame {
 	sectionA: number;
 	sectionB: number;
 	onsetIndex: number;
-}
-
-/** Unlike `buildSongProfile` this keeps silent frames: the table is indexed by time. */
-export async function analyzeDrive(
-	drive: AudioBuffer,
-	onProgress?: (p: number) => void,
-): Promise<SongAudio> {
-	const frames = Math.floor(drive.duration * FPS);
-	const times = Array.from({ length: frames }, (_, i) => i / FPS);
-	const analysed = await analyzeFrames(drive, times, FFT_SIZE, onProgress);
-	const profile: SongProfile = {
-		sampleRate: drive.sampleRate,
-		fftSize: FFT_SIZE,
-		loud: new Uint8Array(0),
-		frames: analysed.map((f) => f.frequencyData),
-		bands: new Map(),
-		rides: new Map(),
-	};
-	return {
-		duration: drive.duration,
-		frames,
-		low: songBand(profile, ...LOW_BAND),
-		mid: songBand(profile, ...MID_BAND),
-		high: songBand(profile, ...HIGH_BAND),
-	};
 }
 
 function follow(values: Float32Array, smoothing: number): Float32Array {

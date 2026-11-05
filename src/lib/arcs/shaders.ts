@@ -1,4 +1,4 @@
-import { GLSL_COMMON } from "../../src/lib/generators/gpu";
+import { GLSL_COMMON } from "../generators/gpu";
 
 // Every point's place comes from its index and the uniforms alone, with no history
 // and no vertex buffer. The same index lands in each form, so a morph flies the points
@@ -321,7 +321,7 @@ export const PRESENT_FS = `#version 300 es
 precision highp float;
 uniform sampler2D uComp;
 uniform vec2 uRes;
-uniform float uZoom, uFocusBlur, uGamma;
+uniform float uZoom, uFocusBlur, uGamma, uClear;
 out vec4 o;
 float noise(vec2 p){
   vec3 q=fract(vec3(p.xyx)*.1031); q+=dot(q,q.yzx+33.33); return fract((q.x+q.y)*q.z);
@@ -342,7 +342,14 @@ void main(){
   c*=(1.-exp(-peak))/max(peak,1e-4);
   c=mix(c,vec3(1.),smoothstep(1.5,9.,peak)*.9);
   c=pow(c,vec3(1./uGamma));
-  o=vec4(c+(jitter-.5)/255.,1.);
+  float dither=(jitter-.5)/255.;
+  if(uClear>.5){
+    // Over other layers: its brightness is its coverage, undone from the colour.
+    float a=max(c.r,max(c.g,c.b));
+    o=vec4(a>0.?c/a:vec3(0.),a+dither);
+    return;
+  }
+  o=vec4(c+dither,1.);
 }`;
 
 export const ARC_VS = `#version 300 es
