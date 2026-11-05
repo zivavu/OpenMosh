@@ -133,6 +133,53 @@ test.describe("from the upload screen", () => {
 	});
 });
 
+test("the canvas holds premultiplied colour, so a glow can't turn into a wash", async ({
+	page,
+}) => {
+	await page.goto("/");
+	await selectMode(page, "Editor");
+	await page
+		.locator('input[type="file"][accept*="audio"]')
+		.setInputFiles(trackFile("song.wav", { seconds: TRACK_SECONDS }));
+	await generate(page).click();
+	await addArcs(page).click();
+	await expect(page.locator(PREVIEW_CANVAS)).toBeVisible({ timeout: 30_000 });
+	await page.keyboard.press("Space");
+	await expect
+		.poll(() => brightness(page), { timeout: 30_000 })
+		.toBeGreaterThan(6);
+	await page.keyboard.press("Space");
+
+	const readCanvas = () =>
+		page.evaluate((selector) => {
+			const canvas = document.querySelector(selector) as HTMLCanvasElement;
+			const gl = canvas.getContext("webgl2")!;
+			const w = gl.drawingBufferWidth;
+			const h = gl.drawingBufferHeight;
+			const px = new Uint8Array(w * h * 4);
+			gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+			gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+			let covered = 0;
+			let overAlpha = 0;
+			for (let i = 0; i < px.length; i += 4) {
+				if (px[i + 3] > 0) covered++;
+				if (Math.max(px[i], px[i + 1], px[i + 2]) > px[i + 3] + 1) overAlpha++;
+			}
+			return {
+				premultiplied: gl.getContextAttributes()!.premultipliedAlpha,
+				covered,
+				overAlpha,
+			};
+		}, PREVIEW_CANVAS);
+	// Pausing redraws the frame, so the canvas can be clear for a moment.
+	await expect
+		.poll(async () => (await readCanvas()).covered)
+		.toBeGreaterThan(0);
+	const { premultiplied, overAlpha } = await readCanvas();
+	expect(premultiplied).toBe(true);
+	expect(overAlpha).toBe(0);
+});
+
 test("draws from the song over the layer below", async ({ page }) => {
 	const glErrors = collectGlErrors(page);
 	await openWithArcs(page);
