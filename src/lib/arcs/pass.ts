@@ -1,3 +1,6 @@
+/** Draws one moment of Arcs: points into a float buffer, the arcs on top of their light,
+ * then glints, bloom and the lens. Everything is worked out from the timestamp. */
+
 import {
 	framebuffer,
 	fullscreen,
@@ -7,17 +10,12 @@ import {
 	program,
 	setInks,
 	texture,
-} from "../../src/lib/generators/gpu";
-import type { Colors } from "../../src/lib/generators/palette";
-import { mulberry32 } from "../../src/lib/rng";
-import {
-	multiply,
-	rotationAxis,
-	translation,
-	type Mat4,
-} from "../../src/lib/mesh/mat4";
-import { ARC_FLOATS, buildArcs, MAX_ARC_VERTICES, type ArcLook } from "./arcs";
-import type { ControlFrame, Controls } from "./controls";
+} from "../generators/gpu";
+import type { Colors } from "../generators/palette";
+import { multiply, rotationAxis, translation, type Mat4 } from "../mesh/mat4";
+import { mulberry32 } from "../rng";
+import { sampleControls, type ControlFrame, type Controls } from "./controls";
+import type { Look } from "./look";
 import { moodAt } from "./mood";
 import {
 	ARC_FS,
@@ -31,31 +29,7 @@ import {
 	PRESENT_FS,
 	STREAK_FS,
 } from "./shaders";
-
-export interface Look extends ArcLook {
-	exposure: number;
-	gamma: number;
-	bloom: number;
-	glint: number;
-	glintThreshold: number;
-	glintLength: number;
-	rays: number;
-	focusBlur: number;
-	dof: number;
-	shutter: number;
-	far: number;
-	speed: number;
-	speedReact: number;
-	kickFlash: number;
-	kickZoom: number;
-	kickPush: number;
-	kickRipple: number;
-	bassSwell: number;
-	midTwist: number;
-	highSparkle: number;
-	midWarp: number;
-	dust: number;
-}
+import { ARC_FLOATS, buildArcs, MAX_ARC_VERTICES } from "./strokes";
 
 /** Past this the picture stopped changing, by eye, up to 10M; below it costs nothing. */
 const POINTS = 1e6;
@@ -95,12 +69,13 @@ function glowTint(colors: Colors): number[] {
 	return mid.map((v) => v / top);
 }
 
-export class MusicRenderer {
-	readonly gl: WebGL2RenderingContext;
+export class ArcsPass {
+	private readonly gl: WebGL2RenderingContext;
 	private vao: WebGLVertexArrayObject;
 	private arcVao: WebGLVertexArrayObject;
 	private arcVbo: WebGLBuffer;
 	private arcData = new Float32Array(MAX_ARC_VERTICES * ARC_FLOATS);
+	private outFbo: WebGLFramebuffer;
 	private targets: Target[] = [];
 	private dens!: Target;
 	private hdr!: Target;
@@ -111,28 +86,16 @@ export class MusicRenderer {
 	private comp!: Target;
 	private w = 0;
 	private h = 0;
-	private timer: {
-		ext: { TIME_ELAPSED_EXT: number; GPU_DISJOINT_EXT: number };
-		pending: WebGLQuery | null;
-	} | null;
-	private timing = false;
-	/** Last GPU time for a frame, in ms, where the browser exposes it. */
-	gpuMs: number | null = null;
-	/** Arc vertices in the last frame, for the read-out. */
+	/** False where the GPU can't render to float: nothing is drawn. */
+	readonly supported: boolean;
+	/** Arc vertices in the last frame, for a read-out. */
 	arcVertices = 0;
 
-	constructor(private canvas: HTMLCanvasElement) {
-		const gl = canvas.getContext("webgl2", {
-			antialias: false,
-			alpha: false,
-			powerPreference: "high-performance",
-		});
-		if (!gl) throw new Error("WebGL2 unavailable");
-		if (!gl.getExtension("EXT_color_buffer_float")) {
-			throw new Error("No float render targets on this GPU");
-		}
+	constructor(gl: WebGL2RenderingContext) {
 		this.gl = gl;
+		this.supported = !!gl.getExtension("EXT_color_buffer_float");
 		this.vao = gl.createVertexArray()!;
+		this.outFbo = gl.createFramebuffer()!;
 		this.arcVbo = gl.createBuffer()!;
 		this.arcVao = gl.createVertexArray()!;
 		gl.bindVertexArray(this.arcVao);
@@ -141,18 +104,17 @@ export class MusicRenderer {
 		const stride = ARC_FLOATS * 4;
 		gl.enableVertexAttribArray(0);
 		gl.vertexAttribPointer(0, 2, gl.FLOAT, false, stride, 0);
-		gl.enableVertexAttribArray(1);
-		gl.vertexAttribPointer(1, 1, gl.FLOAT, false, stride, 8);
-		gl.enableVertexAttribArray(2);
-		gl.vertexAttribPointer(2, 1, gl.FLOAT, false, stride, 12);
-		gl.enableVertexAttribArray(3);
-		gl.vertexAttribPointer(3, 1, gl.FLOAT, false, stride, 16);
-		gl.enableVertexAttribArray(4);
-		gl.vertexAttribPointer(4, 1, gl.FLOAT, false, stride, 20);
+		for (const [location, offset] of [
+			[1, 8],
+			[2, 12],
+			[3, 16],
+			[4, 20],
+		]) {
+			gl.enableVertexAttribArray(location);
+			gl.vertexAttribPointer(location, 1, gl.FLOAT, false, stride, offset);
+		}
 		gl.bindVertexArray(null);
 		gl.bindBuffer(gl.ARRAY_BUFFER, null);
-		const ext = gl.getExtension("EXT_disjoint_timer_query_webgl2");
-		this.timer = ext ? { ext, pending: null } : null;
 	}
 
 	/** Compiles everything now, so a bad shader fails at load and not mid-song. */
@@ -187,13 +149,9 @@ export class MusicRenderer {
 	private ensureSize(w: number, h: number) {
 		const { gl } = this;
 		if (w === this.w && h === this.h) return;
-		for (const t of this.targets) {
-			gl.deleteTexture(t.tex);
-			gl.deleteFramebuffer(t.fbo);
-		}
-		this.targets = [];
-		this.w = this.canvas.width = w;
-		this.h = this.canvas.height = h;
+		this.freeTargets();
+		this.w = w;
+		this.h = h;
 		gl.activeTexture(gl.TEXTURE0);
 		const half = [Math.max(1, w >> 1), Math.max(1, h >> 1)] as const;
 		this.dens = this.target(w, h, gl.RGBA16F, gl.NEAREST);
@@ -203,6 +161,16 @@ export class MusicRenderer {
 		this.pingA = this.target(...half, gl.RGBA16F, gl.LINEAR);
 		this.pingB = this.target(...half, gl.RGBA16F, gl.LINEAR);
 		this.star = this.target(...half, gl.RGBA16F, gl.LINEAR);
+	}
+
+	private freeTargets() {
+		for (const t of this.targets) {
+			this.gl.deleteTexture(t.tex);
+			this.gl.deleteFramebuffer(t.fbo);
+		}
+		this.targets = [];
+		this.w = 0;
+		this.h = 0;
 	}
 
 	private camera(f: ControlFrame, look: Look) {
@@ -253,30 +221,67 @@ export class MusicRenderer {
 		gl.uniform1i(loc(gl, p, name), unit);
 	}
 
-	private drawInto(target: Target | null, w: number, h: number) {
+	private drawInto(target: Target, w: number, h: number) {
 		const { gl } = this;
-		gl.bindFramebuffer(gl.FRAMEBUFFER, target?.fbo ?? null);
+		gl.bindFramebuffer(gl.FRAMEBUFFER, target.fbo);
 		gl.viewport(0, 0, w, h);
 		fullscreen(gl);
 	}
 
-	render(
-		controls: Controls,
-		now: ControlFrame,
-		past: ControlFrame,
+	/** Transparent where nothing is lit, for drawing over other layers. */
+	drawToTexture(
+		tex: WebGLTexture,
+		controls: Controls | null,
+		t: number,
 		look: Look,
 		colors: Colors,
 		w: number,
 		h: number,
 	) {
 		const { gl } = this;
-		this.ensureSize(w, h);
-		this.beginTiming();
+		gl.bindFramebuffer(gl.FRAMEBUFFER, this.outFbo);
+		gl.framebufferTexture2D(
+			gl.FRAMEBUFFER,
+			gl.COLOR_ATTACHMENT0,
+			gl.TEXTURE_2D,
+			tex,
+			0,
+		);
+		gl.viewport(0, 0, w, h);
+		gl.clearColor(0, 0, 0, 0);
+		gl.clear(gl.COLOR_BUFFER_BIT);
+		if (controls && this.supported) {
+			this.draw(controls, t, look, colors, w, h, this.outFbo);
+		}
+		gl.bindFramebuffer(gl.FRAMEBUFFER, this.outFbo);
+		gl.framebufferTexture2D(
+			gl.FRAMEBUFFER,
+			gl.COLOR_ATTACHMENT0,
+			gl.TEXTURE_2D,
+			null,
+			0,
+		);
+	}
 
+	/** Into `out`, or opaque onto the canvas when it's null. */
+	draw(
+		controls: Controls,
+		t: number,
+		look: Look,
+		colors: Colors,
+		w: number,
+		h: number,
+		out: WebGLFramebuffer | null,
+	) {
+		const { gl } = this;
+		this.ensureSize(w, h);
+		const now = sampleControls(controls, t);
+		const past = sampleControls(controls, Math.max(0, t - look.shutter));
 		const nowCam = this.camera(now, look);
 		const pastCam = this.camera(past, look);
-		const halfW = Math.max(1, w >> 1);
-		const halfH = Math.max(1, h >> 1);
+		const mood = moodAt(now, look.seed, look.variety);
+		const side = Math.sqrt(w * h);
+		const spin = (now.t * 0.25 + now.energyTotal * 1.4) * look.coreSpin;
 
 		// Points into the density buffer.
 		const pts = program(gl, POINTS_VS, POINTS_FS);
@@ -308,23 +313,18 @@ export class MusicRenderer {
 		);
 		gl.uniform1f(loc(gl, pts, "uTwist"), now.mid * look.midTwist);
 		gl.uniform1f(loc(gl, pts, "uFar"), look.far);
-		const side = Math.sqrt(w * h);
 		// Lines are one pixel wide, so their light scales with the side, not the area.
 		gl.uniform1f(loc(gl, pts, "uWeight"), POINT_LIGHT * (side / FILM_SIDE));
 		gl.uniform1f(loc(gl, pts, "uFocus"), nowCam.dist);
 		gl.uniform1f(loc(gl, pts, "uDof"), look.dof);
 		gl.uniform1f(loc(gl, pts, "uResScale"), side / FILM_SIDE);
 		gl.uniform1f(loc(gl, pts, "uSparkle"), now.high * look.highSparkle * 0.004);
-		gl.uniform1f(
-			loc(gl, pts, "uSpin"),
-			(now.t * 0.25 + now.energyTotal * 1.4) * look.coreSpin,
-		);
+		gl.uniform1f(loc(gl, pts, "uSpin"), spin);
 		gl.uniform1f(loc(gl, pts, "uBend"), now.mid * look.midTwist * 0.4);
 		gl.uniform1f(
 			loc(gl, pts, "uDustR"),
 			1.5 * (0.55 + 0.7 * now.bass + 0.5 * now.kick),
 		);
-		const mood = moodAt(now, look.seed, look.variety);
 		gl.uniform4fv(loc(gl, pts, "uShapeA"), mood.shapeA);
 		gl.uniform4fv(loc(gl, pts, "uShapeB"), mood.shapeB);
 		gl.uniform1f(loc(gl, pts, "uWarp"), now.mid * look.midWarp * mood.warp);
@@ -346,21 +346,18 @@ export class MusicRenderer {
 		);
 		this.drawInto(this.hdr, w, h);
 		// Into the light before its mips, so bloom and glints pick the arcs up too.
-		this.drawArcs(
-			controls,
-			now,
-			look,
-			colors,
-			nowCam.viewProj,
-			nowCam.dist,
-			w,
-			h,
-		);
+		this.drawArcs(controls, now, look, colors, nowCam, w, h);
 		gl.activeTexture(gl.TEXTURE0);
 		gl.bindTexture(gl.TEXTURE_2D, this.hdr.tex);
 		gl.generateMipmap(gl.TEXTURE_2D);
 
-		this.drawGlints(look, now, nowCam.roll, halfW, halfH);
+		this.drawGlints(
+			look,
+			now,
+			nowCam.roll,
+			Math.max(1, w >> 1),
+			Math.max(1, h >> 1),
+		);
 
 		const comp = program(gl, FULLSCREEN_VS, COMPOSITE_FS);
 		gl.useProgram(comp);
@@ -384,8 +381,11 @@ export class MusicRenderer {
 		gl.uniform1f(loc(gl, present, "uZoom"), look.kickZoom * now.kick);
 		gl.uniform1f(loc(gl, present, "uFocusBlur"), look.focusBlur);
 		gl.uniform1f(loc(gl, present, "uGamma"), look.gamma);
-		this.drawInto(null, w, h);
-		this.endTiming();
+		gl.uniform1f(loc(gl, present, "uClear"), out ? 1 : 0);
+		gl.bindFramebuffer(gl.FRAMEBUFFER, out);
+		gl.viewport(0, 0, w, h);
+		fullscreen(gl);
+		gl.bindTexture(gl.TEXTURE_2D, null);
 	}
 
 	private drawArcs(
@@ -393,8 +393,7 @@ export class MusicRenderer {
 		now: ControlFrame,
 		look: Look,
 		colors: Colors,
-		viewProj: Mat4,
-		focus: number,
+		cam: { viewProj: Mat4; dist: number },
 		w: number,
 		h: number,
 	) {
@@ -404,8 +403,8 @@ export class MusicRenderer {
 			now,
 			controls,
 			look,
-			viewProj,
-			focus,
+			cam.viewProj,
+			cam.dist,
 			w,
 			h,
 		);
@@ -486,30 +485,12 @@ export class MusicRenderer {
 		}
 	}
 
-	private beginTiming() {
-		const { gl, timer } = this;
-		if (!timer) return;
-		if (timer.pending) {
-			const ready = gl.getQueryParameter(
-				timer.pending,
-				gl.QUERY_RESULT_AVAILABLE,
-			);
-			if (!ready) return;
-			if (!gl.getParameter(timer.ext.GPU_DISJOINT_EXT)) {
-				this.gpuMs =
-					(gl.getQueryParameter(timer.pending, gl.QUERY_RESULT) as number) /
-					1e6;
-			}
-			gl.deleteQuery(timer.pending);
-		}
-		timer.pending = gl.createQuery()!;
-		gl.beginQuery(timer.ext.TIME_ELAPSED_EXT, timer.pending);
-		this.timing = true;
-	}
-
-	private endTiming() {
-		if (!this.timer || !this.timing) return;
-		this.gl.endQuery(this.timer.ext.TIME_ELAPSED_EXT);
-		this.timing = false;
+	dispose() {
+		const { gl } = this;
+		this.freeTargets();
+		gl.deleteVertexArray(this.vao);
+		gl.deleteVertexArray(this.arcVao);
+		gl.deleteBuffer(this.arcVbo);
+		gl.deleteFramebuffer(this.outFbo);
 	}
 }
