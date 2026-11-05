@@ -528,9 +528,9 @@ export class GlRenderer {
 		const gl = canvas.getContext("webgl2", {
 			preserveDrawingBuffer: true,
 			antialias: false,
-			// Straight alpha to the canvas: a blank base and the fit's bars are clear, and a
-			// layer's soft edge is its own colour at partial coverage. Premultiplied reads brighter.
-			premultipliedAlpha: false,
+			// Premultiplied, which `drawPass` writes: some compositors show a straight-alpha
+			// canvas as if it were premultiplied, so a soft glow turns into a bright wash.
+			premultipliedAlpha: true,
 		});
 		if (!gl) throw new Error("WebGL2 not supported");
 		this.gl = gl;
@@ -4226,6 +4226,9 @@ export class GlRenderer {
 			gl.viewport(0, 0, vpW ?? this.imgW, vpH ?? this.imgH);
 		} else {
 			gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+			// Buffers hold straight alpha; only the canvas is premultiplied.
+			gl.enable(gl.BLEND);
+			gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ZERO, gl.ONE, gl.ZERO);
 		}
 
 		gl.useProgram(compiled.program);
@@ -4283,5 +4286,6 @@ export class GlRenderer {
 		}
 
 		gl.drawArrays(gl.TRIANGLES, 0, 6);
+		if (!fbo) gl.disable(gl.BLEND);
 	}
 }
