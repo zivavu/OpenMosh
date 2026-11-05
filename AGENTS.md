@@ -142,6 +142,8 @@ Outside CI a run reuses whatever already serves its port, so when my dev server 
   (`lib/demo/demo-sources.ts`), each cut moshed with one rolled chain and blended into the next
   by a transition. They replaced hand-drawn canvas posters. I tried moshed 3D and layered 2D
   worlds instead and dropped both: too heavy, and off the app's vibe.
+- Music-driven visuals (prototype in `lab/music/`, not in the app yet) hear what the audio links
+  hear: the lanes with Drives on, through `renderDrive`. With no driving lane there's no picture.
 - Area masking is the Mask effect (`effects/catalog/mask.ts`), not a per-effect toggle. It
   limits the effects above it, back to the previous Mask or the top of its own chain (an FX
   lane's chain too), and blends the rest back to how that scope began. Moshes, clears and
