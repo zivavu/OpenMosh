@@ -58,6 +58,9 @@ import {
 } from "./effect-shaders";
 import { KeyReachPass, ReachFill, setKeyPointUniforms } from "./key-pass";
 import { MeshPass } from "./mesh-pass";
+import { arcsColors, arcsLook, type ArcsSpec } from "../arcs/look";
+import { ArcsPass } from "../arcs/pass";
+import { activeArcsSong, controlsFor } from "../arcs/song";
 import { fitTextureSize } from "./preview-size";
 import type { Mesh } from "../mesh";
 import {
@@ -280,6 +283,8 @@ const CLEAR_PIXEL = new Uint8Array([0, 0, 0, 0]);
 
 /** Model boxes grow in steps of this many pixels. */
 const MODEL_BOX_STEP = 16;
+/** Its passes hold seven frame-sized float buffers; past this they add little. */
+const ARCS_MAX_SHORT_SIDE = 1080;
 /** A model's texture is at most this many times the frame's longer side. */
 const MODEL_MAX_TEXTURE = 2;
 
@@ -430,6 +435,10 @@ export class GlRenderer {
 	private frameStage: { tex: WebGLTexture; w: number; h: number } | null = null;
 	/** Lanes showing a 3D model, and which one; their texture is redrawn every frame. */
 	private modelLayers = new Map<string, string>();
+	/** Lanes showing Arcs, with the look a clip of their own doesn't override. */
+	private arcsLayers = new Map<string, ArcsSpec>();
+	/** Made on first use: most projects never draw Arcs. */
+	private arcsPass: ArcsPass | null = null;
 	/** A model lane's box in frame pixels, before the lane's scale; set as it draws. */
 	private modelBoxes = new Map<
 		string,
@@ -1175,11 +1184,19 @@ export class GlRenderer {
 
 	/** Show a 3D model on this lane; the mesh uploads once per source. */
 	updateLayerModel(key: string, sourceId: string, mesh: Mesh) {
+		this.arcsLayers.delete(key);
 		const prev = this.modelLayers.get(key);
 		this.modelLayers.set(key, sourceId);
 		if (prev && prev !== sourceId) this.releaseMesh(prev);
 		this.meshPass.upload(sourceId, mesh);
 		// Sized on first draw, to the frame.
+		this.layerEntry(key);
+	}
+
+	/** Show Arcs on this lane; like a model, it's drawn fresh every frame. */
+	updateLayerArcs(key: string, spec: ArcsSpec) {
+		this.leaveModel(key);
+		this.arcsLayers.set(key, spec);
 		this.layerEntry(key);
 	}
 
@@ -1205,6 +1222,7 @@ export class GlRenderer {
 
 	/** The lane moved on from a model to a picture. */
 	private leaveModel(key: string) {
+		this.arcsLayers.delete(key);
 		const model = this.modelLayers.get(key);
 		if (!model) return;
 		this.modelLayers.delete(key);
@@ -2753,6 +2771,8 @@ export class GlRenderer {
 			);
 			if (!this.drawModel(side, turns, time, safeDt)) return false;
 			if (turns.length > 0) effects = effects.filter((e) => !turns.includes(e));
+		} else if (this.arcsLayers.has(side.key) && !this.drawArcs(side)) {
+			return false;
 		}
 		const entry = this.mediaLayerTextures.get(side.key);
 		if (!entry || entry.w <= 0) return false;
@@ -2879,6 +2899,35 @@ export class GlRenderer {
 		);
 		this.gl.bindVertexArray(this.quadVAO);
 		return drawn;
+	}
+
+	/** Arcs into a lane's texture, at the moment on the song's own clock. Transparent
+	 * until the song is read, or with nothing driving. */
+	private drawArcs(side: MediaLayerSide): boolean {
+		const spec = side.arcs ?? this.arcsLayers.get(side.key);
+		if (!spec || this.imgW <= 0 || this.imgH <= 0) return false;
+		const scale = Math.min(
+			1,
+			ARCS_MAX_SHORT_SIDE / Math.min(this.imgW, this.imgH),
+		);
+		const w = Math.max(1, Math.round(this.imgW * scale));
+		const h = Math.max(1, Math.round(this.imgH * scale));
+		const entry = this.sizedLayer(side.key, w, h);
+		if (!entry) return false;
+		const look = arcsLook(spec);
+		const song = activeArcsSong();
+		this.arcsPass ??= new ArcsPass(this.gl);
+		this.arcsPass.drawToTexture(
+			entry.tex,
+			song ? controlsFor(song, look, spec.forms) : null,
+			side.timelineTime,
+			look,
+			arcsColors(spec),
+			w,
+			h,
+		);
+		this.gl.bindVertexArray(this.quadVAO);
+		return true;
 	}
 
 	/** A generated lane's texture, reallocated when its size changed. */
@@ -3256,6 +3305,9 @@ export class GlRenderer {
 		this.modelLayers.clear();
 		this.modelBoxes.clear();
 		this.meshPass.dispose();
+		this.arcsLayers.clear();
+		this.arcsPass?.dispose();
+		this.arcsPass = null;
 	}
 
 	private renderCaption(
@@ -3806,6 +3858,8 @@ export class GlRenderer {
 
 		this.deleteLazyBuffers();
 		this.meshPass.releaseTarget();
+		this.arcsPass?.dispose();
+		this.arcsPass = null;
 		gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 		for (const pair of this.fxFeedback.values()) {
 			this.deleteTexturePair(pair.textures);

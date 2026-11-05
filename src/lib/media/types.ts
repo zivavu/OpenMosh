@@ -1,3 +1,4 @@
+import { normalizeArcsSpec, type ArcsSpec } from "../arcs/look";
 import { finiteOr, records } from "../records";
 import { restoreEffects } from "../effects";
 import type { EffectInstance } from "../effects/types";
@@ -78,6 +79,8 @@ export interface MediaClip extends ChainClip {
 	speed?: number;
 	/** Models only: which of the file's animations plays. Absent means the first. */
 	animation?: number;
+	/** Arcs only: this clip's own look. Absent means its source's. */
+	arcs?: ArcsSpec;
 	/** Fade the layer in over this many seconds from the clip's start, and out over
 	 * `fadeOutSec` before its end. */
 	fadeInSec?: number;
@@ -332,6 +335,7 @@ export function normalizeMediaTimeline(raw: unknown): MediaTimeline {
 						Number.isInteger(clip.animation) && clip.animation! > 0
 							? clip.animation
 							: undefined,
+					arcs: normalizeArcsSpec(clip.arcs),
 					// Saved before the two edges split, `fadeSec` ramped both.
 					fadeInSec: finiteOr(clip.fadeInSec ?? clip.fadeSec, undefined),
 					fadeOutSec: finiteOr(clip.fadeOutSec ?? clip.fadeSec, undefined),
