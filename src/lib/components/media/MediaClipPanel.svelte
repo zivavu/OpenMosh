@@ -1,6 +1,17 @@
 <script lang="ts">
 	import LoadFailed from "../ui/LoadFailed.svelte";
-	import { SlidersHorizontal } from "lucide-svelte";
+	import { RefreshCw, SlidersHorizontal } from "lucide-svelte";
+	import { FORM_NAMES } from "../../arcs/forms";
+	import {
+		allForms,
+		ARCS_KNOBS,
+		ARCS_PALETTES,
+		arcsKnobValue,
+		type ArcsKnobGroup,
+		type ArcsKnobKey,
+		type ArcsSpec,
+	} from "../../arcs/look";
+	import { randomSeed } from "../../rng";
 	import {
 		autoOnSlideshow,
 		clipSourceId,
@@ -86,6 +97,8 @@
 		onRefreshSlideshow?: (sourceId: string) => void;
 		/** Read the single edit this clip came from again. */
 		onRefreshSingle?: (sessionKey: string) => void;
+		/** Whether any lane has Drives on, which is the sound Arcs follows. */
+		arcsHaveMusic?: boolean;
 	}
 
 	let {
@@ -112,6 +125,7 @@
 		onAttachAudio,
 		onRefreshSlideshow,
 		onRefreshSingle,
+		arcsHaveMusic = false,
 	}: Props = $props();
 
 	// This chain runs on the lane's media, so a Mask paints over its box.
@@ -210,6 +224,42 @@
 		if (!clip) return;
 		onBeforeEdit?.();
 		onClipChange({ ...clip, transition: edit(clip.transition) });
+	}
+
+	const ARCS_MAIN = ARCS_KNOBS.filter((k) => k.group === "main");
+	const ARCS_ADVANCED: { name: string; group: ArcsKnobGroup }[] = [
+		{ name: "Picture", group: "picture" },
+		{ name: "Arcs", group: "arcs" },
+		{ name: "Music", group: "music" },
+	];
+
+	let arcsSpec = $derived(
+		source?.kind === "arcs" ? (clip?.arcs ?? source.arcs ?? null) : null,
+	);
+	let arcsAdvanced = $state(false);
+
+	function setArcs(next: ArcsSpec, coalesceKey?: string) {
+		if (!clip) return;
+		onBeforeEdit?.(coalesceKey);
+		onClipChange({ ...clip, arcs: next });
+	}
+
+	function setArcsKnob(key: ArcsKnobKey, value: number) {
+		if (!arcsSpec || !clip) return;
+		setArcs(
+			{ ...arcsSpec, values: { ...arcsSpec.values, [key]: value } },
+			`media-arcs-${key}-${clip.id}`,
+		);
+	}
+
+	/** At least one form stays on: the visual has to be something. */
+	function toggleArcsForm(form: number) {
+		if (!arcsSpec) return;
+		const on = arcsSpec.forms ?? allForms();
+		const next = on.includes(form)
+			? on.filter((f) => f !== form)
+			: [...on, form].sort((a, b) => a - b);
+		if (next.length > 0) setArcs({ ...arcsSpec, forms: next });
 	}
 
 	function setAnimation(index: number) {
@@ -384,6 +434,80 @@
 					This clip has nothing to draw — pick media above, or drag a thumb from
 					the media rail onto it.
 				</p>
+			{/if}
+
+			{#if arcsSpec}
+				{@const spec = arcsSpec}
+				{#if !arcsHaveMusic}
+					<p class="hint">
+						Turn on Drives on an audio lane to give Arcs something to follow.
+					</p>
+				{/if}
+				<div class="row">
+					<label for="mc-arcs-palette">Palette</label>
+					<select
+						id="mc-arcs-palette"
+						value={spec.palette}
+						onchange={(e) =>
+							setArcs({
+								...spec,
+								palette: (e.currentTarget as HTMLSelectElement).value,
+							})}
+					>
+						{#each Object.keys(ARCS_PALETTES) as name (name)}
+							<option value={name}>{name}</option>
+						{/each}
+					</select>
+					<button
+						class="src-edit"
+						title="Roll a new look for this clip"
+						aria-label="Reroll"
+						onclick={() => setArcs({ ...spec, seed: randomSeed() })}
+					>
+						<RefreshCw size={11} />
+					</button>
+				</div>
+				{#each ARCS_MAIN as knob (knob.key)}
+					{@render arcsKnob(spec, knob)}
+				{/each}
+				<div class="row">
+					<span class="label-spacer"></span>
+					<button
+						class="detach"
+						aria-expanded={arcsAdvanced}
+						onclick={() => (arcsAdvanced = !arcsAdvanced)}
+					>
+						Advanced
+					</button>
+					<button
+						class="detach"
+						title="Back to the default look"
+						onclick={() => setArcs({ seed: spec.seed, palette: spec.palette })}
+					>
+						Reset
+					</button>
+				</div>
+				{#if arcsAdvanced}
+					<p class="arcs-group">Forms</p>
+					<div class="arcs-forms">
+						{#each FORM_NAMES as name, form (name)}
+							<button
+								class="detach"
+								class:on={(spec.forms ?? allForms()).includes(form)}
+								aria-pressed={(spec.forms ?? allForms()).includes(form)}
+								onclick={() => toggleArcsForm(form)}
+							>
+								{name}
+							</button>
+						{/each}
+					</div>
+					{#each ARCS_ADVANCED as { name, group } (group)}
+						<p class="arcs-group">{name}</p>
+						{#each ARCS_KNOBS.filter((k) => k.group === group) as knob (knob.key)}
+							{@render arcsKnob(spec, knob)}
+						{/each}
+					{/each}
+				{/if}
 			{/if}
 
 			{#if source?.kind === "model" && source.animations && source.animations.length > 1}
@@ -788,7 +912,47 @@
 	{/await}
 {/if}
 
+{#snippet arcsKnob(spec: ArcsSpec, knob: (typeof ARCS_KNOBS)[number])}
+	{@const value = arcsKnobValue(spec, knob.key)}
+	<div class="row">
+		<label for="mc-arcs-{knob.key}">{knob.label}</label>
+		<RangeSlider
+			id="mc-arcs-{knob.key}"
+			{value}
+			min={knob.min}
+			max={knob.max}
+			step={knob.step}
+			oninput={(v) => setArcsKnob(knob.key, v)}
+			ondblclick={() => setArcsKnob(knob.key, knob.value)}
+		/>
+		<span class="val">{Number(value.toFixed(3))}</span>
+	</div>
+{/snippet}
+
 <style>
+	.arcs-group {
+		margin: 0.5rem 0 0.1rem;
+		color: var(--text-3);
+		font-size: 0.65rem;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+	}
+
+	.arcs-forms {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.25rem;
+	}
+
+	.arcs-forms .detach {
+		flex: none;
+	}
+
+	.arcs-forms .detach.on {
+		border-color: var(--live);
+		color: var(--text);
+	}
+
 	/* Lines the button up with the controls, under the labels' column. */
 	.label-spacer {
 		flex-shrink: 0;
