@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { isInteractiveTarget } from "../../editor/shortcut-target";
-	import { RefreshCw, Palette } from "lucide-svelte";
+	import { RefreshCw, Palette, Zap } from "lucide-svelte";
 	import { onDestroy, untrack } from "svelte";
 	import {
 		GENERATED_SHORT_SIDE,
@@ -27,9 +27,11 @@
 		size?: { width: number; height: number } | null;
 		onUse: (files: File[]) => void;
 		onClose: () => void;
+		/** Offered where there's a song to follow; `ready` once there is one. */
+		arcs?: { ready: boolean; note: string; onAdd: () => void };
 	}
 
-	let { single, size = null, onUse, onClose }: Props = $props();
+	let { single, size = null, onUse, onClose, arcs }: Props = $props();
 
 	const COUNTS = [
 		{ label: "8", value: "8" },
@@ -196,6 +198,18 @@
 	{onClose}
 >
 	{#snippet icon()}<Palette size={12} />{/snippet}
+	{#if arcs}
+		<div class="arcs">
+			<div class="arcs-text">
+				<span class="label">Arcs</span>
+				<span class="arcs-note">{arcs.note}</span>
+			</div>
+			<button class="btn" onclick={arcs.onAdd} disabled={!arcs.ready || busy}>
+				<Zap size={12} />
+				Add Arcs
+			</button>
+		</div>
+	{/if}
 	<div class="controls">
 		{#if !single}
 			<div class="ctrl">
@@ -310,6 +324,27 @@
 </PanelModal>
 
 <style>
+	.arcs {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		padding-bottom: 0.6rem;
+		margin-bottom: 0.6rem;
+		border-bottom: 1px solid var(--line);
+	}
+
+	.arcs-text {
+		display: flex;
+		flex-direction: column;
+		gap: 0.15rem;
+	}
+
+	.arcs-note {
+		color: var(--text-3);
+		font-size: 0.7rem;
+	}
+
 	.controls {
 		display: flex;
 		flex-wrap: wrap;

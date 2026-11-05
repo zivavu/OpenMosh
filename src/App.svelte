@@ -10,6 +10,7 @@
 	import OpeningCard from "./lib/components/ui/OpeningCard.svelte";
 	import AppError from "./lib/components/ui/AppError.svelte";
 	import { lazy } from "./lib/lazy";
+	import { ARCS_NAME, isArcsFile } from "./lib/arcs/file";
 
 	import { GlRenderer } from "./lib/gl/renderer";
 	import { openSavedSequence } from "./lib/editor/saved-sequences";
@@ -299,7 +300,8 @@
 	}
 
 	function filesName(files: File[]): string {
-		return files.length === 1 ? files[0].name : `${files.length} files`;
+		if (files.length !== 1) return `${files.length} files`;
+		return isArcsFile(files[0]) ? ARCS_NAME : files[0].name;
 	}
 
 	/** Reopen a song's saved sequence: its media becomes the pool, and the song
