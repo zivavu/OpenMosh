@@ -10,6 +10,7 @@
 		Play,
 		Plus,
 		SlidersHorizontal,
+		Zap,
 	} from "lucide-svelte";
 	import {
 		DEFAULT_SOURCE_EDIT,
@@ -245,6 +246,8 @@
 							>
 						{:else if src.kind === "model"}
 							<span class="rail-kind" title="3D model"><Box size={7} /></span>
+						{:else if src.kind === "arcs"}
+							<span class="rail-kind" title="Arcs"><Zap size={7} /></span>
 						{:else if src.kind === "cuts"}
 							<span class="rail-kind" title="Slideshow"
 								><GalleryHorizontal size={7} /></span

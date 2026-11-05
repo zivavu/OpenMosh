@@ -16,6 +16,9 @@ import {
 } from "../mesh";
 import { renderMeshThumb } from "../mesh/thumb";
 import { isCutListFile, readCutList, type CutList } from "../media/cut-list";
+import { ARCS_NAME, isArcsFile, readArcsFile } from "../arcs/file";
+import type { ArcsSpec } from "../arcs/look";
+import { renderArcsThumb } from "../arcs/thumb";
 import type { SourceImage } from "../gl/renderer";
 import { ImageCache } from "./image-cache";
 import { probeSlideVideo, SlideVideoSampler } from "../slideshow/video-sampler";
@@ -51,7 +54,7 @@ export interface SequenceSource {
 	id: string;
 	file: File;
 	name: string;
-	kind: "image" | "video" | "model" | "cuts";
+	kind: "image" | "video" | "model" | "cuts" | "arcs";
 	objectUrl: string;
 	/** Grid thumbnail; images fill theirs in after the chip is on screen. */
 	thumbUrl: string | null;
@@ -69,6 +72,8 @@ export interface SequenceSource {
 	animations?: MeshAnimation[];
 	/** Cut lists only: the slideshow it froze, whose slides are pool sources too. */
 	cutList?: CutList;
+	/** Arcs only: the look its clips start from. */
+	arcs?: ArcsSpec;
 	/** <=1080p stand-in the preview decodes; exports still read `file`. */
 	proxyFile?: File;
 	/** Proxy size: target while transcoding, finished size after; absent means still looking. */
@@ -220,9 +225,13 @@ export class SequenceSourceRegistry {
 
 			const models = fresh.filter(isMeshFile);
 			const cutLists = fresh.filter(isCutListFile);
+			const arcs = fresh.filter(isArcsFile);
 			const images = fresh.filter(
 				(f) =>
-					!f.type.startsWith("video/") && !isMeshFile(f) && !isCutListFile(f),
+					!f.type.startsWith("video/") &&
+					!isMeshFile(f) &&
+					!isCutListFile(f) &&
+					!isArcsFile(f),
 			);
 			const videos = fresh.filter((f) => f.type.startsWith("video/"));
 
@@ -317,6 +326,14 @@ export class SequenceSourceRegistry {
 				if (this.#disposed) return [];
 				ok.push(...batch);
 				for (const s of batch) void this.#makeCutsThumb(s);
+			}
+			if (arcs.length > 0) {
+				const built = await Promise.all(arcs.map((f) => this.#buildArcs(f)));
+				const batch = this.#accept(built);
+				this.loadingDone += arcs.length;
+				if (this.#disposed) return [];
+				ok.push(...batch);
+				for (const s of batch) void this.#makeArcsThumb(s);
 			}
 		} finally {
 			// Released after the appends, so a waiting call sees the sources rather than
@@ -642,6 +659,32 @@ export class SequenceSourceRegistry {
 			duration: cutList.duration,
 			cutList,
 		};
+	}
+
+	async #buildArcs(file: File): Promise<SequenceSource | null> {
+		const arcs = await readArcsFile(file);
+		if (!arcs) return null;
+		return {
+			id: stableSourceId(file),
+			file,
+			name: ARCS_NAME,
+			objectUrl: URL.createObjectURL(file),
+			kind: "arcs",
+			thumbUrl: null,
+			thumbPending: true,
+			duration: 0,
+			arcs,
+		};
+	}
+
+	async #makeArcsThumb(src: SequenceSource) {
+		const blob = src.arcs
+			? await renderArcsThumb(src.arcs, THUMB_SIZE).catch(() => null)
+			: null;
+		const live = this.#disposed ? undefined : this.get(src.id);
+		if (!live) return;
+		live.thumbUrl = blob ? URL.createObjectURL(blob) : null;
+		live.thumbPending = false;
 	}
 
 	/** The first slide's picture, copied so the cut list owns its URL. */

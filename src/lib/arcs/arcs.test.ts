@@ -10,6 +10,14 @@ import {
 import { allForms, ARCS_KNOBS, arcsLook, normalizeArcsSpec } from "./look";
 import { moodOf } from "./mood";
 import { ARC_FLOATS, buildArcs, MAX_ARC_VERTICES } from "./strokes";
+import { isArcsFile, newArcsFile, readArcsFile } from "./file";
+import { controlsFor } from "./song";
+import {
+	createMediaClip,
+	normalizeMediaTimeline,
+	resolveMediaLayersAt,
+	type MediaTimeline,
+} from "../media";
 
 const RATE = 48000;
 
@@ -267,5 +275,77 @@ describe("the look", () => {
 		});
 		expect(calm.kickFlash).toBeCloseTo(base.kickFlash / 2);
 		expect(calm.exposure).toBe(base.exposure);
+	});
+});
+
+describe("the pool file", () => {
+	test("reads back the look it was made with", async () => {
+		const file = newArcsFile();
+		expect(isArcsFile(file)).toBe(true);
+		expect(await readArcsFile(file)).toEqual(JSON.parse(await file.text()));
+	});
+
+	test("two sources never share a name", () => {
+		const names = new Set(Array.from({ length: 50 }, () => newArcsFile().name));
+		expect(names.size).toBeGreaterThan(45);
+	});
+
+	test("a damaged or oversized file reads as nothing", async () => {
+		const bad = (text: string) => new File([text], "x.arcs.json");
+		expect(await readArcsFile(bad("not json"))).toBeNull();
+		expect(await readArcsFile(bad("[1,2]"))).toBeNull();
+		expect(await readArcsFile(bad(" ".repeat(70 * 1024)))).toBeNull();
+	});
+});
+
+describe("on a clip", () => {
+	const clipOf = (values: object) => ({
+		...createMediaClip(10, 20),
+		...values,
+	});
+	const timeline = (clip: object) =>
+		({
+			enabled: true,
+			lanes: [
+				{
+					id: "lane",
+					name: "Lane",
+					z: 0,
+					enabled: true,
+					sourceId: "arcs",
+					clips: [clip],
+					style: { opacity: 1 },
+				},
+			],
+		}) as unknown as MediaTimeline;
+
+	test("a layer knows the playhead and the clip's own look", () => {
+		const arcs = { seed: 9, palette: "Ice" };
+		const [layer] = resolveMediaLayersAt(
+			timeline(clipOf({ arcs, sourceStart: 3 })),
+			15,
+		);
+		expect(layer.arcs).toEqual(arcs);
+		expect(layer.timelineTime).toBe(15);
+	});
+
+	test("the look survives a save, and a damaged one is dropped", () => {
+		const kept = normalizeMediaTimeline(
+			timeline(clipOf({ arcs: { seed: 9, palette: "Ice" } })),
+		);
+		expect(kept?.lanes[0].clips[0].arcs).toEqual({ seed: 9, palette: "Ice" });
+		const damaged = normalizeMediaTimeline(
+			timeline(clipOf({ arcs: { seed: "no" } })),
+		);
+		expect(damaged?.lanes[0].clips[0].arcs).toBeUndefined();
+	});
+});
+
+describe("the table cache", () => {
+	test("one table per seed and form setting", async () => {
+		const song = await drop();
+		const look = arcsLook({ seed: 4, palette: "Ice" });
+		expect(controlsFor(song, look)).toBe(controlsFor(song, look));
+		expect(controlsFor(song, look, [1])).not.toBe(controlsFor(song, look));
 	});
 });

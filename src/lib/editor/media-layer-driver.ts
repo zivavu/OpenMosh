@@ -88,6 +88,20 @@ export class MediaLayerDriver {
 				continue;
 			}
 
+			if (src.kind === "arcs") {
+				// Drawn every frame too; there's nothing to upload but its look.
+				if (
+					src.arcs &&
+					renderer &&
+					(this.#uploaded.get(layer.key) !== src.id ||
+						!renderer.hasLayerTexture(layer.key))
+				) {
+					renderer.updateLayerArcs(layer.key, src.arcs);
+					this.#uploaded.set(layer.key, src.id);
+				}
+				continue;
+			}
+
 			if (src.kind === "image") {
 				// Still media only re-uploads when the lane's source changes.
 				const wanted = shownAs(src.id, frame);
