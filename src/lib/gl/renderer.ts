@@ -2919,7 +2919,7 @@ export class GlRenderer {
 		this.arcsPass ??= new ArcsPass(this.gl);
 		this.arcsPass.drawToTexture(
 			entry.tex,
-			song ? controlsFor(song, look, spec.forms) : null,
+			song ? controlsFor(song, look) : null,
 			side.timelineTime,
 			look,
 			arcsColors(spec),

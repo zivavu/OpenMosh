@@ -6,20 +6,23 @@ import {
 	blendBand,
 	placeInRange,
 	PROFILE_FPS,
+	songBand,
 	type BandProfile,
 	type Range,
+	type SongProfile,
 } from "../audio/song-profile";
 import { mulberry32 } from "../rng";
+import type { Look } from "./look";
 
 const FPS = PROFILE_FPS;
 
-/** A hit at least this strong, this far from the last, restarts the ripple. */
-const ONSET_LEVEL = 0.55;
-const ONSET_GAP = 0.12;
+/** The weakest a hit may be at full sensitivity. */
+const MIN_ONSET_LEVEL = 0.02;
 /** How far apart the two seconds either side of a moment must sit to count as a new
  * section of the song. */
 const NOVELTY_WINDOW = 2 * FPS;
-const NOVELTY_CUT = 0.14;
+/** The jump in energy that counts as a new section at no sensitivity. */
+const NOVELTY_CEILING = 0.28;
 const MIN_FORM_HOLD = 4;
 const SNAP_TO_ONSET = 0.5;
 export const MORPH_SECONDS = 0.7;
@@ -27,9 +30,8 @@ export const MORPH_SECONDS = 0.7;
 export interface SongAudio {
 	duration: number;
 	frames: number;
-	low: BandProfile;
-	mid: BandProfile;
-	high: BandProfile;
+	/** Kept so a band can be read again as its range is dragged. */
+	profile: SongProfile;
 }
 
 export interface Controls {
@@ -103,13 +105,17 @@ function ride(band: BandProfile, punch: number, smoothing: number) {
 	return follow(blended, smoothing);
 }
 
-function findOnsets(hits: Float32Array): number[] {
+function findOnsets(
+	hits: Float32Array,
+	sense: number,
+	spacing: number,
+): number[] {
+	const level = Math.max(MIN_ONSET_LEVEL, 1 - sense);
 	const onsets: number[] = [];
-	const gap = Math.ceil(ONSET_GAP * FPS);
+	const gap = Math.ceil(spacing * FPS);
 	let last = -gap;
 	for (let i = 1; i < hits.length; i++) {
-		if (hits[i] < ONSET_LEVEL || hits[i] <= hits[i - 1] || i - last < gap)
-			continue;
+		if (hits[i] < level || hits[i] <= hits[i - 1] || i - last < gap) continue;
 		onsets.push(i);
 		last = i;
 	}
@@ -122,8 +128,12 @@ export function findCuts(
 	energy: Float32Array,
 	onsets: number[],
 	morphEvery: number,
+	/** 0 leaves only the timer. */
+	sectionSense = 0.5,
 ): number[] {
 	const n = energy.length;
+	const noveltyCut =
+		sectionSense > 0 ? NOVELTY_CEILING * (1 - sectionSense) : Infinity;
 	const sums = new Float64Array(n + 1);
 	for (let i = 0; i < n; i++) sums[i + 1] = sums[i] + energy[i];
 	const mean = (a: number, b: number) => {
@@ -135,7 +145,7 @@ export function findCuts(
 		Math.abs(mean(i, i + NOVELTY_WINDOW) - mean(i - NOVELTY_WINDOW, i));
 	const isPeak = (i: number) => {
 		const here = novelty(i);
-		if (here < NOVELTY_CUT) return false;
+		if (here < noveltyCut) return false;
 		for (let d = 1; d <= FPS; d += 4) {
 			if (novelty(i - d) > here || novelty(i + d) > here) return false;
 		}
@@ -163,19 +173,34 @@ export function findCuts(
 /** Quick enough to rerun as a knob moves; only `analyzeDrive` touches the audio. */
 export function buildControls(
 	song: SongAudio,
-	seed: number,
-	morphEvery: number,
+	look: Look,
 	forms: number[],
 ): Controls {
-	const { low, mid: midBand, high: highBand, frames } = song;
-	const lowHits = usable(low.hits);
-	const hits = low.hitLevels.map((v) => placeInRange(v, lowHits));
-	const kick = follow(hits, 0.25);
-	const bass = ride(low, 0.15, 0.6);
-	const mid = ride(midBand, 0.3, 0.5);
-	const high = ride(highBand, 0.7, 0.2);
+	const { frames } = song;
+	const seed = look.seed;
+	const bandOf = (a: number, b: number) =>
+		songBand(song.profile, Math.min(a, b), Math.max(a, b));
+	const hitBand = bandOf(look.hitFreqLow, look.hitFreqHigh);
+	const lowHits = usable(hitBand.hits);
+	const hits = hitBand.hitLevels.map((v) => placeInRange(v, lowHits));
+	const kick = follow(hits, look.hitSmooth);
+	const bass = ride(
+		bandOf(look.bassFreqLow, look.bassFreqHigh),
+		look.bassPunch,
+		look.bassSmooth,
+	);
+	const mid = ride(
+		bandOf(look.midFreqLow, look.midFreqHigh),
+		look.midPunch,
+		look.midSmooth,
+	);
+	const high = ride(
+		bandOf(look.highFreqLow, look.highFreqHigh),
+		look.highPunch,
+		look.highSmooth,
+	);
 	const blend = bass.map((b, i) => 0.5 * b + 0.3 * mid[i] + 0.2 * high[i]);
-	const energy = follow(blend, 0.75);
+	const energy = follow(blend, look.energySmooth);
 
 	const energyTotal = new Float32Array(frames);
 	let total = 0;
@@ -184,7 +209,7 @@ export function buildControls(
 		energyTotal[i] = total;
 	}
 
-	const onsets = findOnsets(hits);
+	const onsets = findOnsets(hits, look.hitSense, look.hitSpacing);
 	const kickAge = new Float32Array(frames).fill(1e3);
 	for (let o = 0; o < onsets.length; o++) {
 		const end = onsets[o + 1] ?? frames;
@@ -194,7 +219,7 @@ export function buildControls(
 	const onsetIndex = new Uint32Array(frames);
 	for (let o = 0; o < onsets.length; o++) onsetIndex.fill(o + 1, onsets[o]);
 
-	const cuts = findCuts(energy, onsets, morphEvery);
+	const cuts = findCuts(energy, onsets, look.morphEvery, look.sectionSense);
 	const order = formOrder(cuts.length + 1, seed, forms);
 	const formA = new Uint8Array(frames);
 	const formB = new Uint8Array(frames);

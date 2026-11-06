@@ -10,10 +10,12 @@ import {
 } from "../../src/lib/arcs/controls";
 import { FORM_NAMES } from "../../src/lib/arcs/forms";
 import {
+	ARCS_CONTROLS,
 	ARCS_KNOBS,
 	ARCS_PALETTES,
 	arcsColors,
 	arcsLook,
+	TABLE_KNOBS,
 	type ArcsKnobGroup,
 } from "../../src/lib/arcs/look";
 import { ArcsPass } from "../../src/lib/arcs/pass";
@@ -22,11 +24,12 @@ import type { MixSegment } from "../../src/lib/mix/plan";
 import { renderDrive } from "../../src/lib/mix/render";
 import { GpuTimer } from "./gpu-timer";
 
-const GROUPS: [ArcsKnobGroup, string][] = [
-	["main", "Main"],
+const GROUPS: [ArcsKnobGroup | "controls", string][] = [
+	["controls", "Controls (what users get)"],
 	["picture", "Picture"],
 	["arcs", "Arcs"],
 	["music", "Music"],
+	["listen", "Listening"],
 ];
 const RATIOS: Record<string, [number, number]> = {
 	"4:5": [4, 5],
@@ -45,7 +48,8 @@ interface State {
 	values: Record<string, number>;
 }
 
-const allKnobs = ARCS_KNOBS;
+const allKnobs = [...ARCS_CONTROLS, ...ARCS_KNOBS];
+const isControl = (key: string) => ARCS_CONTROLS.some((c) => c.key === key);
 const saved: Partial<State> = JSON.parse(localStorage.getItem(STORE) ?? "{}");
 const state: State = {
 	seed: saved.seed ?? 1,
@@ -207,12 +211,7 @@ async function reanalyze() {
 
 function rebuildControls() {
 	if (!song) return;
-	controls = buildControls(
-		song,
-		state.seed,
-		state.values.morphEvery,
-		state.forms,
-	);
+	controls = buildControls(song, arcsLook(spec()), state.forms);
 	drawStrip();
 	dirty = true;
 }
@@ -292,8 +291,12 @@ function spec() {
 	return {
 		seed: state.seed,
 		palette: state.palette,
-		values: state.values,
-		forms: state.forms,
+		values: Object.fromEntries(
+			Object.entries(state.values).filter(([k]) => isControl(k)),
+		),
+		tuning: Object.fromEntries(
+			Object.entries(state.values).filter(([k]) => !isControl(k)),
+		),
 	};
 }
 
@@ -403,7 +406,7 @@ function renderKnobs() {
 				state.values[knob.key] = Number(input.value);
 				value.textContent = input.value;
 				save();
-				if (knob.key === "morphEvery") rebuildControls();
+				if ((TABLE_KNOBS as string[]).includes(knob.key)) rebuildControls();
 				dirty = true;
 			};
 			wrap.append(label, input);

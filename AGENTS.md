@@ -146,7 +146,8 @@ Outside CI a run reuses whatever already serves its port, so when my dev server 
   video. A picture is a function of timeline time, not the clip's in-point, so trimming or moving
   a clip keeps it on the song. It hears what the audio links hear, the lanes with Drives on, through
   `renderDrive`; with none there is no picture. Its look lives on the clip (`arcs`), falling back
-  to its pool file's. `lab/music/` is its tuning bench.
+  to its pool file's. Users get Reacts to and four controls that each move many knobs, with 50
+  the tuned look; a long list of knobs did too little, so the rest stay in `lab/music/`.
 - Area masking is the Mask effect (`effects/catalog/mask.ts`), not a per-effect toggle. It
   limits the effects above it, back to the previous Mask or the top of its own chain (an FX
   lane's chain too), and blends the rest back to how that scope began. Moshes, clears and

@@ -2,9 +2,9 @@
  * renderer has no line to the mixer, and preview and export both read this. */
 
 import { buildControls, type Controls, type SongAudio } from "./controls";
-import { allForms, type Look } from "./look";
+import { allForms, TABLE_KNOBS, type Look } from "./look";
 
-/** Tables kept per song: one for each seed and form setting in use. */
+/** Tables kept per song: one for each look that listens differently. */
 const MAX_TABLES = 16;
 
 let active: SongAudio | null = null;
@@ -54,22 +54,14 @@ export async function arcsSongReady(): Promise<void> {
 }
 
 /** The look's table for this song, built once. */
-export function controlsFor(
-	song: SongAudio,
-	look: Look,
-	forms?: number[],
-): Controls {
+export function controlsFor(song: SongAudio, look: Look): Controls {
 	let held = tables.get(song);
 	if (!held) tables.set(song, (held = new Map()));
-	const key = `${look.seed}|${look.morphEvery}|${forms?.join() ?? ""}`;
+	const knobs = TABLE_KNOBS.map((k) => look[k]).join();
+	const key = `${look.seed}|${knobs}`;
 	let controls = held.get(key);
 	if (!controls) {
-		controls = buildControls(
-			song,
-			look.seed,
-			look.morphEvery,
-			forms ?? allForms(),
-		);
+		controls = buildControls(song, look, allForms());
 		if (held.size >= MAX_TABLES) held.clear();
 		held.set(key, controls);
 	}
