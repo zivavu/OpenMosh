@@ -7,7 +7,15 @@ import {
 	type Controls,
 	type SongAudio,
 } from "./controls";
-import { allForms, ARCS_KNOBS, arcsLook, normalizeArcsSpec } from "./look";
+import {
+	allForms,
+	ARCS_CONTROLS,
+	ARCS_KNOBS,
+	arcsLook,
+	normalizeArcsSpec,
+	type ArcsSpec,
+	type Look,
+} from "./look";
 import { moodOf } from "./mood";
 import { ARC_FLOATS, buildArcs, MAX_ARC_VERTICES } from "./strokes";
 import { isArcsFile, newArcsFile, readArcsFile } from "./file";
@@ -59,7 +67,7 @@ const drop = () => analysed("drop", dropSong);
 const sum = (a: Float32Array) => a.reduce((x, y) => x + y, 0);
 
 function controlsOf(song: SongAudio, seed = 1): Controls {
-	return buildControls(song, seed, 8, allForms());
+	return buildControls(song, arcsLook({ seed, palette: "Ice" }), allForms());
 }
 
 const LOOK = arcsLook({ seed: 1, palette: "Ice" });
@@ -121,7 +129,11 @@ describe("the song table", () => {
 	});
 
 	test("stays on one form when only one is allowed", async () => {
-		const c = buildControls(await drop(), 1, 8, [5]);
+		const c = buildControls(
+			await drop(),
+			arcsLook({ seed: 1, palette: "Ice" }),
+			[5],
+		);
 		expect(new Set(c.formA)).toEqual(new Set([5]));
 		expect(new Set(c.formB)).toEqual(new Set([5]));
 	});
@@ -134,6 +146,83 @@ describe("the song table", () => {
 		for (let i = 1; i < cuts.length; i++) {
 			expect(cuts[i] - cuts[i - 1]).toBeGreaterThanOrEqual(4 * 60);
 		}
+	});
+});
+
+describe("listening", () => {
+	const listening = (tuning: NonNullable<ArcsSpec["tuning"]>) =>
+		arcsLook({ seed: 1, palette: "Ice", tuning });
+	const onsetsWith = async (tuning: NonNullable<ArcsSpec["tuning"]>) =>
+		buildControls(await drop(), listening(tuning), allForms()).onsets;
+
+	test("hits only come from the band it's told to hear", async () => {
+		// Smooth-edged bursts, so neither leaks a click into the other's band.
+		const burst = (x: number, hz: number) =>
+			x < 0.2
+				? Math.sin((Math.PI * x) / 0.2) ** 2 * Math.sin(2 * Math.PI * hz * x)
+				: 0;
+		const song = await analysed("alternating", () =>
+			buffer(
+				20,
+				(t) => 0.7 * burst(t % 1, 60) + 0.7 * burst((t + 0.5) % 1, 3000),
+			),
+		);
+		const phases = (hitFreqLow: number, hitFreqHigh: number) =>
+			buildControls(
+				song,
+				listening({ hitFreqLow, hitFreqHigh }),
+				allForms(),
+			).onsets.map((f) => (f / 60) % 1);
+		const lows = phases(30, 140);
+		const highs = phases(2000, 4000);
+		expect(lows.length).toBeGreaterThan(5);
+		expect(highs.length).toBeGreaterThan(5);
+		for (const p of lows) expect(p).toBeLessThan(0.3);
+		for (const p of highs) expect(p).toBeGreaterThan(0.4);
+	});
+
+	test("swapped band edges read the same band", async () => {
+		expect(await onsetsWith({ hitFreqLow: 140, hitFreqHigh: 30 })).toEqual(
+			await onsetsWith({ hitFreqLow: 30, hitFreqHigh: 140 }),
+		);
+	});
+
+	test("more sensitivity never hears fewer hits", async () => {
+		const deaf = await onsetsWith({ hitSense: 0 });
+		const keen = await onsetsWith({ hitSense: 1 });
+		expect(keen.length).toBeGreaterThanOrEqual(deaf.length);
+		expect(keen.length).toBeGreaterThan(0);
+	});
+
+	test("hits keep the distance they're given", async () => {
+		const onsets = await onsetsWith({ hitSense: 1, hitSpacing: 1 });
+		for (let i = 1; i < onsets.length; i++) {
+			expect(onsets[i] - onsets[i - 1]).toBeGreaterThanOrEqual(60);
+		}
+	});
+
+	test("smoothing slows how a band falls", async () => {
+		const song = await drop();
+		const fall = (hitSmooth: number) => {
+			const c = buildControls(song, listening({ hitSmooth }), allForms());
+			return sampleControls(c, 12.3).kick;
+		};
+		expect(fall(1)).toBeGreaterThan(fall(0));
+	});
+
+	test("section sensitivity at 0 leaves only the timer", () => {
+		const energy = Float32Array.from({ length: 3600 }, (_, i) =>
+			i > 1800 ? 1 : 0,
+		);
+		expect(findCuts(energy, [], 60, 1).length).toBeGreaterThan(0);
+		expect(findCuts(energy, [], 60, 0)).toEqual([]);
+	});
+
+	test("a listening knob gets its own table, a picture knob doesn't", async () => {
+		const song = await drop();
+		const base = controlsFor(song, listening({}));
+		expect(controlsFor(song, listening({ hitSense: 0.9 }))).not.toBe(base);
+		expect(controlsFor(song, listening({ bloom: 0.9 }))).toBe(base);
 	});
 });
 
@@ -164,8 +253,12 @@ describe("arcs", () => {
 
 	test("subarcs add branches, and 0 turns them off", async () => {
 		const c = controlsOf(await drop());
-		const off = arcsLook({ seed: 1, palette: "Ice", values: { arcSub: 0 } });
-		const on = arcsLook({ seed: 1, palette: "Ice", values: { arcSub: 4 } });
+		const off = arcsLook({
+			seed: 1,
+			palette: "Ice",
+			tuning: { arcSub: 0, arcSubDepth: 1 },
+		});
+		const on = arcsLook({ seed: 1, palette: "Ice", tuning: { arcSub: 4 } });
 		expect(arcsAt(c, 12.1, on).length).toBeGreaterThan(
 			arcsAt(c, 12.1, off).length,
 		);
@@ -176,7 +269,7 @@ describe("arcs", () => {
 		const none = arcsLook({
 			seed: 1,
 			palette: "Ice",
-			values: { arcAmount: 0 },
+			tuning: { arcAmount: 0 },
 		});
 		expect(arcsAt(c, 12.1, none).length).toBe(0);
 	});
@@ -184,10 +277,10 @@ describe("arcs", () => {
 	test("every knob at its limit stays in budget and finite", async () => {
 		const c = controlsOf(await drop());
 		for (const pick of ["max", "min"] as const) {
-			const values = Object.fromEntries(
+			const tuning = Object.fromEntries(
 				ARCS_KNOBS.map((k) => [k.key, k[pick]]),
 			);
-			const look = arcsLook({ seed: 1, palette: "Ice", values });
+			const look = arcsLook({ seed: 1, palette: "Ice", tuning });
 			for (const t of [8.02, 12.1, 30]) {
 				const arcs = arcsAt(c, t, look);
 				expect(arcs.length).toBeLessThanOrEqual(out.length);
@@ -217,6 +310,22 @@ describe("arcs", () => {
 	});
 });
 
+describe("arc lifetime", () => {
+	test("a longer life keeps a volley on screen", async () => {
+		const c = controlsOf(await drop());
+		// Past the default life, before the next beat's volley matters: fewer arcs.
+		const short = arcsLook({
+			seed: 1,
+			palette: "Ice",
+			tuning: { arcLife: 0.3 },
+		});
+		const long = arcsLook({ seed: 1, palette: "Ice", tuning: { arcLife: 3 } });
+		expect(arcsAt(c, 12.4, long).length).toBeGreaterThan(
+			arcsAt(c, 12.4, short).length,
+		);
+	});
+});
+
 describe("moods", () => {
 	test("a section's mood is fixed by its seed and number", () => {
 		expect(moodOf(3, 5, 1)).toEqual(moodOf(3, 5, 1));
@@ -230,18 +339,19 @@ describe("moods", () => {
 });
 
 describe("the look", () => {
-	test("a saved spec can't ask for more than a knob allows", () => {
+	test("a saved spec can't ask for more than a control allows", () => {
 		const spec = normalizeArcsSpec({
 			seed: 7,
 			palette: "Ice",
-			values: { arcKick: 1e9, arcSub: -5, nope: 3, gamma: "high" },
-			forms: [1, 1, 99, 2.5],
+			listen: "nope",
+			values: { amount: 1e9, reach: -5, nope: 3, roughness: "high" },
+			tuning: { arcKick: 1e9 },
+			forms: [1],
 		});
 		expect(spec).toEqual({
 			seed: 7,
 			palette: "Ice",
-			values: { arcKick: 30, arcSub: 0 },
-			forms: [1],
+			values: { amount: 100, reach: 0 },
 		});
 	});
 
@@ -261,20 +371,71 @@ describe("the look", () => {
 		const look = arcsLook({
 			seed: 1,
 			palette: "Ice",
-			values: { arcLength: 1e9 },
+			tuning: { arcLength: 1e9 },
 		});
 		expect(look.arcLength).toBe(64);
 	});
 
-	test("intensity scales what the music does, not what the picture is", () => {
-		const base = arcsLook({ seed: 1, palette: "Ice" });
-		const calm = arcsLook({
-			seed: 1,
-			palette: "Ice",
-			values: { intensity: 0.5 },
-		});
-		expect(calm.kickFlash).toBeCloseTo(base.kickFlash / 2);
-		expect(calm.exposure).toBe(base.exposure);
+	const at = (values: NonNullable<ArcsSpec["values"]>) =>
+		arcsLook({ seed: 1, palette: "Ice", values });
+
+	test("50 is the tuned look, whatever the tuning", () => {
+		const tuning = { arcKick: 17, kickFlash: 1.3 };
+		const look = arcsLook({ seed: 1, palette: "Ice", tuning });
+		const fifties = Object.fromEntries(ARCS_CONTROLS.map((c) => [c.key, 50]));
+		expect(
+			arcsLook({ seed: 1, palette: "Ice", tuning, values: fifties }),
+		).toEqual(look);
+		expect(look.arcKick).toBe(17);
+		for (const knob of ARCS_KNOBS) {
+			if (knob.key in tuning) continue;
+			expect(at({})[knob.key]).toBe(knob.value);
+		}
+	});
+
+	test("every control moves everything it holds, in range", () => {
+		for (const control of ARCS_CONTROLS) {
+			const low = at({ [control.key]: 0 });
+			const high = at({ [control.key]: 100 });
+			const moved = ARCS_KNOBS.filter((k) => low[k.key] !== high[k.key]);
+			expect(moved.length).toBeGreaterThanOrEqual(4);
+			for (const knob of ARCS_KNOBS) {
+				for (const look of [low, high]) {
+					expect(look[knob.key]).toBeGreaterThanOrEqual(knob.min);
+					expect(look[knob.key]).toBeLessThanOrEqual(knob.max);
+				}
+			}
+		}
+	});
+
+	test("reacts to picks the band hits are heard in", () => {
+		const look = arcsLook({ seed: 1, palette: "Ice", listen: "hats" });
+		expect([look.hitFreqLow, look.hitFreqHigh]).toEqual([6000, 16000]);
+		const kick = arcsLook({ seed: 1, palette: "Ice", listen: "kick" });
+		expect(kick.hitFreqHigh).toBe(at({}).hitFreqHigh);
+	});
+
+	test("the ends of a control are far apart on screen data", async () => {
+		const c = controlsOf(await drop());
+		const fewest = arcsAt(c, 12.1, at({ amount: 0 })).length;
+		const most = arcsAt(c, 12.1, at({ amount: 100 })).length;
+		expect(most).toBeGreaterThan(fewest * 5);
+	});
+
+	test("roughness keeps its reach: lightning doesn't stop at the middle", async () => {
+		const c = controlsOf(await drop());
+		const reachOf = (look: Look) => {
+			const v = arcsAt(c, 12.1, look);
+			let far = 0;
+			for (let i = 0; i < v.length; i += ARC_FLOATS) {
+				far = Math.max(far, Math.hypot(v[i], v[i + 1]));
+			}
+			return far;
+		};
+		const silky = reachOf(at({ roughness: 0 }));
+		const jagged = reachOf(at({ roughness: 100 }));
+		expect(jagged).toBeGreaterThan(silky * 0.3);
+		expect(silky).toBeGreaterThan(jagged * 0.3);
 	});
 });
 
@@ -342,10 +503,11 @@ describe("on a clip", () => {
 });
 
 describe("the table cache", () => {
-	test("one table per seed and form setting", async () => {
+	test("one table per seed", async () => {
 		const song = await drop();
 		const look = arcsLook({ seed: 4, palette: "Ice" });
 		expect(controlsFor(song, look)).toBe(controlsFor(song, look));
-		expect(controlsFor(song, look, [1])).not.toBe(controlsFor(song, look));
+		const other = arcsLook({ seed: 5, palette: "Ice" });
+		expect(controlsFor(song, other)).not.toBe(controlsFor(song, look));
 	});
 });

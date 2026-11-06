@@ -1,14 +1,13 @@
 <script lang="ts">
 	import LoadFailed from "../ui/LoadFailed.svelte";
 	import { RefreshCw, SlidersHorizontal } from "lucide-svelte";
-	import { FORM_NAMES } from "../../arcs/forms";
 	import {
-		allForms,
-		ARCS_KNOBS,
+		ARCS_CONTROLS,
+		ARCS_LISTEN,
 		ARCS_PALETTES,
-		arcsKnobValue,
-		type ArcsKnobGroup,
-		type ArcsKnobKey,
+		arcsControlValue,
+		type ArcsControlKey,
+		type ArcsListen,
 		type ArcsSpec,
 	} from "../../arcs/look";
 	import { randomSeed } from "../../rng";
@@ -226,17 +225,9 @@
 		onClipChange({ ...clip, transition: edit(clip.transition) });
 	}
 
-	const ARCS_MAIN = ARCS_KNOBS.filter((k) => k.group === "main");
-	const ARCS_ADVANCED: { name: string; group: ArcsKnobGroup }[] = [
-		{ name: "Picture", group: "picture" },
-		{ name: "Arcs", group: "arcs" },
-		{ name: "Music", group: "music" },
-	];
-
 	let arcsSpec = $derived(
 		source?.kind === "arcs" ? (clip?.arcs ?? source.arcs ?? null) : null,
 	);
-	let arcsAdvanced = $state(false);
 
 	function setArcs(next: ArcsSpec, coalesceKey?: string) {
 		if (!clip) return;
@@ -244,22 +235,12 @@
 		onClipChange({ ...clip, arcs: next });
 	}
 
-	function setArcsKnob(key: ArcsKnobKey, value: number) {
+	function setArcsControl(key: ArcsControlKey, value: number) {
 		if (!arcsSpec || !clip) return;
 		setArcs(
 			{ ...arcsSpec, values: { ...arcsSpec.values, [key]: value } },
 			`media-arcs-${key}-${clip.id}`,
 		);
-	}
-
-	/** At least one form stays on: the visual has to be something. */
-	function toggleArcsForm(form: number) {
-		if (!arcsSpec) return;
-		const on = arcsSpec.forms ?? allForms();
-		const next = on.includes(form)
-			? on.filter((f) => f !== form)
-			: [...on, form].sort((a, b) => a - b);
-		if (next.length > 0) setArcs({ ...arcsSpec, forms: next });
 	}
 
 	function setAnimation(index: number) {
@@ -467,47 +448,39 @@
 						<RefreshCw size={11} />
 					</button>
 				</div>
-				{#each ARCS_MAIN as knob (knob.key)}
-					{@render arcsKnob(spec, knob)}
-				{/each}
-				<div class="row">
-					<span class="label-spacer"></span>
-					<button
-						class="detach"
-						aria-expanded={arcsAdvanced}
-						onclick={() => (arcsAdvanced = !arcsAdvanced)}
+				<div class="row" title="Which sound fires the arcs">
+					<label for="mc-arcs-listen">Reacts to</label>
+					<select
+						id="mc-arcs-listen"
+						value={spec.listen ?? "kick"}
+						onchange={(e) =>
+							setArcs({
+								...spec,
+								listen: (e.currentTarget as HTMLSelectElement)
+									.value as ArcsListen,
+							})}
 					>
-						Advanced
-					</button>
-					<button
-						class="detach"
-						title="Back to the default look"
-						onclick={() => setArcs({ seed: spec.seed, palette: spec.palette })}
-					>
-						Reset
-					</button>
+						{#each Object.entries(ARCS_LISTEN) as [value, { label }] (value)}
+							<option {value}>{label}</option>
+						{/each}
+					</select>
 				</div>
-				{#if arcsAdvanced}
-					<p class="arcs-group">Forms</p>
-					<div class="arcs-forms">
-						{#each FORM_NAMES as name, form (name)}
-							<button
-								class="detach"
-								class:on={(spec.forms ?? allForms()).includes(form)}
-								aria-pressed={(spec.forms ?? allForms()).includes(form)}
-								onclick={() => toggleArcsForm(form)}
-							>
-								{name}
-							</button>
-						{/each}
+				{#each ARCS_CONTROLS as control (control.key)}
+					{@const value = arcsControlValue(spec, control.key)}
+					<div class="row" title={control.hint}>
+						<label for="mc-arcs-{control.key}">{control.label}</label>
+						<RangeSlider
+							id="mc-arcs-{control.key}"
+							{value}
+							min={control.min}
+							max={control.max}
+							step={control.step}
+							oninput={(v) => setArcsControl(control.key, v)}
+							ondblclick={() => setArcsControl(control.key, control.value)}
+						/>
+						<span class="val">{value}</span>
 					</div>
-					{#each ARCS_ADVANCED as { name, group } (group)}
-						<p class="arcs-group">{name}</p>
-						{#each ARCS_KNOBS.filter((k) => k.group === group) as knob (knob.key)}
-							{@render arcsKnob(spec, knob)}
-						{/each}
-					{/each}
-				{/if}
+				{/each}
 			{/if}
 
 			{#if source?.kind === "model" && source.animations && source.animations.length > 1}
@@ -912,47 +885,7 @@
 	{/await}
 {/if}
 
-{#snippet arcsKnob(spec: ArcsSpec, knob: (typeof ARCS_KNOBS)[number])}
-	{@const value = arcsKnobValue(spec, knob.key)}
-	<div class="row">
-		<label for="mc-arcs-{knob.key}">{knob.label}</label>
-		<RangeSlider
-			id="mc-arcs-{knob.key}"
-			{value}
-			min={knob.min}
-			max={knob.max}
-			step={knob.step}
-			oninput={(v) => setArcsKnob(knob.key, v)}
-			ondblclick={() => setArcsKnob(knob.key, knob.value)}
-		/>
-		<span class="val">{Number(value.toFixed(3))}</span>
-	</div>
-{/snippet}
-
 <style>
-	.arcs-group {
-		margin: 0.5rem 0 0.1rem;
-		color: var(--text-3);
-		font-size: 0.65rem;
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-	}
-
-	.arcs-forms {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.25rem;
-	}
-
-	.arcs-forms .detach {
-		flex: none;
-	}
-
-	.arcs-forms .detach.on {
-		border-color: var(--live);
-		color: var(--text);
-	}
-
 	/* Lines the button up with the controls, under the labels' column. */
 	.label-spacer {
 		flex-shrink: 0;

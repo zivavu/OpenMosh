@@ -192,12 +192,10 @@ test("a clip's look undoes, and comes back on reload", async ({ page }) => {
 	await openWithArcs(page);
 	const palette = page.locator("#mc-arcs-palette");
 
-	// Dropped clips start selected. Subarcs is a main knob; Advanced brings out the rest.
+	// Dropped clips start selected.
 	await page.getByRole("tab", { name: "Media clip" }).click();
-	await expect(page.locator("#mc-arcs-arcSub")).toBeVisible();
-	await expect(page.locator("#mc-arcs-glint")).toHaveCount(0);
-	await page.getByRole("button", { name: "Advanced" }).click();
-	await expect(page.locator("#mc-arcs-glint")).toBeVisible();
+	await expect(page.locator("#mc-arcs-reaction")).toBeVisible();
+	await page.locator("#mc-arcs-listen").selectOption("hats");
 	await page.getByRole("button", { name: "Reroll" }).click();
 
 	await palette.selectOption("Magma");

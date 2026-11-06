@@ -2,12 +2,8 @@
  * catalog, which the renderer can't import back. */
 
 import { analyzeFrames, FFT_SIZE } from "../audio/offline-audio";
-import { PROFILE_FPS, songBand, type SongProfile } from "../audio/song-profile";
+import { PROFILE_FPS, type SongProfile } from "../audio/song-profile";
 import type { SongAudio } from "./controls";
-
-const LOW_BAND = [30, 140] as const;
-const MID_BAND = [250, 2500] as const;
-const HIGH_BAND = [5000, 14000] as const;
 
 /** Unlike `buildSongProfile` this keeps silent frames: the table is indexed by time. */
 export async function analyzeDrive(
@@ -25,11 +21,5 @@ export async function analyzeDrive(
 		bands: new Map(),
 		rides: new Map(),
 	};
-	return {
-		duration: drive.duration,
-		frames,
-		low: songBand(profile, ...LOW_BAND),
-		mid: songBand(profile, ...MID_BAND),
-		high: songBand(profile, ...HIGH_BAND),
-	};
+	return { duration: drive.duration, frames, profile };
 }

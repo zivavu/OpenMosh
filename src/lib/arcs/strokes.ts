@@ -43,6 +43,8 @@ const NEAR_W = 0.5;
 /** How much closer than the focus an arc may swell, or it fills the frame. */
 const MAX_NEAR_SWELL = 2.5;
 const MIN_SUB_SPEED = 0.05;
+/** The momentum a push of 1 is sized for; see `strokeOf`. */
+const PUSH_MOMENTUM = 0.82;
 
 type Vec = [number, number, number];
 
@@ -167,7 +169,7 @@ function strokeOf(kind: number, rng: Rand, look: Look): Stroke {
 		curl: toward(0, rolled.curl),
 		// A push travels push / (1 - momentum), so more momentum needs less of it to
 		// land in the same place. Otherwise a whip flies off past the camera.
-		push: toward(1, rolled.push) * ((1 - momentum) / (1 - m)),
+		push: toward(1, rolled.push) * ((1 - momentum) / (1 - PUSH_MOMENTUM)),
 	};
 }
 
@@ -252,7 +254,7 @@ function collectStems(
 			origin: scale(dir, ORIGIN_RADIUS),
 			velocity: scale(
 				dir,
-				(0.1 + 0.24 * frame.bass) * look.arcReach * stroke.push,
+				(0.1 + look.bassReach * frame.bass) * look.arcReach * stroke.push,
 			),
 			axis: perpendicular(dir, rng),
 			curl: stroke.curl,
@@ -312,7 +314,8 @@ function collectVolley(
 	for (let i = 0; i < count; i++) {
 		const own = arcSeed(look.seed, 1, o, i + 2);
 		const a = mulberry32(own);
-		const life = KICK_LIFE[0] + a() * (KICK_LIFE[1] - KICK_LIFE[0]);
+		const life =
+			(KICK_LIFE[0] + a() * (KICK_LIFE[1] - KICK_LIFE[0])) * look.arcLife;
 		const born = pattern === 5 ? (i / count) * SPIRAL_DELAY : 0;
 		const arcAge = age - born;
 		if (arcAge < 0 || arcAge >= life) continue;
@@ -341,7 +344,10 @@ function collectVolley(
 			origin: scale(dir, ORIGIN_RADIUS),
 			velocity: scale(
 				dir,
-				(0.16 + 0.2 * strength) * look.arcReach * rolled.reach * stroke.push,
+				(0.16 + look.kickReach * strength) *
+					look.arcReach *
+					rolled.reach *
+					stroke.push,
 			),
 			axis: symmetric ? axis : perpendicular(dir, walkRng),
 			curl: stroke.curl,
@@ -350,7 +356,7 @@ function collectVolley(
 			steps: volleySteps,
 			head,
 			tail,
-			heat: 0.75 * strength * fade,
+			heat: look.kickHeat * strength * fade,
 			width: rolled.width,
 			halo: 1,
 			spark: 1,
@@ -419,7 +425,7 @@ function collectArcs(frame: ControlFrame, controls: Controls, look: Look) {
 	for (let o = controls.onsets.length - 1; o >= 0; o--) {
 		const age = frame.t - controls.onsets[o] / fps;
 		if (age < 0) continue;
-		if (age > KICK_LIFE[1] + SPIRAL_DELAY) break;
+		if (age > KICK_LIFE[1] * look.arcLife + SPIRAL_DELAY) break;
 		collectVolley(arcs, o, age, controls, steps, look);
 	}
 	collectCrackle(arcs, frame.t, controls, steps, look);
