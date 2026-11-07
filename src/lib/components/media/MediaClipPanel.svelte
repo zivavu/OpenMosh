@@ -448,7 +448,7 @@
 						<RefreshCw size={11} />
 					</button>
 				</div>
-				<div class="row" title="Which sound fires the arcs">
+				<div class="row" title="Which sound pushes the drawing along">
 					<label for="mc-arcs-listen">Reacts to</label>
 					<select
 						id="mc-arcs-listen"

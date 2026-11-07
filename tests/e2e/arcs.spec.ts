@@ -42,6 +42,19 @@ const generate = (page: Page) =>
 	page.getByRole("button", { name: "Generate" }).first();
 const addArcs = (page: Page) => page.getByRole("button", { name: "Add Arcs" });
 
+/** Space does nothing while media is loading, so wait for the transport to take it. */
+async function startPlaying(page: Page) {
+	await expect(
+		page.locator('.tl-transport-btn[title="Play (Space)"]'),
+	).toBeEnabled({
+		timeout: 30_000,
+	});
+	await page.keyboard.press("Space");
+	await expect(
+		page.locator('.tl-transport-btn[title="Pause (Space)"]'),
+	).toBeVisible();
+}
+
 /** Over a flat dim layer, so anything brighter on the canvas is Arcs. */
 async function openWithArcs(page: Page, seconds = TRACK_SECONDS) {
 	await openEditor(page, {
@@ -59,7 +72,7 @@ async function openWithArcs(page: Page, seconds = TRACK_SECONDS) {
 
 /** The click track's hits are short, so sample while it plays. */
 async function expectLitWhilePlaying(page: Page) {
-	await page.keyboard.press("Space");
+	await startPlaying(page);
 	await expect
 		.poll(() => brightness(page), {
 			message: "Arcs never lit the canvas",
@@ -121,7 +134,7 @@ test.describe("from the upload screen", () => {
 			"song.wav",
 		);
 		// Nothing under it, so anything lit on the canvas is Arcs.
-		await page.keyboard.press("Space");
+		await startPlaying(page);
 		await expect
 			.poll(() => brightness(page), {
 				message: "Arcs never lit the canvas",
@@ -144,11 +157,14 @@ test("the canvas holds premultiplied colour, so a glow can't turn into a wash", 
 	await generate(page).click();
 	await addArcs(page).click();
 	await expect(page.locator(PREVIEW_CANVAS)).toBeVisible({ timeout: 30_000 });
-	await page.keyboard.press("Space");
+	await expect(mediaClips(page, 0)).toHaveCount(1);
+	await expect(page.getByRole("group", { name: /Audio 1/ })).toContainText(
+		"song.wav",
+	);
+	await startPlaying(page);
 	await expect
 		.poll(() => brightness(page), { timeout: 30_000 })
 		.toBeGreaterThan(6);
-	await page.keyboard.press("Space");
 
 	const readCanvas = () =>
 		page.evaluate((selector) => {
@@ -171,11 +187,12 @@ test("the canvas holds premultiplied colour, so a glow can't turn into a wash", 
 				overAlpha,
 			};
 		}, PREVIEW_CANVAS);
-	// Pausing redraws the frame, so the canvas can be clear for a moment.
+	// While it plays: stopping goes back to the start marker, where this song is silent.
 	await expect
 		.poll(async () => (await readCanvas()).covered)
 		.toBeGreaterThan(0);
 	const { premultiplied, overAlpha } = await readCanvas();
+	await page.keyboard.press("Space");
 	expect(premultiplied).toBe(true);
 	expect(overAlpha).toBe(0);
 });

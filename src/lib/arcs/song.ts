@@ -2,7 +2,7 @@
  * renderer has no line to the mixer, and preview and export both read this. */
 
 import { buildControls, type Controls, type SongAudio } from "./controls";
-import { allForms, TABLE_KNOBS, type Look } from "./look";
+import { TABLE_KNOBS, type Look } from "./look";
 
 /** Tables kept per song: one for each look that listens differently. */
 const MAX_TABLES = 16;
@@ -58,12 +58,11 @@ export function controlsFor(song: SongAudio, look: Look): Controls {
 	let held = tables.get(song);
 	if (!held) tables.set(song, (held = new Map()));
 	const knobs = TABLE_KNOBS.map((k) => look[k]).join();
-	const key = `${look.seed}|${knobs}`;
-	let controls = held.get(key);
+	let controls = held.get(knobs);
 	if (!controls) {
-		controls = buildControls(song, look, allForms());
+		controls = buildControls(song, look);
 		if (held.size >= MAX_TABLES) held.clear();
-		held.set(key, controls);
+		held.set(knobs, controls);
 	}
 	return controls;
 }

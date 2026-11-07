@@ -82,7 +82,7 @@ bun dev   →   http://localhost:5173/lab/music/
 Drop one or more audio files. Every lane is heard; ticked lanes drive the picture,
 through the same `renderDrive` the editor's Drives toggle feeds. With no driving
 lane there is no picture. **Copy settings** copies every knob as JSON, and **Reset**
-goes back to the defaults. Points are fixed at 1M: more made no visible difference.
+goes back to the defaults.
 
 The page tunes `src/lib/arcs/`, the visual the editor's Arcs clips draw. It only adds
 the transport, the knobs and a read-out, so what it shows is what the app draws.

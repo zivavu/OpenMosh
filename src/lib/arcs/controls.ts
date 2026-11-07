@@ -11,7 +11,6 @@ import {
 	type Range,
 	type SongProfile,
 } from "../audio/song-profile";
-import { mulberry32 } from "../rng";
 import type { Look } from "./look";
 
 const FPS = PROFILE_FPS;
@@ -23,9 +22,18 @@ const MIN_ONSET_LEVEL = 0.02;
 const NOVELTY_WINDOW = 2 * FPS;
 /** The jump in energy that counts as a new section at no sensitivity. */
 const NOVELTY_CEILING = 0.28;
-const MIN_FORM_HOLD = 4;
+const MIN_SECTION_HOLD = 4;
 const SNAP_TO_ONSET = 0.5;
-export const MORPH_SECONDS = 0.7;
+export const MORPH_SECONDS = 1.2;
+/** How much of a section's music it takes to finish its figure; the rest shows it whole. */
+const PEN_FINISHES_AT = 0.7;
+/** A hit moves the pen as far as this many seconds of full energy. */
+const HIT_PEN = 0.3;
+/** The quickest a whole figure can be drawn, or a section whose music only starts at its
+ * end would throw its figure up at once. */
+const MIN_DRAW_SECONDS = 1.5;
+/** The energy at which the picture is fully there. */
+const FULL_PRESENCE = 0.2;
 
 export interface SongAudio {
 	duration: number;
@@ -44,17 +52,16 @@ export interface Controls {
 	energy: Float32Array;
 	/** Running total of energy, so the camera speeds up without ever jumping. */
 	energyTotal: Float32Array;
-	/** Seconds since the last strong hit. */
-	kickAge: Float32Array;
-	formA: Uint8Array;
-	formB: Uint8Array;
-	formMix: Float32Array;
-	/** The song sections being left and entered; the same outside a form change. */
+	/** How much of the picture there is: none in silence. */
+	presence: Float32Array;
+	/** How far through its section's figure the pen is, 0 to 1. */
+	pen: Float32Array;
+	/** How far the last section's figure has been erased, once the next one starts. */
+	morph: Float32Array;
+	/** The song sections being left and entered; the same outside a change. */
 	sectionA: Uint16Array;
 	sectionB: Uint16Array;
-	/** How many strong hits have landed by each frame. */
-	onsetIndex: Uint32Array;
-	/** Frames where the form changes, for the song strip. */
+	/** Frames where a new section starts. */
 	cuts: number[];
 	/** Frames of the strong hits, and how hard each one hit. */
 	onsets: number[];
@@ -69,13 +76,10 @@ export interface ControlFrame {
 	high: number;
 	energy: number;
 	energyTotal: number;
-	kickAge: number;
-	formA: number;
-	formB: number;
-	formMix: number;
+	presence: number;
+	morph: number;
 	sectionA: number;
 	sectionB: number;
-	onsetIndex: number;
 }
 
 function follow(values: Float32Array, smoothing: number): Float32Array {
@@ -122,7 +126,7 @@ function findOnsets(
 	return onsets;
 }
 
-/** Where the form changes: at a new section of the song, or after `morphEvery` seconds
+/** Where the figure changes: at a new section of the song, or after `morphEvery` seconds
  * without one, moved onto the next hit so the change lands with the music. */
 export function findCuts(
 	energy: Float32Array,
@@ -152,8 +156,8 @@ export function findCuts(
 		return true;
 	};
 
-	const hold = MIN_FORM_HOLD * FPS;
-	const every = Math.max(MIN_FORM_HOLD, morphEvery) * FPS;
+	const hold = MIN_SECTION_HOLD * FPS;
+	const every = Math.max(MIN_SECTION_HOLD, morphEvery) * FPS;
 	const snap = SNAP_TO_ONSET * FPS;
 	const cuts: number[] = [];
 	let last = 0;
@@ -171,13 +175,8 @@ export function findCuts(
 }
 
 /** Quick enough to rerun as a knob moves; only `analyzeDrive` touches the audio. */
-export function buildControls(
-	song: SongAudio,
-	look: Look,
-	forms: number[],
-): Controls {
+export function buildControls(song: SongAudio, look: Look): Controls {
 	const { frames } = song;
-	const seed = look.seed;
 	const bandOf = (a: number, b: number) =>
 		songBand(song.profile, Math.min(a, b), Math.max(a, b));
 	const hitBand = bandOf(look.hitFreqLow, look.hitFreqHigh);
@@ -210,39 +209,19 @@ export function buildControls(
 	}
 
 	const onsets = findOnsets(hits, look.hitSense, look.hitSpacing);
-	const kickAge = new Float32Array(frames).fill(1e3);
-	for (let o = 0; o < onsets.length; o++) {
-		const end = onsets[o + 1] ?? frames;
-		for (let i = onsets[o]; i < end; i++) kickAge[i] = (i - onsets[o]) / FPS;
-	}
-
-	const onsetIndex = new Uint32Array(frames);
-	for (let o = 0; o < onsets.length; o++) onsetIndex.fill(o + 1, onsets[o]);
-
 	const cuts = findCuts(energy, onsets, look.morphEvery, look.sectionSense);
-	const order = formOrder(cuts.length + 1, seed, forms);
-	const formA = new Uint8Array(frames);
-	const formB = new Uint8Array(frames);
-	const formMix = new Float32Array(frames);
+	const onsetStrength = onsets.map((i) => hits[i]);
+	const morphFrames = Math.ceil(MORPH_SECONDS * FPS);
+	const morph = new Float32Array(frames);
 	const sectionA = new Uint16Array(frames);
 	const sectionB = new Uint16Array(frames);
-	const morph = Math.ceil(MORPH_SECONDS * FPS);
 	let cut = -1;
 	for (let i = 0; i < frames; i++) {
 		while (cut + 1 < cuts.length && cuts[cut + 1] <= i) cut++;
-		const into = cut < 0 ? morph : i - cuts[cut];
-		const to = order[cut + 1];
+		const into = cut < 0 ? morphFrames : i - cuts[cut];
 		sectionB[i] = cut + 1;
-		if (into >= morph) {
-			formA[i] = formB[i] = to;
-			sectionA[i] = cut + 1;
-			continue;
-		}
-		const x = into / morph;
-		sectionA[i] = cut;
-		formA[i] = order[cut];
-		formB[i] = to;
-		formMix[i] = x * x * (3 - 2 * x);
+		sectionA[i] = into < morphFrames ? cut : cut + 1;
+		if (into < morphFrames) morph[i] = into / morphFrames;
 	}
 
 	return {
@@ -254,33 +233,48 @@ export function buildControls(
 		high,
 		energy,
 		energyTotal,
-		kickAge,
-		formA,
-		formB,
-		formMix,
+		presence: energy.map((e) => Math.min(1, e / FULL_PRESENCE)),
+		pen: penTable(energy, onsets, onsetStrength, cuts),
+		morph,
 		sectionA,
 		sectionB,
-		onsetIndex,
 		cuts,
 		onsets,
-		onsetStrength: onsets.map((i) => hits[i]),
+		onsetStrength,
 	};
 }
 
-function formOrder(count: number, seed: number, forms: number[]): number[] {
-	const pool = forms.length ? forms : [0];
-	const rng = mulberry32(seed);
-	const order: number[] = [];
-	for (let i = 0; i < count; i++) {
-		let pick = pool[Math.floor(rng() * pool.length)];
-		if (pool.length > 1) {
-			while (pick === order[i - 1]) {
-				pick = pool[Math.floor(rng() * pool.length)];
-			}
+/** The music moves the pen: a section's energy creeps it on and its hits lurch it, shared
+ * out so the figure is finished before the section ends, however loud it is. */
+function penTable(
+	energy: Float32Array,
+	onsets: number[],
+	strengths: number[],
+	cuts: number[],
+): Float32Array {
+	const frames = energy.length;
+	const travel = new Float32Array(frames);
+	for (let i = 0; i < frames; i++) travel[i] = (energy[i] * energy[i]) / FPS;
+	onsets.forEach((frame, o) => {
+		travel[frame] += strengths[o] * HIT_PEN;
+	});
+	const pen = new Float32Array(frames);
+	for (let section = 0; section <= cuts.length; section++) {
+		const from = section > 0 ? cuts[section - 1] : 0;
+		const to = cuts[section] ?? frames;
+		let total = 0;
+		for (let i = from; i < to; i++) total += travel[i];
+		if (total <= 0) continue;
+		const topSpeed = 1 / (MIN_DRAW_SECONDS * FPS);
+		let sofar = 0;
+		let at = 0;
+		for (let i = from; i < to; i++) {
+			sofar += travel[i];
+			at = Math.min(at + topSpeed, sofar / total / PEN_FINISHES_AT, 1);
+			pen[i] = at;
 		}
-		order.push(pick);
 	}
-	return order;
+	return pen;
 }
 
 export function sampleControls(c: Controls, t: number): ControlFrame {
@@ -297,13 +291,9 @@ export function sampleControls(c: Controls, t: number): ControlFrame {
 		high: at(c.high),
 		energy: at(c.energy),
 		energyTotal: at(c.energyTotal),
-		// Not interpolated: it falls back to 0 on a hit, and a blend would sweep the ripple.
-		kickAge: c.kickAge[i],
-		formA: c.formA[i],
-		formB: c.formB[i],
-		formMix: c.formMix[i],
+		presence: at(c.presence),
+		morph: at(c.morph),
 		sectionA: c.sectionA[i],
 		sectionB: c.sectionB[i],
-		onsetIndex: c.onsetIndex[i],
 	};
 }

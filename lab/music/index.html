@@ -170,16 +170,6 @@
 				font-size: 11px;
 				line-height: 1.5;
 			}
-			#forms {
-				display: flex;
-				flex-wrap: wrap;
-				gap: 4px 12px;
-			}
-			#forms label {
-				display: flex;
-				align-items: center;
-				gap: 4px;
-			}
 			.ctl {
 				margin-bottom: 8px;
 			}
@@ -234,9 +224,7 @@
 					<option value="720">720p</option>
 					<option value="1080">1080p</option>
 				</select>
-				<button id="reset" title="Back to the default knobs and every form">
-					Reset
-				</button>
+				<button id="reset" title="Back to the default knobs">Reset</button>
 				<button id="copy" title="Copy every setting as JSON">
 					Copy settings
 				</button>
@@ -254,7 +242,6 @@
 				to seek. White ticks on the strip are form changes.
 			</p>
 			<h4>Forms</h4>
-			<div id="forms"></div>
 			<div id="knobs"></div>
 			<div id="error"></div>
 		</aside>

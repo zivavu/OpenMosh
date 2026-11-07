@@ -148,6 +148,12 @@ Outside CI a run reuses whatever already serves its port, so when my dev server 
   `renderDrive`; with none there is no picture. Its look lives on the clip (`arcs`), falling back
   to its pool file's. Users get Reacts to and four controls that each move many knobs, with 50
   the tuned look; a long list of knobs did too little, so the rest stay in `lab/music/`.
+- Arcs draws only arcDrawer's stroke (github.com/zivavu/arcDrawer), at its slider defaults and
+  with its "over" blend. One layer: I dropped the point-cloud forms, knot, stems, crackle, 3D
+  camera and glints as too much and too random. Structure comes from a figure per song section
+  (`arcs/figures.ts`), whose symmetric copies share one walk; the music moves the pen along it and
+  it's finished before the section ends. Each stroke paints alone into a scratch target, as
+  arcDrawer does; one ribbon per stroke folded into slivers at sharp bends.
 - Area masking is the Mask effect (`effects/catalog/mask.ts`), not a per-effect toggle. It
   limits the effects above it, back to the previous Mask or the top of its own chain (an FX
   lane's chain too), and blends the rest back to how that scope began. Moshes, clears and

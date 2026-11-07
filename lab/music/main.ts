@@ -8,7 +8,6 @@ import {
 	type Controls,
 	type SongAudio,
 } from "../../src/lib/arcs/controls";
-import { FORM_NAMES } from "../../src/lib/arcs/forms";
 import {
 	ARCS_CONTROLS,
 	ARCS_KNOBS,
@@ -26,8 +25,8 @@ import { GpuTimer } from "./gpu-timer";
 
 const GROUPS: [ArcsKnobGroup | "controls", string][] = [
 	["controls", "Controls (what users get)"],
-	["picture", "Picture"],
-	["arcs", "Arcs"],
+	["structure", "Structure"],
+	["stroke", "Stroke (arcDrawer's sliders)"],
 	["music", "Music"],
 	["listen", "Listening"],
 ];
@@ -44,7 +43,6 @@ interface State {
 	palette: string;
 	ratio: string;
 	short: number;
-	forms: number[];
 	values: Record<string, number>;
 }
 
@@ -56,7 +54,6 @@ const state: State = {
 	palette: saved.palette ?? "Ice",
 	ratio: saved.ratio ?? "4:5",
 	short: saved.short ?? 720,
-	forms: saved.forms ?? FORM_NAMES.map((_, i) => i),
 	values: {
 		...Object.fromEntries(allKnobs.map((k) => [k.key, k.value])),
 		...saved.values,
@@ -211,7 +208,7 @@ async function reanalyze() {
 
 function rebuildControls() {
 	if (!song) return;
-	controls = buildControls(song, arcsLook(spec()), state.forms);
+	controls = buildControls(song, arcsLook(spec()));
 	drawStrip();
 	dirty = true;
 }
@@ -328,7 +325,7 @@ function updateHud(stamp: number) {
 	hud.textContent = [
 		`${(1000 / mean).toFixed(0)} fps · worst 5% ${worst.toFixed(1)} ms`,
 		timer.ms === null ? "GPU time n/a" : `GPU ${timer.ms.toFixed(1)} ms`,
-		`${w}×${h} · ${Math.floor(pass.arcVertices / 6)} arc segments`,
+		`${w}×${h} · ${pass.strokes} strokes`,
 		`read the song in ${(analyzeMs / 1000).toFixed(1)} s`,
 	].join("\n");
 }
@@ -413,28 +410,10 @@ function renderKnobs() {
 			el.append(wrap);
 		}
 	}
-	const forms = $("forms");
-	forms.replaceChildren();
-	FORM_NAMES.forEach((name, i) => {
-		const label = document.createElement("label");
-		const box = document.createElement("input");
-		box.type = "checkbox";
-		box.checked = state.forms.includes(i);
-		box.onchange = () => {
-			state.forms = box.checked
-				? [...state.forms, i].sort()
-				: state.forms.filter((f) => f !== i);
-			save();
-			rebuildControls();
-		};
-		label.append(box, name);
-		forms.append(label);
-	});
 }
 
 function resetKnobs() {
 	state.values = Object.fromEntries(allKnobs.map((k) => [k.key, k.value]));
-	state.forms = FORM_NAMES.map((_, i) => i);
 	save();
 	renderKnobs();
 	rebuildControls();
