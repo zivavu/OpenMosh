@@ -1,33 +1,30 @@
-/** A pool thumbnail: one lively moment of the look, on its own short-lived context. */
+/** A pool thumbnail: the look's first figure, finished, on its own short-lived context. */
 
 import type { Controls } from "./controls";
-import { allForms, arcsColors, arcsLook, type ArcsSpec } from "./look";
+import { arcsColors, arcsLook, type ArcsSpec } from "./look";
 import { ArcsPass } from "./pass";
 
-/** A second of steady music with one hit, so a thumbnail needs no song. */
+/** A second of steady music with the figure finished, so a thumbnail needs no song. */
 function posedControls(): Controls {
 	const frames = 60;
 	const flat = (v: number) => new Float32Array(frames).fill(v);
-	const hit = 30;
 	return {
 		frames,
 		duration: 1,
-		kick: flat(0.6),
-		bass: flat(0.6),
+		kick: flat(0.4),
+		bass: flat(0.5),
 		mid: flat(0.5),
 		high: flat(0.5),
 		energy: flat(0.7),
 		energyTotal: flat(0.5),
-		kickAge: flat(0).map((_, i) => Math.max(0, (i - hit) / frames)),
-		formA: new Uint8Array(frames),
-		formB: new Uint8Array(frames),
-		formMix: flat(0),
+		presence: flat(1),
+		pen: flat(1),
+		morph: flat(0),
 		sectionA: new Uint16Array(frames),
 		sectionB: new Uint16Array(frames),
-		onsetIndex: new Uint32Array(frames).fill(1),
 		cuts: [],
-		onsets: [hit],
-		onsetStrength: [1],
+		onsets: [],
+		onsetStrength: [],
 	};
 }
 
@@ -43,13 +40,8 @@ export async function renderArcsThumb(
 	const pass = new ArcsPass(gl);
 	try {
 		if (!pass.supported) return null;
-		const controls = posedControls();
-		// The form follows the seed, so thumbnails don't all show the same one.
-		const forms = allForms();
-		controls.formA.fill(forms[spec.seed % forms.length]);
-		controls.formB.set(controls.formA);
 		pass.draw(
-			controls,
+			posedControls(),
 			0.6,
 			arcsLook(spec),
 			arcsColors(spec),
