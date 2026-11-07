@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.0.4](https://github.com/zivavu/OpenMosh/compare/v1.0.3...v1.0.4) (2026-11-07)
+
+
+### Added
+
+* Add Arcs, a visual that follows your music ([0f1b18f](https://github.com/zivavu/OpenMosh/commit/0f1b18f062c85ee33afb14f74a81385ddff95571))
+* Choose what Arcs listens to in your music ([46a8335](https://github.com/zivavu/OpenMosh/commit/46a833542927a4f8ed0dcf0db4d7ce2b43c4ce43))
+* Draw Arcs as figures that build with your music ([666b8e1](https://github.com/zivavu/OpenMosh/commit/666b8e10718df329d2ae38ce23a1834c25d795f8))
+* Pick several generator types at once in Generate ([9f2cbf2](https://github.com/zivavu/OpenMosh/commit/9f2cbf24a23a926636a344a135a96e13046441f0))
+
+
+### Fixed
+
+* Deselect the preset after a roll ([68aaa1f](https://github.com/zivavu/OpenMosh/commit/68aaa1fd5867540c9d661d9c3dd3a2490d93ac83))
+* Stop glows washing out over a transparent background ([ab216b1](https://github.com/zivavu/OpenMosh/commit/ab216b12e36469b5a8e58576320a6c92b20ea7e4))
+
 ## [1.0.3](https://github.com/zivavu/OpenMosh/compare/v1.0.2...v1.0.3) (2026-11-04)
 
 Reopening a slideshow whose song ran longer than its export length no longer cuts its segments down to that length and saves over them, which made edits seem to vanish. Renaming a song no longer wipes a slideshow's cuts or adds a second copy of the song to the library. In slideshow mode, S now splits the segment under the playhead, as it does in the editor.
