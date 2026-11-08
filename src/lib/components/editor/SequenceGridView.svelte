@@ -9,7 +9,6 @@
 		Play,
 		Plus,
 		X,
-		Zap,
 	} from "lucide-svelte";
 	import {
 		SOURCE_DND_TYPE,
@@ -220,10 +219,6 @@
 					{:else if src.kind === "model"}
 						<span class="card-kind" title="3D model">
 							<Box size={9} />
-						</span>
-					{:else if src.kind === "arcs"}
-						<span class="card-kind" title="Arcs">
-							<Zap size={9} />
 						</span>
 					{:else if src.kind === "cuts"}
 						<span class="card-kind" title="Slideshow">

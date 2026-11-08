@@ -2,12 +2,8 @@
 // follows the music before anything goes into the app. Dev only:
 // localhost:5173/lab/music/ (`bun dev`).
 
-import { analyzeDrive } from "../../src/lib/arcs/analyze";
-import {
-	buildControls,
-	type Controls,
-	type SongAudio,
-} from "../../src/lib/arcs/controls";
+import { analyzeDrive } from "./arcs/analyze";
+import { buildControls, type Controls, type SongAudio } from "./arcs/controls";
 import {
 	ARCS_CONTROLS,
 	ARCS_KNOBS,
@@ -16,8 +12,8 @@ import {
 	arcsLook,
 	TABLE_KNOBS,
 	type ArcsKnobGroup,
-} from "../../src/lib/arcs/look";
-import { ArcsPass } from "../../src/lib/arcs/pass";
+} from "./arcs/look";
+import { ArcsPass } from "./arcs/pass";
 import { decodeAudioFile } from "../../src/lib/audio/offline-audio";
 import type { MixSegment } from "../../src/lib/mix/plan";
 import { renderDrive } from "../../src/lib/mix/render";

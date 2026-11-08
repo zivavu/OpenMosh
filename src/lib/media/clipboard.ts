@@ -2,7 +2,6 @@
  * and chain; the placement lives on the lane, so a whole-clip paste brings the
  * clip and not that. Pasting onto a clip keeps its span, fade and lane. */
 
-import type { ArcsSpec } from "../arcs/look";
 import {
 	applyChainTo,
 	captureChain,
@@ -27,7 +26,6 @@ export interface MediaClipboardEntry extends ClipBlockEntry {
 	sourceStart: number;
 	speed?: number;
 	animation?: number;
-	arcs?: ArcsSpec;
 	/** The clip's own source, when it had one; absent means the lane's. */
 	sourceId?: string;
 	/** What the clip showed, resolved through its lane at copy time, so a paste onto
@@ -71,7 +69,6 @@ export function copyMediaClips(
 			sourceStart: clip.sourceStart,
 			speed: clip.speed,
 			animation: clip.animation,
-			arcs: clip.arcs,
 			sourceId: clip.sourceId,
 			resolvedSourceId: clip.sourceId ?? lane.sourceId,
 			chain: captureChain(clip),
@@ -115,7 +112,6 @@ export function pasteMediaClips(
 			);
 			if (e.speed !== undefined) clip.speed = e.speed;
 			if (e.animation !== undefined) clip.animation = e.animation;
-			if (e.arcs !== undefined) clip.arcs = e.arcs;
 			if (e.fadeInSec !== undefined) clip.fadeInSec = e.fadeInSec;
 			if (e.fadeOutSec !== undefined) clip.fadeOutSec = e.fadeOutSec;
 			if (e.gain !== undefined) clip.gain = e.gain;
@@ -149,7 +145,6 @@ export function pasteMediaContentOnto(
 					sourceStart: e.sourceStart,
 					speed: e.speed,
 					animation: e.animation,
-					arcs: e.arcs,
 					sourceId: pinnedSource(e, lane),
 					bounce: e.bounce,
 					bounceBack: e.bounceBack,

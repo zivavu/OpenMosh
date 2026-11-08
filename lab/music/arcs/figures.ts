@@ -1,7 +1,7 @@
 // What the pen draws in one section of the song: a curve and the symmetric copies it is
 // repeated in. Rolled from the seed and the section's number alone.
 
-import { mulberry32, shuffle, type Rand } from "../rng";
+import { mulberry32, shuffle, type Rand } from "../../../src/lib/rng";
 
 /** x' = a·x + b·y + e, y' = c·x + d·y + f. Only rotations, mirrors and shifts. */
 export type Copy = readonly [number, number, number, number, number, number];

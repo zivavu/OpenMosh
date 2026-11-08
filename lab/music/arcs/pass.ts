@@ -9,8 +9,8 @@ import {
 	program,
 	setInks,
 	texture,
-} from "../generators/gpu";
-import type { Colors } from "../generators/palette";
+} from "../../../src/lib/generators/gpu";
+import type { Colors } from "../../../src/lib/generators/palette";
 import { sampleControls, type Controls } from "./controls";
 import type { Look } from "./look";
 import { ARC_FS, ARC_VS, PRESENT_FS, STROKE_FS } from "./shaders";

@@ -1,16 +1,6 @@
 <script lang="ts">
 	import LoadFailed from "../ui/LoadFailed.svelte";
-	import { RefreshCw, SlidersHorizontal } from "lucide-svelte";
-	import {
-		ARCS_CONTROLS,
-		ARCS_LISTEN,
-		ARCS_PALETTES,
-		arcsControlValue,
-		type ArcsControlKey,
-		type ArcsListen,
-		type ArcsSpec,
-	} from "../../arcs/look";
-	import { randomSeed } from "../../rng";
+	import { SlidersHorizontal } from "lucide-svelte";
 	import {
 		autoOnSlideshow,
 		clipSourceId,
@@ -96,8 +86,6 @@
 		onRefreshSlideshow?: (sourceId: string) => void;
 		/** Read the single edit this clip came from again. */
 		onRefreshSingle?: (sessionKey: string) => void;
-		/** Whether any lane has Drives on, which is the sound Arcs follows. */
-		arcsHaveMusic?: boolean;
 	}
 
 	let {
@@ -124,7 +112,6 @@
 		onAttachAudio,
 		onRefreshSlideshow,
 		onRefreshSingle,
-		arcsHaveMusic = false,
 	}: Props = $props();
 
 	// This chain runs on the lane's media, so a Mask paints over its box.
@@ -223,24 +210,6 @@
 		if (!clip) return;
 		onBeforeEdit?.();
 		onClipChange({ ...clip, transition: edit(clip.transition) });
-	}
-
-	let arcsSpec = $derived(
-		source?.kind === "arcs" ? (clip?.arcs ?? source.arcs ?? null) : null,
-	);
-
-	function setArcs(next: ArcsSpec, coalesceKey?: string) {
-		if (!clip) return;
-		onBeforeEdit?.(coalesceKey);
-		onClipChange({ ...clip, arcs: next });
-	}
-
-	function setArcsControl(key: ArcsControlKey, value: number) {
-		if (!arcsSpec || !clip) return;
-		setArcs(
-			{ ...arcsSpec, values: { ...arcsSpec.values, [key]: value } },
-			`media-arcs-${key}-${clip.id}`,
-		);
 	}
 
 	function setAnimation(index: number) {
@@ -415,72 +384,6 @@
 					This clip has nothing to draw — pick media above, or drag a thumb from
 					the media rail onto it.
 				</p>
-			{/if}
-
-			{#if arcsSpec}
-				{@const spec = arcsSpec}
-				{#if !arcsHaveMusic}
-					<p class="hint">
-						Turn on Drives on an audio lane to give Arcs something to follow.
-					</p>
-				{/if}
-				<div class="row">
-					<label for="mc-arcs-palette">Palette</label>
-					<select
-						id="mc-arcs-palette"
-						value={spec.palette}
-						onchange={(e) =>
-							setArcs({
-								...spec,
-								palette: (e.currentTarget as HTMLSelectElement).value,
-							})}
-					>
-						{#each Object.keys(ARCS_PALETTES) as name (name)}
-							<option value={name}>{name}</option>
-						{/each}
-					</select>
-					<button
-						class="src-edit"
-						title="Roll a new look for this clip"
-						aria-label="Reroll"
-						onclick={() => setArcs({ ...spec, seed: randomSeed() })}
-					>
-						<RefreshCw size={11} />
-					</button>
-				</div>
-				<div class="row" title="Which sound pushes the drawing along">
-					<label for="mc-arcs-listen">Reacts to</label>
-					<select
-						id="mc-arcs-listen"
-						value={spec.listen ?? "kick"}
-						onchange={(e) =>
-							setArcs({
-								...spec,
-								listen: (e.currentTarget as HTMLSelectElement)
-									.value as ArcsListen,
-							})}
-					>
-						{#each Object.entries(ARCS_LISTEN) as [value, { label }] (value)}
-							<option {value}>{label}</option>
-						{/each}
-					</select>
-				</div>
-				{#each ARCS_CONTROLS as control (control.key)}
-					{@const value = arcsControlValue(spec, control.key)}
-					<div class="row" title={control.hint}>
-						<label for="mc-arcs-{control.key}">{control.label}</label>
-						<RangeSlider
-							id="mc-arcs-{control.key}"
-							{value}
-							min={control.min}
-							max={control.max}
-							step={control.step}
-							oninput={(v) => setArcsControl(control.key, v)}
-							ondblclick={() => setArcsControl(control.key, control.value)}
-						/>
-						<span class="val">{value}</span>
-					</div>
-				{/each}
 			{/if}
 
 			{#if source?.kind === "model" && source.animations && source.animations.length > 1}

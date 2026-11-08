@@ -11,11 +11,6 @@ import { resetSpectrumBars } from "../audio/spectrum-bars";
 import type { SpectrumData } from "../types";
 import type { MixSegment } from "./plan";
 import { renderDrive } from "./render";
-import { analyzeDrive } from "../arcs/analyze";
-import type { SongAudio } from "../arcs/controls";
-
-/** Under one analysis frame there's nothing to read. */
-const MIN_ARCS_SONG = 1 / 60;
 import { scheduleMix, stopNodes, type ScheduledNode } from "./schedule";
 import type { SourceAudioBank } from "./source-audio.svelte";
 
@@ -148,18 +143,6 @@ export class SequenceMixer {
 			this.duration,
 		);
 		return drive ? buildSongProfile(drive) : null;
-	}
-
-	/** The same sound as Arcs reads it, indexed by time. Null when nothing drives. */
-	async analyseArcs(): Promise<SongAudio | null> {
-		const drive = await renderDrive(
-			this.plan,
-			(id) => this.#bank.buffer(id),
-			this.duration,
-		);
-		return drive && drive.duration >= MIN_ARCS_SONG
-			? analyzeDrive(drive)
-			: null;
 	}
 
 	/** Swap in a new plan; a playing mix picks it up where it is. A change of volume

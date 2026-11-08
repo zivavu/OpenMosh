@@ -334,3 +334,52 @@ test("gives each effect its own look", async ({ report }) => {
 	const duplicates = [...byLook.values()].filter((ids) => ids.length > 1);
 	expect(duplicates).toEqual([]);
 });
+
+base(
+	"writes premultiplied colour, so a soft edge can't turn into a wash",
+	async ({ page }) => {
+		await page.goto("/");
+		const result = await page.evaluate(async (size) => {
+			const load = (path: string) => import(/* @vite-ignore */ path);
+			const { GlRenderer } = await load("/src/lib/gl/renderer.ts");
+
+			// Bright colour fading to clear: straight alpha would leave colour above alpha.
+			const art = document.createElement("canvas");
+			art.width = size;
+			art.height = size;
+			const ctx = art.getContext("2d")!;
+			const glow = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+			glow.addColorStop(0, "rgba(255, 240, 200, 1)");
+			glow.addColorStop(1, "rgba(255, 240, 200, 0)");
+			ctx.fillStyle = glow;
+			ctx.fillRect(0, 0, size, size);
+
+			const canvas = document.createElement("canvas");
+			canvas.width = size;
+			canvas.height = size;
+			const renderer = new GlRenderer(canvas);
+			renderer.resize(size, size);
+			renderer.loadImage(await createImageBitmap(art));
+			renderer.render([], 0);
+
+			const gl = canvas.getContext("webgl2") as WebGL2RenderingContext;
+			const px = new Uint8Array(size * size * 4);
+			gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+			gl.readPixels(0, 0, size, size, gl.RGBA, gl.UNSIGNED_BYTE, px);
+			let soft = 0;
+			let overAlpha = 0;
+			for (let i = 0; i < px.length; i += 4) {
+				if (px[i + 3] > 0 && px[i + 3] < 255) soft++;
+				if (Math.max(px[i], px[i + 1], px[i + 2]) > px[i + 3] + 1) overAlpha++;
+			}
+			return {
+				premultiplied: gl.getContextAttributes()!.premultipliedAlpha,
+				soft,
+				overAlpha,
+			};
+		}, SIZE);
+		expect(result.premultiplied).toBe(true);
+		expect(result.soft).toBeGreaterThan(0);
+		expect(result.overAlpha).toBe(0);
+	},
+);

@@ -3,7 +3,7 @@
 // segment. Seeded rather than by Math.random, so a stroke is a function of the timestamp
 // like the rest of the picture.
 
-import { mulberry32 } from "../rng";
+import { mulberry32 } from "../../../src/lib/rng";
 import type { ControlFrame, Controls } from "./controls";
 import {
 	figureOf,

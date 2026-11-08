@@ -142,18 +142,9 @@ Outside CI a run reuses whatever already serves its port, so when my dev server 
   (`lib/demo/demo-sources.ts`), each cut moshed with one rolled chain and blended into the next
   by a transition. They replaced hand-drawn canvas posters. I tried moshed 3D and layered 2D
   worlds instead and dropped both: too heavy, and off the app's vibe.
-- Arcs (`lib/arcs/`) is editor-only and stays live, drawn every frame like a model: no baked
-  video. A picture is a function of timeline time, not the clip's in-point, so trimming or moving
-  a clip keeps it on the song. It hears what the audio links hear, the lanes with Drives on, through
-  `renderDrive`; with none there is no picture. Its look lives on the clip (`arcs`), falling back
-  to its pool file's. Users get Reacts to and four controls that each move many knobs, with 50
-  the tuned look; a long list of knobs did too little, so the rest stay in `lab/music/`.
-- Arcs draws only arcDrawer's stroke (github.com/zivavu/arcDrawer), at its slider defaults and
-  with its "over" blend. One layer: I dropped the point-cloud forms, knot, stems, crackle, 3D
-  camera and glints as too much and too random. Structure comes from a figure per song section
-  (`arcs/figures.ts`), whose symmetric copies share one walk; the music moves the pen along it and
-  it's finished before the section ends. Each stroke paints alone into a scratch target, as
-  arcDrawer does; one ribbon per stroke folded into slivers at sharp bends.
+- Music-driven visuals hear what the audio links hear: the lanes with Drives on, through
+  `renderDrive`. With no driving lane there's no picture. Arcs (`lab/music/arcs/`) shipped to the
+  editor unreleased and came back out: I didn't like its look. It stays in the lab only.
 - Area masking is the Mask effect (`effects/catalog/mask.ts`), not a per-effect toggle. It
   limits the effects above it, back to the previous Mask or the top of its own chain (an FX
   lane's chain too), and blends the rest back to how that scope began. Moshes, clears and
