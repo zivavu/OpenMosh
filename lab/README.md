@@ -84,5 +84,7 @@ through the same `renderDrive` the editor's Drives toggle feeds. With no driving
 lane there is no picture. **Copy settings** copies every knob as JSON, and **Reset**
 goes back to the defaults.
 
-The page tunes `src/lib/arcs/`, the visual the editor's Arcs clips draw. It only adds
-the transport, the knobs and a read-out, so what it shows is what the app draws.
+The visual is Arcs (`music/arcs/`): arcDrawer's stroke (github.com/zivavu/arcDrawer)
+walked along a figure per song section, the music moving the pen. It was in the editor
+as a Generate layer and came out again: it didn't look good enough. `bun test
+./lab/music/arcs` runs its tests.

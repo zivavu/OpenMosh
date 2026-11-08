@@ -63,8 +63,6 @@
 	import { getDecodedAudioBuffer } from "../../audio/audio-buffer-cache";
 	import { songProfileOf } from "../../audio/build-song-profile";
 	import { publishSongProfile } from "../../audio/song-profile";
-	import { newArcsFile } from "../../arcs/file";
-	import { publishArcsSong } from "../../arcs/song";
 	import {
 		audioLanesEnd,
 		createAudioClip,
@@ -992,12 +990,6 @@
 		selectedMediaClipId = clip.id;
 		selectedMediaClipIds = [clip.id];
 		void revealLaneRow(lane.id);
-	}
-
-	async function addArcs() {
-		generateOpen = false;
-		await addSequenceSources([newArcsFile()]);
-		showToast("Arcs is in the pool. Drag it onto a lane.", "info");
 	}
 
 	function useGenerated(files: File[]) {
@@ -2151,26 +2143,6 @@
 		reportUnreadableImages,
 		keepAddsThroughPoolUndo,
 	);
-
-	// Arcs hears the same sound, but it's read apart and only for a project that has one.
-	let poolHasArcs = $derived(
-		isSequenceMode && sourceRegistry.sources.some((s) => s.kind === "arcs"),
-	);
-	$effect(() => {
-		if (!poolHasArcs) {
-			publishArcsSong(null);
-			return;
-		}
-		void mixer.plan;
-		void mixer.duration;
-		void audioBank.version;
-		const timer = setTimeout(
-			() => publishArcsSong(() => mixer.analyseArcs(), bumpSourceTick),
-			400,
-		);
-		return () => clearTimeout(timer);
-	});
-	$effect(() => () => publishArcsSong(null));
 
 	/** The pool has dropped these already; the lanes that drew them let go too. */
 	function reportUnreadableImages(sources: SequenceSource[]) {
@@ -6284,7 +6256,6 @@
 				onLaneChange={updateMediaLane}
 				onClipChange={updateMediaClip}
 				onBeforeEdit={beforeMediaClipEdit}
-				arcsHaveMusic={mixer.hasDrive}
 				onClose={() => (selectedMediaClipId = null)}
 				hasTrack={linksHaveAudio}
 				beatSync={sequenceBpm > 0}
@@ -6438,15 +6409,6 @@
 					? { width: resizeWidth, height: resizeHeight }
 					: null}
 				onUse={useGenerated}
-				arcs={isSequenceMode
-					? {
-							ready: mixer.hasDrive,
-							note: mixer.hasDrive
-								? "Lines that move with your music. Put them on a media lane like any clip."
-								: "Arcs follows your music, so turn on Drives on an audio lane first.",
-							onAdd: addArcs,
-						}
-					: undefined}
 				onClose={() => (generateOpen = false)}
 			/>
 		{:catch}

@@ -1,7 +1,7 @@
 // The song, read once into a table indexed by time. A frame depends only on its
 // timestamp, so seeking, replaying and exporting all land on the same picture.
 
-import { followerTaus } from "../audio/auto-range";
+import { followerTaus } from "../../../src/lib/audio/auto-range";
 import {
 	blendBand,
 	placeInRange,
@@ -10,7 +10,7 @@ import {
 	type BandProfile,
 	type Range,
 	type SongProfile,
-} from "../audio/song-profile";
+} from "../../../src/lib/audio/song-profile";
 import type { Look } from "./look";
 
 const FPS = PROFILE_FPS;

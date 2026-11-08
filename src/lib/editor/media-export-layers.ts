@@ -56,7 +56,6 @@ export async function createMediaExportLayers(
 					if (mesh) meshes.set(src.id, mesh);
 					return;
 				}
-				if (src.kind === "arcs") return;
 				if (images.has(src.id)) return;
 				const img = await decodeImage(src.objectUrl);
 				if (img) images.set(src.id, img);
@@ -99,18 +98,6 @@ export async function createMediaExportLayers(
 						if (!mesh) return;
 						renderer.updateLayerModel(layer.key, src.id, mesh);
 						uploaded.set(layer.key, src.id);
-						return;
-					}
-
-					if (src.kind === "arcs") {
-						if (
-							src.arcs &&
-							(uploaded.get(layer.key) !== src.id ||
-								!renderer.hasLayerTexture(layer.key))
-						) {
-							renderer.updateLayerArcs(layer.key, src.arcs);
-							uploaded.set(layer.key, src.id);
-						}
 						return;
 					}
 

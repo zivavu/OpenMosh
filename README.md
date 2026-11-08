@@ -16,7 +16,7 @@ Pick a mode on the upload screen.
 
 ![Single mode with a moshed image and its signal chain](assets/screenshots/single.webp)
 
-**Editor** is a timeline built around a song. Lay clips out on media layers, each with its own mosh, and run effect lanes over the whole frame, with text on a timeline of its own. Any piece of media can be cropped, keyed, erased by hand and run at its own speed. 3D models go on layers too (OBJ, STL, GLB, FBX, PLY), and animated GLB and FBX files play. An FBX needs its textures embedded. Arcs, from Generate, is a layer drawn from the song itself, following the audio lanes with Drives on.
+**Editor** is a timeline built around a song. Lay clips out on media layers, each with its own mosh, and run effect lanes over the whole frame, with text on a timeline of its own. Any piece of media can be cropped, keyed, erased by hand and run at its own speed. 3D models go on layers too (OBJ, STL, GLB, FBX, PLY), and animated GLB and FBX files play. An FBX needs its textures embedded.
 
 ![Editor mode, media layers and effect lanes on the timeline](assets/screenshots/editor.webp)
 

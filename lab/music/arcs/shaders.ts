@@ -1,4 +1,4 @@
-import { GLSL_COMMON } from "../generators/gpu";
+import { GLSL_COMMON } from "../../../src/lib/generators/gpu";
 
 export const ARC_VS = `#version 300 es
 precision highp float;

@@ -468,13 +468,6 @@
 		else void handleFile(files[0]);
 	}
 
-	/** Into the editor with Arcs as the opening media, so it starts on a lane. */
-	async function startWithArcs() {
-		generateOpen = false;
-		const { newArcsFile } = await import("../../arcs/file");
-		onSequence([newArcsFile()]);
-	}
-
 	/** One click in with no file: a random generated batch, sized for the mode. */
 	let sampling = $state(false);
 	async function trySample() {
@@ -914,15 +907,6 @@
 				single={!isMultiMode}
 				onUse={useGenerated}
 				onClose={() => (generateOpen = false)}
-				arcs={selectedMode === "sequence"
-					? {
-							ready: !!pendingAudio,
-							note: pendingAudio
-								? "Lines that move with your music. Opens the editor with them on a lane over your song."
-								: "Arcs follows your music, so add a song first.",
-							onAdd: startWithArcs,
-						}
-					: undefined}
 			/>
 		{:catch}
 			<LoadFailed onclose={() => (generateOpen = false)} />

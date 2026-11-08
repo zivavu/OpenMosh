@@ -2,7 +2,7 @@
  * defaults. Everything is read through here, so a hand-edited file can't ask for more
  * than a knob allows. */
 
-import { PALETTES, type Colors } from "../generators/palette";
+import { PALETTES, type Colors } from "../../../src/lib/generators/palette";
 
 export type ArcsKnobGroup = "structure" | "stroke" | "music" | "listen";
 

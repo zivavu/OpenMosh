@@ -1424,7 +1424,6 @@
 				c.bounceBack;
 				c.speed;
 				c.animation;
-				c.arcs;
 				c.sourceId;
 				c.mode;
 				c.seed;

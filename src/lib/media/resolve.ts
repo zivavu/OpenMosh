@@ -1,4 +1,3 @@
-import type { ArcsSpec } from "../arcs/look";
 import type { AudioResponse } from "../audio/auto-range";
 import { chainClipEffectsAt, laneMoshOptions } from "../editor/chain-clip";
 import { cutAt, type CutList } from "./cut-list";
@@ -46,10 +45,6 @@ export interface ResolvedMediaLayer {
 	sourceTime: number;
 	/** Models only: which animation `sourceTime` is in. */
 	animation?: number;
-	/** Arcs only: the clip's look, when it has its own. */
-	arcs?: ArcsSpec;
-	/** The playhead: Arcs follows the song, whatever the clip's in-point. */
-	timelineTime: number;
 	/** Set on a bouncing clip; see `SideBounce`. */
 	bounce?: SideBounce;
 	slideFrame?: boolean;
@@ -71,8 +66,6 @@ export interface MediaLayerSide {
 	sourceId: string;
 	sourceTime: number;
 	animation?: number;
-	arcs?: ArcsSpec;
-	timelineTime: number;
 	bounce?: SideBounce;
 	effects: EffectInstance[];
 	/** A slideshow draws its slides in its own frame; see `MediaStyle.slideFrame`. */
@@ -292,8 +285,6 @@ export function resolveMediaLayersAt(
 									sourceId: prevSource,
 									...prevAt,
 									animation: prev.animation,
-									arcs: prev.arcs,
-									timelineTime: time,
 									slideFrame: lane.style.slideFrame,
 									effects: chains
 										? chains(lane, prev, time, prevAt.sourceTime)
@@ -315,8 +306,6 @@ export function resolveMediaLayersAt(
 			sourceId,
 			...at,
 			animation: clip.animation,
-			arcs: clip.arcs,
-			timelineTime: time,
 			slideFrame: lane.style.slideFrame,
 			style: lane.style,
 			opacity: lane.style.opacity * mediaClipWeight(clip, time),
