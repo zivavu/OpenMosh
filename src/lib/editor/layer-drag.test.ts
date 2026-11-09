@@ -129,6 +129,35 @@ describe("scaleFromHandle", () => {
 		);
 		expect(next.scaleX).toBe(MIN_SCALE);
 	});
+
+	const SIDE = frame({ hy: 0, c0x: 50, c0y: 0 });
+
+	test("with flip, a side dragged past the far one mirrors the layer onto the cursor", () => {
+		const next = scaleFromHandle(FROM, SIDE, 100, 150, FW, FH, false, true);
+		expect(next.scaleX).toBeCloseTo(-0.5);
+		const b = boxOf(next);
+		const hw = Math.abs(b.hw);
+		expect(b.cx + hw).toBeCloseTo(150);
+		expect(b.cx - hw).toBeCloseTo(100);
+	});
+
+	test("with flip, dragging a mirrored side back across turns it the right way", () => {
+		const from = { ...FROM, scaleX: -1 };
+		const next = scaleFromHandle(from, SIDE, 100, 150, FW, FH, false, true);
+		expect(next.scaleX).toBeCloseTo(0.5);
+	});
+
+	test("with flip, the floor holds on whichever side of zero the cursor is", () => {
+		const at = (x: number) =>
+			scaleFromHandle(FROM, SIDE, x, 150, FW, FH, false, true).scaleX;
+		expect(at(151)).toBe(MIN_SCALE);
+		expect(at(149)).toBeCloseTo(-MIN_SCALE);
+	});
+
+	test("without flip, the far side is as far as a drag goes", () => {
+		const next = scaleFromHandle(FROM, SIDE, 100, 150, FW, FH, false);
+		expect(next.scaleX).toBe(MIN_SCALE);
+	});
 });
 describe("clampMove", () => {
 	// The 100×80 box: half-extents 50×40.

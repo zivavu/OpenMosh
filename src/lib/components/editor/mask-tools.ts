@@ -13,6 +13,9 @@ export type MaskBox = {
 	w: number;
 	h: number;
 	rot: number;
+	/** The layer is mirrored across that axis, so its chain's uv runs backwards on screen. */
+	flipX?: boolean;
+	flipY?: boolean;
 };
 
 export function measureMaskBox(
@@ -44,6 +47,8 @@ export function measureMaskBox(
 			w: w * s,
 			h: h * s,
 			rot: rect.rot,
+			flipX: lane.style.scaleX < 0,
+			flipY: lane.style.scaleY < 0,
 		};
 	}
 	return {
@@ -62,7 +67,9 @@ export function sameBox(a: MaskBox | null, b: MaskBox | null): boolean {
 		Math.abs(a.top - b.top) < 0.5 &&
 		Math.abs(a.w - b.w) < 0.5 &&
 		Math.abs(a.h - b.h) < 0.5 &&
-		a.rot === b.rot
+		a.rot === b.rot &&
+		!!a.flipX === !!b.flipX &&
+		!!a.flipY === !!b.flipY
 	);
 }
 
@@ -95,9 +102,11 @@ export function boxUv(
 	const dy = y - (box.top + box.h / 2);
 	const c = Math.cos(box.rot);
 	const s = Math.sin(box.rot);
+	const u = (dx * c + dy * s) / box.w;
+	const v = (-dx * s + dy * c) / box.h;
 	return {
-		u: (dx * c + dy * s) / box.w + 0.5,
-		v: (-dx * s + dy * c) / box.h + 0.5,
+		u: (box.flipX ? -u : u) + 0.5,
+		v: (box.flipY ? -v : v) + 0.5,
 	};
 }
 
@@ -107,8 +116,8 @@ export function uvPoint(
 	u: number,
 	v: number,
 ): { x: number; y: number } {
-	const lx = (u - 0.5) * box.w;
-	const ly = (v - 0.5) * box.h;
+	const lx = (u - 0.5) * box.w * (box.flipX ? -1 : 1);
+	const ly = (v - 0.5) * box.h * (box.flipY ? -1 : 1);
 	const c = Math.cos(box.rot);
 	const s = Math.sin(box.rot);
 	return {

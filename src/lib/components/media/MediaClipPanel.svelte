@@ -613,14 +613,14 @@
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				class="row"
-				title="Stretch across, on top of the scale. Dragging a side handle on the preview moves this. Double-click to reset."
+				title="Stretch across, on top of the scale. Below 0% mirrors it. Dragging a side handle on the preview moves this; drag it past the far side to flip. Double-click to reset."
 				ondblclick={(e) => resetStyle(e, "scaleX")}
 			>
 				<label for="mc-scale-x">Scale X</label>
 				<RangeSlider
 					id="mc-scale-x"
 					value={lane.style.scaleX}
-					min={0.05}
+					min={-3}
 					max={3}
 					step={0.01}
 					oninput={(v) => setStyle("scaleX", v, `mc-scale-x-${lane.id}`)}
@@ -632,14 +632,14 @@
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				class="row"
-				title="Stretch down, on top of the scale. Dragging a top or bottom handle on the preview moves this. Double-click to reset."
+				title="Stretch down, on top of the scale. Below 0% mirrors it. Dragging a top or bottom handle on the preview moves this; drag it past the far side to flip. Double-click to reset."
 				ondblclick={(e) => resetStyle(e, "scaleY")}
 			>
 				<label for="mc-scale-y">Scale Y</label>
 				<RangeSlider
 					id="mc-scale-y"
 					value={lane.style.scaleY}
-					min={0.05}
+					min={-3}
 					max={3}
 					step={0.01}
 					oninput={(v) => setStyle("scaleY", v, `mc-scale-y-${lane.id}`)}
