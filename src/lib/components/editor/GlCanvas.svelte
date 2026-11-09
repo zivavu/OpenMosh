@@ -811,7 +811,7 @@
 			if (!drag.moved && rotation === from.rotation) return;
 			next = { ...from, rotation };
 		} else {
-			next = scaleFromHandle(from, drag, px, py, fw, fh, e.altKey);
+			next = scaleFromHandle(from, drag, px, py, fw, fh, e.altKey, true);
 		}
 		if (!drag.moved) {
 			drag.moved = true;

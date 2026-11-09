@@ -146,6 +146,9 @@ interface LayerBox {
 	cy: number;
 	/** Radians, clockwise. */
 	rot: number;
+	/** Mirrored across that axis: a negative scale. */
+	flipX?: boolean;
+	flipY?: boolean;
 }
 
 type ChainOp =
@@ -3036,12 +3039,16 @@ export class GlRenderer {
 			h = texH * k;
 		}
 		const scale = Math.max(style.scale, 0.01);
+		const sx = style.scaleX ?? 1;
+		const sy = style.scaleY ?? 1;
 		return {
-			drawW: w * scale * Math.max(style.scaleX ?? 1, 0.01),
-			drawH: h * scale * Math.max(style.scaleY ?? 1, 0.01),
+			drawW: w * scale * Math.max(Math.abs(sx), 0.01),
+			drawH: h * scale * Math.max(Math.abs(sy), 0.01),
 			cx: style.x,
 			cy: style.y,
 			rot: (style.rotation * Math.PI) / 180,
+			flipX: sx < 0,
+			flipY: sy < 0,
 		};
 	}
 
@@ -3057,6 +3064,13 @@ export class GlRenderer {
 			gl.uniform2f(prog.uniforms["u_center"], box.cx, box.cy);
 		}
 		if (prog.uniforms["u_rot"]) gl.uniform1f(prog.uniforms["u_rot"], box.rot);
+		if (prog.uniforms["u_mirror"]) {
+			gl.uniform2f(
+				prog.uniforms["u_mirror"],
+				box.flipX ? 1 : 0,
+				box.flipY ? 1 : 0,
+			);
+		}
 	}
 
 	/** Draw a layer's media into a full-frame buffer at its placement, keying out

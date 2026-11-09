@@ -242,7 +242,10 @@
 		if (!box) return null;
 		const g = shapeGeometry(shape, box.w, box.h);
 		const at = uvPoint(box, shape.x, shape.y);
-		return { ...at, w: g.sw, h: g.sh, rot: box.rot + g.rot };
+		// A mirrored layer mirrors the shape on it, which also turns it the other way.
+		const mirror = `scale(${box.flipX ? -1 : 1}, ${box.flipY ? -1 : 1})`;
+		const turn = `rotate(${box.rot}rad) ${mirror} rotate(${g.rot}rad)`;
+		return { ...at, w: g.sw, h: g.sh, turn };
 	});
 	/** Long enough for the gradient's edge to cross the whole box at any turn. */
 	const lineLength = $derived(box ? 2 * Math.hypot(box.w, box.h) : 0);
@@ -272,7 +275,7 @@
 	{#if placed && gradient}
 		<div
 			class="gradient-pivot"
-			style="left: {placed.x}px; top: {placed.y}px; transform: rotate({placed.rot}rad)"
+			style="left: {placed.x}px; top: {placed.y}px; transform: {placed.turn}"
 		>
 			<span class="gradient-edge" style:width="{lineLength}px"></span>
 			<span class="gradient-grip"></span>
@@ -290,7 +293,7 @@
 			class:round={target.shape === "ellipse"}
 			style="left: {placed.x - placed.w / 2}px; top: {placed.y -
 				placed.h /
-					2}px; width: {placed.w}px; height: {placed.h}px; transform: rotate({placed.rot}rad)"
+					2}px; width: {placed.w}px; height: {placed.h}px; transform: {placed.turn}"
 		>
 			{#each HANDLES as h (h.hx * 3 + h.hy)}
 				<!-- svelte-ignore a11y_no_static_element_interactions -->

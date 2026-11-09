@@ -10,6 +10,17 @@ describe("boxUv and uvPoint", () => {
 		expect(back.u).toBeCloseTo(0.2);
 		expect(back.v).toBeCloseTo(0.85);
 	});
+
+	it("run backwards across a mirrored axis, and still undo each other", () => {
+		const box = { left: 0, top: 0, w: 200, h: 100, rot: 0.3, flipX: true };
+		const left = boxUv({ ...box, rot: 0 }, 20, 50);
+		expect(left.u).toBeGreaterThan(0.5);
+		expect(left.v).toBeCloseTo(0.5);
+		const p = uvPoint(box, 0.2, 0.7);
+		const back = boxUv(box, p.x, p.y);
+		expect(back.u).toBeCloseTo(0.2);
+		expect(back.v).toBeCloseTo(0.7);
+	});
 });
 
 describe("createParamSession", () => {

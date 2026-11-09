@@ -75,6 +75,8 @@ const LAYER_BOX_GLSL = `uniform vec2 u_frameSize;
 uniform vec2 u_drawSize;
 uniform vec2 u_center;
 uniform float u_rot;
+// 1 on an axis the layer is mirrored across.
+uniform vec2 u_mirror;
 
 /** Frame uv -> uv inside the placed media. Outside [0,1] is off the layer. */
 vec2 layerUv(vec2 uv) {
@@ -82,7 +84,7 @@ vec2 layerUv(vec2 uv) {
   float s = sin(u_rot);
   float c = cos(u_rot);
   vec2 r = vec2(c * p.x + s * p.y, c * p.y - s * p.x);
-  return r / max(u_drawSize, vec2(1.0)) + 0.5;
+  return r * (1.0 - 2.0 * u_mirror) / max(u_drawSize, vec2(1.0)) + 0.5;
 }
 
 float insideLayer(vec2 uv) {

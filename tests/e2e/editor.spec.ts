@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import {
 	poolCount,
 	canvasStats,
@@ -8,6 +8,7 @@ import {
 	mediaClips,
 	nearestColor,
 	openEditor,
+	PREVIEW_CANVAS,
 	selectClip,
 	splitClipAt,
 	waitForRender,
@@ -116,4 +117,53 @@ test.describe("a clip's chain", () => {
 		await selectClip(page, 0);
 		expect(await liveEffectNames(page)).toEqual(rolled);
 	});
+});
+
+/** Mean red across the preview's left quarter; the pattern's red climbs left to right. */
+async function leftQuarterRed(page: Page) {
+	return page.evaluate(
+		(selector) =>
+			new Promise<number>((resolve) => {
+				requestAnimationFrame(() => {
+					const src = document.querySelector(selector) as HTMLCanvasElement;
+					const off = document.createElement("canvas");
+					off.width = 64;
+					off.height = 64;
+					const ctx = off.getContext("2d")!;
+					ctx.drawImage(src, 0, 0, 64, 64);
+					const px = ctx.getImageData(0, 0, 16, 64).data;
+					let r = 0;
+					for (let i = 0; i < px.length; i += 4) r += px[i];
+					resolve(r / (px.length / 4));
+				});
+			}),
+		PREVIEW_CANVAS,
+	);
+}
+
+test("dragging a side handle past the far side mirrors the layer", async ({
+	page,
+}) => {
+	await openEditor(page, { sources: [["pattern.png", "pattern"]] });
+	await waitForRender(page);
+	await selectClip(page, 0);
+	const before = await leftQuarterRed(page);
+
+	const outline = (await page.locator(".layer-outline").boundingBox())!;
+	const handle = page.locator('.layer-handle[style*="left: 100%; top: 50%"]');
+	const grab = (await handle.boundingBox())!;
+	const y = grab.y + grab.height / 2;
+	// Alt pins the centre, so the right edge dragged to the left one is a mirror in place.
+	await page.mouse.move(grab.x + grab.width / 2, y);
+	await page.keyboard.down("Alt");
+	await page.mouse.down();
+	await page.mouse.move(outline.x, y, { steps: 12 });
+	await page.mouse.up();
+	await page.keyboard.up("Alt");
+
+	await expect
+		.poll(() => leftQuarterRed(page), {
+			message: "the left side never mirrored",
+		})
+		.toBeGreaterThan(before + 80);
 });

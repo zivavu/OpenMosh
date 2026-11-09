@@ -36,6 +36,14 @@ export interface HandleFrame {
 	c0y: number;
 }
 
+/** How far a side drag stretches an axis now at `from`. Held to `MIN_SCALE` either
+ * way; with `flip`, dragging past the far side crosses zero and mirrors it. */
+function sideFactor(f: number, from: number, flip: boolean): number {
+	const floor = MIN_SCALE / Math.abs(from);
+	if (!flip) return Math.max(f, floor);
+	return Math.abs(f) >= floor ? f : f < 0 ? -floor : floor;
+}
+
 /** The style after a handle drag, with the dragged edge landing on the cursor. */
 export function scaleFromHandle(
 	from: MediaStyle,
@@ -45,6 +53,8 @@ export function scaleFromHandle(
 	fw: number,
 	fh: number,
 	alt: boolean,
+	/** A side handle may cross the far side to mirror Scale X or Y. */
+	flip = false,
 ): MediaStyle {
 	const dx = px - g.cx;
 	const dy = py - g.cy;
@@ -62,11 +72,11 @@ export function scaleFromHandle(
 		next.scale = from.scale * fx;
 	} else if (g.hx !== 0) {
 		const p = lx / g.c0x;
-		fx = Math.max(alt ? p : 0.5 + p / 2, MIN_SCALE / from.scaleX);
+		fx = sideFactor(alt ? p : 0.5 + p / 2, from.scaleX, flip);
 		next.scaleX = from.scaleX * fx;
 	} else {
 		const p = ly / g.c0y;
-		fy = Math.max(alt ? p : 0.5 + p / 2, MIN_SCALE / from.scaleY);
+		fy = sideFactor(alt ? p : 0.5 + p / 2, from.scaleY, flip);
 		next.scaleY = from.scaleY * fy;
 	}
 	// The opposite side stays put unless Alt asks for the centre to.
