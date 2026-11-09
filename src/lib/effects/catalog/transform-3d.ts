@@ -31,7 +31,7 @@ export const definition: EffectDefinition = {
 			min: -180,
 			max: 180,
 			step: 1,
-			defaultValue: 25,
+			defaultValue: 0,
 			moshMin: -55,
 			moshMax: 55,
 		},
