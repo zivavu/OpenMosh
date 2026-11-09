@@ -10,6 +10,7 @@
 		Play,
 		Plus,
 		SlidersHorizontal,
+		Trash2,
 	} from "lucide-svelte";
 	import {
 		DEFAULT_SOURCE_EDIT,
@@ -18,6 +19,7 @@
 		type SourceEdit,
 	} from "../../media";
 	import { lazy } from "../../lazy";
+	import { modKey } from "../../input-device";
 	import { readRaw, writeRaw } from "../../storage";
 	import {
 		SOURCE_DND_TYPE,
@@ -274,6 +276,16 @@
 							<SlidersHorizontal size={10} />
 						</button>
 					{/if}
+					{#if onRemove}
+						<button
+							class="rail-remove"
+							onclick={() => onRemove(src.id)}
+							title="Remove “{src.name}” ({modKey}+Z puts it back)"
+							aria-label="Remove {src.name}"
+						>
+							<Trash2 size={10} />
+						</button>
+					{/if}
 				</div>
 			{/each}
 			<button
@@ -468,6 +480,38 @@
 
 	.rail-edit:hover {
 		color: var(--text);
+	}
+
+	/* Over the kind badge's corner, clear of the thumb's middle that a click or
+	   drag starts from. Unclickable while hidden. */
+	.rail-remove {
+		position: absolute;
+		top: 2px;
+		right: 2px;
+		display: flex;
+		padding: 2px;
+		border: none;
+		border-radius: 2px;
+		background: rgba(0, 0, 0, 0.6);
+		color: var(--text-3);
+		opacity: 0;
+		pointer-events: none;
+		cursor: pointer;
+		transition: opacity var(--t-fast);
+	}
+
+	.rail-slot:hover .rail-remove,
+	.rail-remove:focus-visible {
+		opacity: 1;
+		pointer-events: auto;
+	}
+
+	.rail-remove:hover {
+		color: var(--rec);
+	}
+
+	.rail-slot:hover .rail-kind {
+		opacity: 0;
 	}
 
 	.rail-thumb {

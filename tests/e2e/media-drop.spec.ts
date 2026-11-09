@@ -221,6 +221,21 @@ test("dragging a rail thumb onto another reorders the pool", async ({
 	await expect.poll(names).not.toEqual(before);
 });
 
+test("a rail thumb's trash button removes it from the pool, and undo brings it back", async ({
+	page,
+}) => {
+	await openLayers(page);
+	const names = async () => railThumbs(page).allInnerTexts();
+	const before = await names();
+
+	await railThumbs(page).first().hover();
+	await page.locator(".rail-remove").first().click();
+	await expect(railThumbs(page)).toHaveCount(before.length - 1);
+
+	await page.keyboard.press("ControlOrMeta+z");
+	await expect.poll(names).toEqual(before);
+});
+
 test("dropping a thumb on the preview lays it on a new lane, centred where it landed", async ({
 	page,
 }) => {
