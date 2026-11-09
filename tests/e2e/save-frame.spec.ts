@@ -1,12 +1,15 @@
 import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 import {
+	canvasStats,
+	dragSourceToLane,
 	mediaClips,
 	nearestColor,
 	openEditor,
 	openSingle,
 	PREVIEW_CANVAS,
 	selectMode,
+	splitClipAt,
 	waitForRender,
 	waitForSaved,
 } from "./app";
@@ -81,6 +84,48 @@ test("saves the editor's frame, not a black image", async ({ page }) => {
 	// Saving early still passes with the fix; it just stops catching the bug.
 	await page.waitForTimeout(2000);
 	expect(nearestColor(await saveAndMeasure(page), PALETTE)).toBe("red");
+});
+
+test("an editor on PNG saves the frame under the playhead", async ({
+	page,
+}) => {
+	await openEditor(page, {
+		sources: [
+			["red.png", RED],
+			["blue.png", BLUE],
+		],
+		track: { seconds: 4 },
+	});
+	await waitForRender(page);
+	await splitClipAt(page, 0.5);
+	await expect(mediaClips(page)).toHaveCount(2);
+	await dragSourceToLane(page, { thumb: 1, fraction: 0.75 });
+	await expect(mediaClips(page).nth(1)).toContainText("blue.png");
+
+	await page.getByRole("button", { name: "Mosh settings" }).click();
+	await page.getByRole("button", { name: "PNG", exact: true }).click();
+	const save = page.getByRole("button", { name: "SAVE", exact: true });
+	await expect(save).toBeVisible();
+
+	const ruler = page.getByRole("slider", { name: "Start marker" });
+	const box = (await ruler.boundingBox())!;
+	for (const [fraction, color] of [
+		[0.75, "blue"],
+		[0.25, "red"],
+	] as const) {
+		await ruler.click({
+			position: { x: box.width * fraction, y: box.height / 2 },
+		});
+		await expect
+			.poll(async () => nearestColor((await canvasStats(page)).mean, PALETTE))
+			.toBe(color);
+		const download = page.waitForEvent("download");
+		await save.click();
+		const file = await download;
+		expect(file.suggestedFilename()).toMatch(/\.png$/);
+		const saved = await savedImageMean(page, (await file.path())!);
+		expect(nearestColor(saved, PALETTE)).toBe(color);
+	}
 });
 
 test("saves the single-mode frame", async ({ page }) => {

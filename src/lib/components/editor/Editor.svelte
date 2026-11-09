@@ -607,7 +607,7 @@
 		})();
 	});
 
-	// A lane timeline is a video, so sequence mode skips the still-image picker.
+	// The editor's still is the frame under the playhead; it starts on video.
 	let format = $state<"png" | "jpg" | "webm">(
 		isMobile && untrack(() => mode) !== "sequence" ? "png" : "webm",
 	);
@@ -1530,7 +1530,7 @@
 			moshAudioLinkStrength,
 			moshLinkBand: linkBand.value,
 			hasAudio,
-			still: !isSequenceMode && isImageFormat,
+			still: isImageFormat,
 		};
 	}
 
@@ -5299,15 +5299,7 @@
 				</button>
 				<div class="output-group">
 					<span class="rack-label">Output</span>
-					<ButtonGroup
-						buttons={[
-							{ label: "PNG", value: "png" },
-							{ label: "JPG", value: "jpg" },
-							{ label: videoFormatLabel, value: "webm" },
-						]}
-						value={format}
-						onchange={(v) => (format = v)}
-					/>
+					{@render formatPicker()}
 				</div>
 			{/if}
 		</TopBar>
@@ -5605,18 +5597,8 @@
 				bind:showSettings={showMoshSettings}
 			>
 				{#snippet settingsContent()}
-					{#if !isSequenceMode}
-						<ButtonGroup
-							buttons={[
-								{ label: "PNG", value: "png" },
-								{ label: "JPG", value: "jpg" },
-								{ label: videoFormatLabel, value: "webm" },
-							]}
-							value={format}
-							onchange={(v) => (format = v)}
-						/>
-						<div class="settings-divider"></div>
-					{/if}
+					{@render formatPicker()}
+					<div class="settings-divider"></div>
 					<div class="mosh-setting-row">
 						<label for="show-fps">Show FPS</label>
 						<Checkbox id="show-fps" bind:checked={showFps} />
@@ -6185,6 +6167,17 @@
 			}}
 		/>
 	</div>
+	{#snippet formatPicker()}
+		<ButtonGroup
+			buttons={[
+				{ label: "PNG", value: "png" },
+				{ label: "JPG", value: "jpg" },
+				{ label: videoFormatLabel, value: "webm" },
+			]}
+			value={format}
+			onchange={(v) => (format = v)}
+		/>
+	{/snippet}
 	{#snippet moshSettings()}
 		<div class="mosh-settings-wrapper">
 			<MoshSettingsPanel
