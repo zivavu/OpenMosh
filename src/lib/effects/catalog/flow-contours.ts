@@ -5,6 +5,7 @@ import type { EffectDefinition } from "../types";
 export const definition: EffectDefinition = {
 	id: "flow-contours",
 	name: "Flow Contours",
+	needsPlayback: true,
 	params: [
 		{
 			key: "bands",

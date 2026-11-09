@@ -1530,6 +1530,7 @@
 			moshAudioLinkStrength,
 			moshLinkBand: linkBand.value,
 			hasAudio,
+			still: !isSequenceMode && isImageFormat,
 		};
 	}
 

@@ -5,6 +5,7 @@ import type { EffectDefinition } from "../types";
 export const definition: EffectDefinition = {
 	id: "petri",
 	name: "Petri",
+	needsPlayback: true,
 	// Curated rolls leave it out: it only fits when picked on purpose.
 	moshable: false,
 	params: [

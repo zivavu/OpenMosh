@@ -5,6 +5,7 @@ import type { EffectDefinition } from "../types";
 export const definition: EffectDefinition = {
 	id: "fast-mosh",
 	name: "Fast Mosh",
+	needsPlayback: true,
 	params: [
 		{
 			key: "hold",

@@ -5,6 +5,7 @@ import type { EffectDefinition } from "../types";
 export const definition: EffectDefinition = {
 	id: "melt",
 	name: "Melt",
+	needsPlayback: true,
 	params: [
 		{
 			key: "amount",

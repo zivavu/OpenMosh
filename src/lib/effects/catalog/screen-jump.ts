@@ -6,6 +6,7 @@ import type { EffectDefinition } from "../types";
 export const definition: EffectDefinition = {
 	id: "screen-jump",
 	name: "Screen Jump",
+	needsPlayback: true,
 	params: [
 		{
 			key: "direction",

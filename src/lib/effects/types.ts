@@ -110,6 +110,9 @@ export interface EffectDefinition {
 	moshable?: false;
 	/** Draws nothing useful without music, so the panel hides it until there is a track. */
 	needsAudio?: true;
+	/** Builds up across frames, so a single still frame shows nothing of it. A roll
+	 * for a PNG/JPG save never picks it. */
+	needsPlayback?: true;
 	/** The param the renderer integrates into `u_time`, so changing it changes the rate
 	 * rather than the position. Defaults to "speed", where there is one. */
 	rateParam?: string;

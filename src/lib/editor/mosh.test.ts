@@ -225,6 +225,27 @@ describe("generateMosh styles", () => {
 		expect(picked(false)).toBe(false);
 		expect(picked(true)).toBe(true);
 	});
+
+	it("leaves playback-only effects off a roll for a still", () => {
+		const playbackOnly = EFFECT_DEFINITIONS.filter((d) => d.needsPlayback).map(
+			(d) => d.id,
+		);
+		const picked = (still: boolean) => {
+			const seen = new Set<string>();
+			for (let seed = 1; seed <= 400; seed++) {
+				const effects = loadInitialEffects();
+				for (const e of effects) e.enabled = playbackOnly.includes(e.defId);
+				withSeededRandom(seed, () =>
+					generateMosh(effects, { ...options, still }),
+				);
+				for (const e of effects) if (e.enabled) seen.add(e.defId);
+			}
+			return playbackOnly.some((id) => seen.has(id));
+		};
+		expect(playbackOnly).toContain("motion-mask");
+		expect(picked(true)).toBe(false);
+		expect(picked(false)).toBe(true);
+	});
 });
 
 describe("Mask effects", () => {

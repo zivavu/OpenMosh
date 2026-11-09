@@ -6,6 +6,7 @@ import type { EffectDefinition } from "../types";
 export const definition: EffectDefinition = {
 	id: "strobe",
 	name: "Strobe",
+	needsPlayback: true,
 	params: [
 		...clockParams(
 			"Rate",
