@@ -5,6 +5,7 @@ import type { EffectDefinition } from "../types";
 export const definition: EffectDefinition = {
 	id: "liquid-light",
 	name: "Liquid Light",
+	needsPlayback: true,
 	params: [
 		{
 			key: "scale",

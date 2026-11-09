@@ -5,6 +5,7 @@ import type { EffectDefinition } from "../types";
 export const definition: EffectDefinition = {
 	id: "motion-mask",
 	name: "Motion Mask",
+	needsPlayback: true,
 	params: [
 		{
 			key: "threshold",

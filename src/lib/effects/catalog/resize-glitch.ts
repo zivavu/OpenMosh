@@ -6,6 +6,7 @@ import type { EffectDefinition } from "../types";
 export const definition: EffectDefinition = {
 	id: "resize-glitch",
 	name: "Resize Glitch",
+	needsPlayback: true,
 	params: [
 		{
 			key: "chance",

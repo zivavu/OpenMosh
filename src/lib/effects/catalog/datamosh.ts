@@ -6,6 +6,7 @@ import type { EffectDefinition } from "../types";
 export const definition: EffectDefinition = {
 	id: "datamosh",
 	name: "Datamosh",
+	needsPlayback: true,
 	params: [
 		{
 			key: "amount",

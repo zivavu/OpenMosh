@@ -11,6 +11,7 @@ import type { EffectDefinition } from "../types";
 export const definition: EffectDefinition = {
 	id: "feedback",
 	name: "Feedback",
+	needsPlayback: true,
 	params: [
 		{
 			key: "decay",

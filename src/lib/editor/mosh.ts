@@ -29,6 +29,8 @@ export interface MoshOptions {
 	/** Band every rolled link listens to. Defaults to the full spectrum. */
 	moshLinkBand?: FreqBand;
 	hasAudio: boolean;
+	/** Rolling for a single saved frame: effects that need playback stay off. */
+	still?: boolean;
 	/** When true, only enabled effects are included in random mosh. */
 	onlyMoshEnabled?: boolean;
 	/** Rolling for a 3D model: a 3D Transform always comes along to turn it. */
@@ -42,17 +44,20 @@ export function isMoshable(effect: EffectInstance): boolean {
 }
 
 /** Effects a roll may switch on. Curated skips the ones marked `moshable: false`;
- * random takes anything unlocked. Without music, neither picks a `needsAudio` one. */
+ * random takes anything unlocked. Without music, neither picks a `needsAudio` one,
+ * and a roll for a still never picks a `needsPlayback` one. */
 export function isRollable(
 	effect: EffectInstance,
 	style: MoshStyle = "random",
 	hasAudio = true,
+	still = false,
 ): boolean {
 	const def = getDefinition(effect.defId);
 	return (
 		isMoshable(effect) &&
 		(style !== "curated" || def?.moshable !== false) &&
-		(hasAudio || !def?.needsAudio)
+		(hasAudio || !def?.needsAudio) &&
+		!(still && def?.needsPlayback)
 	);
 }
 
@@ -171,13 +176,13 @@ export function generateMosh(
 	} = options;
 	const style = options.moshStyle ?? "random";
 	// Unlocked effects the style never picks still go off with the roll.
+	const rollable = (e: EffectInstance) =>
+		isRollable(e, style, options.hasAudio, options.still);
 	for (const e of effects) {
-		if (isMoshable(e) && !isRollable(e, style, options.hasAudio))
-			e.enabled = false;
+		if (isMoshable(e) && !rollable(e)) e.enabled = false;
 	}
 	const moshable = effects.filter(
-		(e) =>
-			isRollable(e, style, options.hasAudio) && (!onlyMoshEnabled || e.enabled),
+		(e) => rollable(e) && (!onlyMoshEnabled || e.enabled),
 	);
 	const clampedMin = Math.min(moshMin, moshable.length);
 	const clampedMax = Math.min(moshMax, moshable.length);
