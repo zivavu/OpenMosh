@@ -5,7 +5,7 @@ import {
 	type AudioResponse,
 } from "../audio/auto-range";
 import { downloadBlob, recordVideo } from "../recorder";
-import { getExportFormat } from "../export-format.svelte";
+import { getExportFormat, getExportQuality } from "../export-format.svelte";
 import { preloadCaptionFonts } from "../caption";
 import {
 	createTextChainSource,
@@ -398,6 +398,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 			onFinalizing,
 			onNotice: ctx.onNotice,
 			container,
+			quality: getExportQuality(),
 			signal,
 			...(ctx.sequence?.mix && { audioMix: ctx.sequence.mix }),
 			// Explicit audio track: always include for both mux output and FFT reactivity

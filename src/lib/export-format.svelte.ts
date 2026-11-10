@@ -1,8 +1,28 @@
+import {
+	DEFAULT_EXPORT_QUALITY,
+	type ExportQuality,
+	isExportQuality,
+} from "./export-quality";
 import { readRaw, writeRaw } from "./storage";
 
 export type VideoContainer = "webm" | "mp4";
 
 const KEY = "openmosh-export-format";
+const QUALITY_KEY = "openmosh-export-quality";
+
+const storedQuality = readRaw(QUALITY_KEY);
+let quality = $state<ExportQuality>(
+	isExportQuality(storedQuality) ? storedQuality : DEFAULT_EXPORT_QUALITY,
+);
+
+export function getExportQuality(): ExportQuality {
+	return quality;
+}
+
+export function setExportQuality(value: ExportQuality) {
+	quality = value;
+	writeRaw(QUALITY_KEY, value);
+}
 
 // Phones default to MP4: the iPhone Photos app can't play WebM.
 const stored = readRaw(KEY);

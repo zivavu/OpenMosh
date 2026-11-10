@@ -6,9 +6,12 @@
 		getExportFormat,
 		isMp4Supported,
 		probeMp4,
+		getExportQuality,
 		setExportFormat,
+		setExportQuality,
 		type VideoContainer,
 	} from "../../export-format.svelte";
+	import type { ExportQuality } from "../../export-quality";
 
 	interface Props {
 		recording: boolean;
@@ -46,6 +49,24 @@
 			hint: "H.264 MP4 plays almost anywhere, Instagram and the iPhone Photos app included.",
 		},
 	];
+	const QUALITIES: { value: ExportQuality; label: string; hint: string }[] = [
+		{
+			value: "small",
+			label: "Small",
+			hint: "Smallest file, for chats. Fine detail and heavy glitching come out blocky.",
+		},
+		{ value: "standard", label: "Standard", hint: "Right for most videos." },
+		{
+			value: "high",
+			label: "High",
+			hint: "Up to twice Standard's size, for busy, noisy effects.",
+		},
+		{
+			value: "max",
+			label: "Max",
+			hint: "Up to four times Standard's size, for YouTube or editing later.",
+		},
+	];
 	const MP4_UNSUPPORTED =
 		"This browser can't encode H.264, so MP4 is off here. Chrome and Edge can.";
 
@@ -55,6 +76,36 @@
 		}
 	}
 </script>
+
+{#snippet choiceRow<T extends string>(
+	label: string,
+	options: { value: T; label: string; hint: string }[],
+	current: T,
+	choose: (value: T) => void,
+	offReason: (value: T) => string | null = () => null,
+)}
+	<div class="format-row" role="group" aria-label={label}>
+		{#each options as o (o.value)}
+			{@const off = offReason(o.value)}
+			<button
+				class="format-btn"
+				class:active={current === o.value}
+				aria-pressed={current === o.value}
+				disabled={!!off}
+				title={off ?? o.hint}
+				onclick={() => choose(o.value)}
+			>
+				{o.label}
+			</button>
+		{/each}
+		<span
+			class="format-info"
+			title={options.find((o) => o.value === current)?.hint}
+		>
+			<Info size={11} />
+		</span>
+	</div>
+{/snippet}
 
 <div class="record-group" bind:this={groupEl}>
 	<button
@@ -71,27 +122,20 @@
 	{#if showSettings && settingsContent}
 		<div class="bar-pop record-settings">
 			{@render settingsContent()}
-			<div class="format-row" role="group" aria-label="Video format">
-				{#each FORMATS as f (f.value)}
-					{@const off = f.value === "mp4" && isMp4Supported() === false}
-					<button
-						class="format-btn"
-						class:active={getExportFormat() === f.value}
-						aria-pressed={getExportFormat() === f.value}
-						disabled={off}
-						title={off ? MP4_UNSUPPORTED : f.hint}
-						onclick={() => setExportFormat(f.value)}
-					>
-						{f.label}
-					</button>
-				{/each}
-				<span
-					class="format-info"
-					title={FORMATS.find((f) => f.value === getExportFormat())?.hint}
-				>
-					<Info size={11} />
-				</span>
-			</div>
+			{@render choiceRow(
+				"Video format",
+				FORMATS,
+				getExportFormat(),
+				setExportFormat,
+				(v) =>
+					v === "mp4" && isMp4Supported() === false ? MP4_UNSUPPORTED : null,
+			)}
+			{@render choiceRow(
+				"Video quality",
+				QUALITIES,
+				getExportQuality(),
+				setExportQuality,
+			)}
 		</div>
 	{/if}
 </div>
