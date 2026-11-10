@@ -1,10 +1,33 @@
 # Changelog
 
+## [1.0.4](https://github.com/zivavu/OpenMosh/compare/v1.0.3...v1.0.4) (2026-11-10)
+
+The editor can now save the frame under the playhead as a PNG or JPG. Record's settings have a video quality choice, from Small for sharing in chats to Max for YouTube or editing later; Standard keeps the bitrate exports had before. In the editor you can flip media by dragging Scale X or Y below zero, and remove media from the rail with the trash button on its thumbnail (Ctrl+Z puts it back). Generate takes several generator types at once. Glows no longer turn into a bright wash over a transparent background. A mosh for a PNG or JPG leaves out effects that only show during playback, a new 3D Transform starts facing the camera, and a roll clears the preset's highlight once it changes the chain.
+
+3D Transforms already in a project keep their angle; only new ones start facing the camera.
+
+
+### Added
+
+* Flip media by dragging Scale X or Y past zero ([d7bd4b3](https://github.com/zivavu/OpenMosh/commit/d7bd4b3561c2570c67bb19063e878b19832436ed))
+* Pick a video quality in Record's settings ([6cfea5e](https://github.com/zivavu/OpenMosh/commit/6cfea5ee63435ca9ef3e1a0bd6353f3dd60e94ee))
+* Pick several generator types at once in Generate ([9f2cbf2](https://github.com/zivavu/OpenMosh/commit/9f2cbf24a23a926636a344a135a96e13046441f0))
+* Remove media from the rail with its trash button ([410f4c9](https://github.com/zivavu/OpenMosh/commit/410f4c907b9452fc27af903523900a3b82d02065))
+* Save PNG and JPG stills from the editor ([da2bd45](https://github.com/zivavu/OpenMosh/commit/da2bd4520bd7d2935b519a1c258dbdfbf3eed72e))
+
+
+### Fixed
+
+* Deselect the preset after a roll ([68aaa1f](https://github.com/zivavu/OpenMosh/commit/68aaa1fd5867540c9d661d9c3dd3a2490d93ac83))
+* Skip motion-only effects when moshing a PNG or JPG ([fcf5836](https://github.com/zivavu/OpenMosh/commit/fcf5836a6dafa3448abf2a07c221613ee6f0ef75))
+* Start 3D Transform facing the camera ([0069fc5](https://github.com/zivavu/OpenMosh/commit/0069fc52308be2386aeafd415725660fb56e9dd3))
+* Stop glows washing out over a transparent background ([ab216b1](https://github.com/zivavu/OpenMosh/commit/ab216b12e36469b5a8e58576320a6c92b20ea7e4))
+
 ## [1.0.3](https://github.com/zivavu/OpenMosh/compare/v1.0.2...v1.0.3) (2026-11-04)
 
 Reopening a slideshow whose song ran longer than its export length no longer cuts its segments down to that length and saves over them, which made edits seem to vanish. Renaming a song no longer wipes a slideshow's cuts or adds a second copy of the song to the library. In slideshow mode, S now splits the segment under the playhead, as it does in the editor.
 
-Saved projects open as before, and nothing they store has changed. Cuts already lost to this bug don't come back, and copies of a song that a rename already added stay in the library until you remove them.
+Cuts already lost to this bug don't come back, and copies of a song that a rename already added stay in the library until you remove them.
 
 
 ### Added
@@ -20,8 +43,6 @@ Saved projects open as before, and nothing they store has changed. Cuts already 
 
 There's a new Settings window in the top bar. It can swap sliders for number fields, so you can type an exact value, and it has a high contrast mode with brighter text and lines on a darker background. Optimize large videos and Show spectrum moved there from the Mosh settings. Without changing any setting, sliders are brighter and easier to grab, and the top bar and lane names are easier to read. The editor's lanes also scroll with the mouse wheel now.
 
-Saved projects open as before, and nothing they store has changed.
-
 
 ### Added
 
@@ -32,8 +53,6 @@ Saved projects open as before, and nothing they store has changed.
 ## [1.0.1](https://github.com/zivavu/OpenMosh/compare/v1.0.0...v1.0.1) (2026-11-03)
 
 Videos can now export as MP4 as well as WebM; pick one in Record's settings. MP4 plays in the iPhone Photos app and on Instagram, where WebM doesn't. Phones get the Record button too, and start on MP4. In the editor, Add a project shows what each project looks like, puts slideshows and single edits on their own tabs, and asks whether a project's song comes along. The shortcuts list is ordered by task, and fast slideshows stay on the beat in the editor preview.
-
-Saved projects open as before, and nothing they store has changed.
 
 
 ### Added
@@ -50,8 +69,6 @@ Saved projects open as before, and nothing they store has changed.
 ## [1.0.0](https://github.com/zivavu/OpenMosh/compare/v0.9.27...v1.0.0) (2026-10-31)
 
 This is OpenMosh 1.0. The editor can now pull in your other work: a saved slideshow or single edit goes onto the timeline as one clip, and Update brings in what you change in it later. Datamosh is a new effect whose keyframes land on the beat. You can record your microphone onto an audio lane while the project plays, and resize text by dragging its box on the preview. The library drawer has a search box and stays open after you pick something.
-
-Saved projects open as before, and nothing they store has changed.
 
 
 ### Added
@@ -74,8 +91,6 @@ Saved projects open as before, and nothing they store has changed.
 ## [0.9.27](https://github.com/zivavu/OpenMosh/compare/v0.9.26...v0.9.27) (2026-10-25)
 
 Edit media opens again. Since 0.9.26, opening it from a clip's panel or the Media rail froze the editor. Video clips on the timeline also show the video's own frames along their length now, following its trim, speed, loops and bounces, where they used to repeat its first frame.
-
-Saved projects open as before, and nothing they store has changed.
 
 
 ### Added
