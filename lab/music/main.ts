@@ -1,31 +1,18 @@
-// Music Lab: a visual computed from the song, to judge its look, its speed and how it
-// follows the music before anything goes into the app. Dev only:
+// Music Lab: visuals computed from the song, to judge their look, their speed and how
+// they follow the music before anything goes into the app. Dev only:
 // localhost:5173/lab/music/ (`bun dev`).
 
-import { analyzeDrive } from "./arcs/analyze";
-import { buildControls, type Controls, type SongAudio } from "./arcs/controls";
-import {
-	ARCS_CONTROLS,
-	ARCS_KNOBS,
-	ARCS_PALETTES,
-	arcsColors,
-	arcsLook,
-	TABLE_KNOBS,
-	type ArcsKnobGroup,
-} from "./arcs/look";
-import { ArcsPass } from "./arcs/pass";
+import { analyzeDrive } from "./analyze";
+import { ARCS_VISUAL } from "./arcs/visual";
+import type { SongAudio } from "./listen";
+import { PULSAR_VISUAL } from "./pulsar/visual";
+import type { MusicVisual, VisualRun, VisualSettings } from "./visual";
 import { decodeAudioFile } from "../../src/lib/audio/offline-audio";
 import type { MixSegment } from "../../src/lib/mix/plan";
 import { renderDrive } from "../../src/lib/mix/render";
 import { GpuTimer } from "./gpu-timer";
 
-const GROUPS: [ArcsKnobGroup | "controls", string][] = [
-	["controls", "Controls (what users get)"],
-	["structure", "Structure"],
-	["stroke", "Stroke (arcDrawer's sliders)"],
-	["music", "Music"],
-	["listen", "Listening"],
-];
+const VISUALS: MusicVisual[] = [PULSAR_VISUAL, ARCS_VISUAL];
 const RATIOS: Record<string, [number, number]> = {
 	"4:5": [4, 5],
 	"9:16": [9, 16],
@@ -34,28 +21,59 @@ const RATIOS: Record<string, [number, number]> = {
 };
 const STORE = "musiclab-state";
 
-interface State {
-	seed: number;
+interface VisualState {
 	palette: string;
-	ratio: string;
-	short: number;
 	values: Record<string, number>;
 }
 
-const allKnobs = [...ARCS_CONTROLS, ...ARCS_KNOBS];
-const isControl = (key: string) => ARCS_CONTROLS.some((c) => c.key === key);
-const saved: Partial<State> = JSON.parse(localStorage.getItem(STORE) ?? "{}");
+interface State {
+	visual: string;
+	seed: number;
+	ratio: string;
+	short: number;
+	looks: Record<string, VisualState>;
+}
+
+/** What the lab saved before it had more than Arcs. */
+interface ArcsOnlyState {
+	palette?: string;
+	values?: Record<string, number>;
+}
+
+const saved: Partial<State> & ArcsOnlyState = JSON.parse(
+	localStorage.getItem(STORE) ?? "{}",
+);
 const state: State = {
+	visual: saved.visual ?? VISUALS[0].id,
 	seed: saved.seed ?? 1,
-	palette: saved.palette ?? "Ice",
 	ratio: saved.ratio ?? "4:5",
 	short: saved.short ?? 720,
-	values: {
-		...Object.fromEntries(allKnobs.map((k) => [k.key, k.value])),
-		...saved.values,
-	},
+	looks:
+		saved.looks ??
+		(saved.values
+			? { arcs: { palette: saved.palette ?? "Ice", values: saved.values } }
+			: {}),
 };
 const save = () => localStorage.setItem(STORE, JSON.stringify(state));
+
+let visual = VISUALS.find((v) => v.id === state.visual) ?? VISUALS[0];
+
+const defaults = (v: MusicVisual) =>
+	Object.fromEntries(v.knobs.map((k) => [k.key, k.value]));
+
+for (const v of VISUALS) {
+	const kept = state.looks[v.id];
+	state.looks[v.id] = {
+		palette: kept && v.palettes[kept.palette] ? kept.palette : v.defaultPalette,
+		values: { ...defaults(v), ...kept?.values },
+	};
+}
+const lookOf = (v: MusicVisual) => state.looks[v.id];
+
+const settings = (): VisualSettings => ({
+	seed: state.seed,
+	...lookOf(visual),
+});
 
 interface Lane {
 	id: string;
@@ -78,11 +96,13 @@ const gl = canvas.getContext("webgl2", {
 	alpha: false,
 	powerPreference: "high-performance",
 })!;
-const pass = new ArcsPass(gl);
 const timer = new GpuTimer(gl);
+const runs = new Map<string, VisualRun>();
 const lanes: Lane[] = [];
 let song: SongAudio | null = null;
-let controls: Controls | null = null;
+let run: VisualRun | null = null;
+/** Whether `run` holds a table for the current song. */
+let built = false;
 let analyzeMs = 0;
 let dirty = false;
 
@@ -171,7 +191,7 @@ function drivePlan(): MixSegment[] {
 async function reanalyze() {
 	const mine = ++analysisToken;
 	song = null;
-	controls = null;
+	built = false;
 	syncOverlay();
 	renderLanes();
 	try {
@@ -195,18 +215,35 @@ async function reanalyze() {
 		if (mine !== analysisToken) return;
 		song = analysed;
 		analyzeMs = performance.now() - t0;
-		rebuildControls();
+		rebuild();
 	} catch (e) {
 		showError(e);
 	}
 	syncOverlay();
 }
 
-function rebuildControls() {
-	if (!song) return;
-	controls = buildControls(song, arcsLook(spec()));
+function rebuild() {
+	if (!song || !run) return;
+	run.build(song, settings());
+	built = true;
 	drawStrip();
 	dirty = true;
+}
+
+function startVisual() {
+	errorEl.classList.remove("show");
+	run = runs.get(visual.id) ?? null;
+	if (!run) {
+		try {
+			run = visual.start(gl);
+			runs.set(visual.id, run);
+		} catch (e) {
+			showError(e);
+		}
+	}
+	built = false;
+	rebuild();
+	syncOverlay();
 }
 
 function syncOverlay() {
@@ -214,12 +251,12 @@ function syncOverlay() {
 		? "Drop a track to start. There's no picture without one."
 		: !lanes.some((l) => l.drives)
 			? "No lane has Drives on, so nothing moves the picture."
-			: !controls
+			: !built
 				? "Reading the song…"
 				: "";
 	overlay.textContent = message;
 	overlay.classList.toggle("show", !!message);
-	canvas.classList.toggle("off", !controls);
+	canvas.classList.toggle("off", !built);
 }
 
 async function addFiles(files: Iterable<File>) {
@@ -280,29 +317,16 @@ function size() {
 		: { w: state.short, h: Math.round((state.short * b) / a) & ~1 };
 }
 
-function spec() {
-	return {
-		seed: state.seed,
-		palette: state.palette,
-		values: Object.fromEntries(
-			Object.entries(state.values).filter(([k]) => isControl(k)),
-		),
-		tuning: Object.fromEntries(
-			Object.entries(state.values).filter(([k]) => !isControl(k)),
-		),
-	};
-}
-
 /** The whole picture is a function of `t`: this is the only place time enters it. */
 function drawAt(t: number) {
-	if (!controls) return;
+	if (!run || !built) return;
 	const { w, h } = size();
 	if (canvas.width !== w || canvas.height !== h) {
 		canvas.width = w;
 		canvas.height = h;
 	}
 	timer.begin();
-	pass.draw(controls, t, arcsLook(spec()), arcsColors(spec()), w, h, null);
+	run.draw(t, settings(), w, h);
 	timer.end();
 }
 
@@ -321,7 +345,7 @@ function updateHud(stamp: number) {
 	hud.textContent = [
 		`${(1000 / mean).toFixed(0)} fps · worst 5% ${worst.toFixed(1)} ms`,
 		timer.ms === null ? "GPU time n/a" : `GPU ${timer.ms.toFixed(1)} ms`,
-		`${w}×${h} · ${pass.strokes} strokes`,
+		`${w}×${h} · ${run?.hud() ?? ""}`,
 		`read the song in ${(analyzeMs / 1000).toFixed(1)} s`,
 	].join("\n");
 }
@@ -346,20 +370,16 @@ function loop(stamp: number) {
 
 function drawStrip() {
 	const ctx = strip.getContext("2d");
-	if (!ctx || !controls) return;
+	const view = built ? run?.strip() : null;
+	if (!ctx || !view) return;
 	const w = (strip.width = strip.clientWidth);
 	const h = (strip.height = strip.clientHeight);
 	ctx.clearRect(0, 0, w, h);
-	const lanesOf: [Float32Array, string][] = [
-		[controls.bass, "#2a5fb0"],
-		[controls.kick, "#7fc4ff"],
-		[controls.high, "#ffb454"],
-	];
-	for (const [values, color] of lanesOf) {
+	for (const [values, color] of view.lanes) {
 		ctx.fillStyle = color;
 		for (let x = 0; x < w; x++) {
-			const a = Math.floor((x / w) * controls.frames);
-			const b = Math.max(a + 1, Math.floor(((x + 1) / w) * controls.frames));
+			const a = Math.floor((x / w) * view.frames);
+			const b = Math.max(a + 1, Math.floor(((x + 1) / w) * view.frames));
 			let peak = 0;
 			for (let i = a; i < b; i++) peak = Math.max(peak, values[i]);
 			ctx.globalAlpha = 0.55;
@@ -369,37 +389,47 @@ function drawStrip() {
 	}
 	ctx.globalAlpha = 1;
 	ctx.fillStyle = "#fff";
-	for (const cut of controls.cuts) {
-		ctx.fillRect((cut / controls.frames) * w, 0, 1, h);
+	for (const cut of view.cuts) {
+		ctx.fillRect((cut / view.frames) * w, 0, 1, h);
 	}
 }
 
 // ---- Panel
+function renderPalettes() {
+	const palette = $<HTMLSelectElement>("palette");
+	palette.replaceChildren();
+	for (const name of Object.keys(visual.palettes)) {
+		palette.add(new Option(name, name));
+	}
+	palette.value = lookOf(visual).palette;
+}
+
 function renderKnobs() {
 	const el = $("knobs");
 	el.replaceChildren();
-	for (const [group, name] of GROUPS) {
+	const { values } = lookOf(visual);
+	for (const [group, name] of visual.groups) {
 		const title = document.createElement("h4");
 		title.textContent = name;
 		el.append(title);
-		for (const knob of allKnobs.filter((k) => k.group === group)) {
+		for (const knob of visual.knobs.filter((k) => k.group === group)) {
 			const wrap = document.createElement("div");
 			wrap.className = "ctl";
 			const label = document.createElement("label");
 			const value = document.createElement("span");
-			value.textContent = String(state.values[knob.key]);
+			value.textContent = String(values[knob.key]);
 			label.append(knob.label, value);
 			const input = document.createElement("input");
 			input.type = "range";
 			input.min = String(knob.min);
 			input.max = String(knob.max);
 			input.step = String(knob.step);
-			input.value = String(state.values[knob.key]);
+			input.value = String(values[knob.key]);
 			input.oninput = () => {
-				state.values[knob.key] = Number(input.value);
+				values[knob.key] = Number(input.value);
 				value.textContent = input.value;
 				save();
-				if ((TABLE_KNOBS as string[]).includes(knob.key)) rebuildControls();
+				if (visual.tableKnobs.includes(knob.key)) rebuild();
 				dirty = true;
 			};
 			wrap.append(label, input);
@@ -409,27 +439,34 @@ function renderKnobs() {
 }
 
 function resetKnobs() {
-	state.values = Object.fromEntries(allKnobs.map((k) => [k.key, k.value]));
+	lookOf(visual).values = defaults(visual);
 	save();
 	renderKnobs();
-	rebuildControls();
+	rebuild();
 }
 
 function setSeed(seed: number) {
 	state.seed = Math.max(0, Math.floor(seed));
 	$<HTMLInputElement>("seed").value = String(state.seed);
 	save();
-	rebuildControls();
+	rebuild();
 }
 
 function initPanel() {
+	const picker = $<HTMLSelectElement>("visual");
+	for (const v of VISUALS) picker.add(new Option(v.name, v.id));
+	picker.value = visual.id;
+	picker.onchange = () => {
+		visual = VISUALS.find((v) => v.id === picker.value) ?? VISUALS[0];
+		state.visual = visual.id;
+		save();
+		renderPalettes();
+		renderKnobs();
+		startVisual();
+	};
 	const palette = $<HTMLSelectElement>("palette");
-	for (const name of Object.keys(ARCS_PALETTES)) {
-		palette.add(new Option(name, name));
-	}
-	palette.value = state.palette;
 	palette.onchange = () => {
-		state.palette = palette.value;
+		lookOf(visual).palette = palette.value;
 		save();
 		dirty = true;
 	};
@@ -483,14 +520,10 @@ function initPanel() {
 	});
 }
 
-try {
-	pass.compile();
-} catch (e) {
-	showError(e);
-}
 initPanel();
+renderPalettes();
 renderKnobs();
-syncOverlay();
+startVisual();
 requestAnimationFrame(loop);
 
 // Debug hook for a headless smoke run.
@@ -500,8 +533,8 @@ requestAnimationFrame(loop);
 		return reanalyze();
 	},
 	drawAt,
-	controls: () => controls,
-	rebuild: rebuildControls,
+	run: () => run,
+	rebuild,
 	gl,
 	state,
 };
