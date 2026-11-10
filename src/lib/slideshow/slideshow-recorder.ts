@@ -2,7 +2,7 @@ import type { MoshOptions } from "../editor/mosh";
 import type { EffectInstance } from "../effects";
 import type { GlRenderer } from "../gl/renderer";
 import { downloadBlob, recordVideo } from "../recorder";
-import { getExportFormat } from "../export-format.svelte";
+import { getExportFormat, getExportQuality } from "../export-format.svelte";
 import { preloadCaptionFonts } from "../caption";
 import { createTextChainSource, preloadTextTimelineFonts } from "../text";
 import { SlideshowFrameDriver } from "./frame-driver";
@@ -144,6 +144,7 @@ export async function executeSlideshowRecording(
 		blob = await recordVideo({
 			onNotice: ctx.onNotice,
 			container,
+			quality: getExportQuality(),
 			duration,
 			fps,
 			canvas,
