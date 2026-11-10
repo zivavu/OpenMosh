@@ -42,27 +42,14 @@ import type { GlRenderer } from "./gl/renderer";
 import { downloadFile } from "./utils";
 import { openExportFile, removeExportFile } from "./export-files";
 import type { VideoContainer } from "./export-format.svelte";
+import {
+	DEFAULT_EXPORT_QUALITY,
+	type ExportQuality,
+	targetVideoBitrate,
+} from "./export-quality";
 
-/** Bitrate scales with output size: a fixed rate starves big canvases and bloats
- * small ones. Chrome honors the target, Firefox clamps it. */
 const CONTEXT_LOST =
 	"The graphics card reset during the export, so it stopped. Try again";
-const BITS_PER_PIXEL = 0.2;
-const MIN_VIDEO_BITRATE = 3_000_000;
-const MAX_VIDEO_BITRATE = 60_000_000;
-
-function targetVideoBitrate(
-	width: number,
-	height: number,
-	fps: number,
-): number {
-	return Math.round(
-		Math.min(
-			MAX_VIDEO_BITRATE,
-			Math.max(MIN_VIDEO_BITRATE, width * height * fps * BITS_PER_PIXEL),
-		),
-	);
-}
 
 export interface RecordOptions {
 	duration: number;
@@ -78,6 +65,8 @@ export interface RecordOptions {
 	signal?: AbortSignal;
 	/** Defaults to WebM. */
 	container?: VideoContainer;
+	/** Defaults to standard. */
+	quality?: ExportQuality;
 	/** Decoded to drive effects during recording; it is also muxed. */
 	audioFile?: File;
 	/** Start of the audio region in seconds, for trimming and effect timing. */
@@ -376,6 +365,7 @@ async function encodeVideo(opts: RecordOptions): Promise<Blob> {
 		onNotice,
 		signal,
 		container = "webm",
+		quality = DEFAULT_EXPORT_QUALITY,
 		audioFile,
 		audioStart = 0,
 		audioEnd,
@@ -408,7 +398,6 @@ async function encodeVideo(opts: RecordOptions): Promise<Blob> {
 	if (evenW !== canvas.width || evenH !== canvas.height) {
 		renderer.resize(evenW, evenH);
 	}
-	const bitrate = targetVideoBitrate(canvas.width, canvas.height, fps);
 
 	let audioBufferForMux: AudioBuffer | null = null;
 	let frameAudioData: FrameAudioData[] = [];
@@ -461,31 +450,43 @@ async function encodeVideo(opts: RecordOptions): Promise<Blob> {
 	const hwOrder: VideoCodec[] = mp4 ? ["avc"] : ["vp9", "av1"];
 	const swOrder: VideoCodec[] = mp4 ? ["avc"] : ["vp8", "vp9", "av1"];
 	const hwCandidates = hwOrder.filter((c) => containerCodecs.includes(c));
-	let selectedCodec: VideoCodec | null = null;
-	let hardware = false;
-	for (const c of hwCandidates) {
-		if (
-			await mb.canEncodeVideo(c, {
-				width: canvas.width,
-				height: canvas.height,
+	const swCandidates = swOrder.filter((c) => containerCodecs.includes(c));
+	const size = { width: canvas.width, height: canvas.height };
+	const pickCodec = async (bitrate: number) => {
+		for (const codec of hwCandidates) {
+			const ok = await mb.canEncodeVideo(codec, {
+				...size,
 				bitrate,
 				hardwareAcceleration: "prefer-hardware",
-			})
-		) {
-			selectedCodec = c;
-			hardware = true;
-			break;
+			});
+			if (ok) return { codec, hardware: true };
 		}
-	}
-
-	const swCandidates = swOrder.filter((c) => containerCodecs.includes(c));
-	if (!selectedCodec) {
-		selectedCodec = await mb.getFirstEncodableVideoCodec(swCandidates, {
-			width: canvas.width,
-			height: canvas.height,
+		const codec = await mb.getFirstEncodableVideoCodec(swCandidates, {
+			...size,
 			bitrate,
 		});
+		return codec ? { codec, hardware: false } : null;
+	};
+
+	let bitrate = targetVideoBitrate(quality, size.width, size.height, fps);
+	let picked = await pickCodec(bitrate);
+	// An encoder may cap its rate below what High or Max asks for.
+	if (!picked && quality !== DEFAULT_EXPORT_QUALITY) {
+		bitrate = targetVideoBitrate(
+			DEFAULT_EXPORT_QUALITY,
+			size.width,
+			size.height,
+			fps,
+		);
+		picked = await pickCodec(bitrate);
+		if (picked) {
+			onNotice?.(
+				"This browser can't encode at that quality, so this video uses Standard.",
+			);
+		}
 	}
+	const selectedCodec = picked?.codec ?? null;
+	const hardware = picked?.hardware ?? false;
 
 	if (!selectedCodec) {
 		throw new Error(
