@@ -1,12 +1,12 @@
-/** Reads a song for Arcs. Apart from `controls.ts`: the analyser brings in the effects
+/** Reads a song for the visuals. Apart from `listen.ts`: the analyser brings in the effects
  * catalog, which the renderer can't import back. */
 
-import { analyzeFrames, FFT_SIZE } from "../../../src/lib/audio/offline-audio";
+import { analyzeFrames, FFT_SIZE } from "../../src/lib/audio/offline-audio";
 import {
 	PROFILE_FPS,
 	type SongProfile,
-} from "../../../src/lib/audio/song-profile";
-import type { SongAudio } from "./controls";
+} from "../../src/lib/audio/song-profile";
+import type { SongAudio } from "./listen";
 
 /** Unlike `buildSongProfile` this keeps silent frames: the table is indexed by time. */
 export async function analyzeDrive(

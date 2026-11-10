@@ -1,12 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { analyzeDrive } from "./analyze";
-import {
-	buildControls,
-	findCuts,
-	sampleControls,
-	type Controls,
-	type SongAudio,
-} from "./controls";
+import { analyzeDrive } from "../analyze";
+import { findCuts, type SongAudio } from "../listen";
+import { buildControls, sampleControls, type Controls } from "./controls";
 import {
 	ARCS_CONTROLS,
 	ARCS_KNOBS,

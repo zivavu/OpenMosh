@@ -72,8 +72,8 @@ own; the rest are still Canvas 2D or plain typed-array maths.
 
 # Music Lab
 
-Dev-only page for a visual computed from a song, to judge its look, its speed and
-how it follows the music before anything goes into the app.
+Dev-only page for visuals computed from a song, to judge their look, their speed and
+how they follow the music before anything goes into the app.
 
 ```
 bun dev   →   http://localhost:5173/lab/music/
@@ -81,10 +81,23 @@ bun dev   →   http://localhost:5173/lab/music/
 
 Drop one or more audio files. Every lane is heard; ticked lanes drive the picture,
 through the same `renderDrive` the editor's Drives toggle feeds. With no driving
-lane there is no picture. **Copy settings** copies every knob as JSON, and **Reset**
-goes back to the defaults.
+lane there is no picture. Pick the visual next to **Play**; each keeps its own palette
+and knobs. **Copy settings** copies every knob as JSON, and **Reset** puts the current
+visual's knobs back to their defaults.
 
-The visual is Arcs (`music/arcs/`): arcDrawer's stroke (github.com/zivavu/arcDrawer)
-walked along a figure per song section, the music moving the pen. It was in the editor
-as a Generate layer and came out again: it didn't look good enough. `bun test
-./lab/music/arcs` runs its tests.
+A visual implements `MusicVisual` (`music/visual.ts`) and is listed in `VISUALS` in
+`music/main.ts`. The song is read once (`music/analyze.ts`), and `music/listen.ts`
+turns it into the bands, hits and sections every visual shares.
+
+- **Pulsar** (`music/pulsar/`): a glowing symmetric figure (starburst, star-polygon
+  wireframes, orbits, a kaleidoscopic fold and a noise field) fed back on itself so its
+  light drifts outward, twists and smears. A radial blur with the channels pulled apart,
+  a bloom from the field's mips, then a grade into dark, ink or blue-field mode. Each
+  section picks its mode and symmetry, and some hits snap between dark and ink. The
+  feedback runs in steps of song time; after a seek it is rebuilt from 1.2 s back, so a
+  frame comes out much the same however playback got there.
+- **Arcs** (`music/arcs/`): arcDrawer's stroke (github.com/zivavu/arcDrawer) walked
+  along a figure per song section, the music moving the pen. It was in the editor as a
+  Generate layer and came out again: it didn't look good enough.
+
+`bun test ./lab/music` runs their tests.
