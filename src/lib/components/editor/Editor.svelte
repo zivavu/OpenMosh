@@ -205,12 +205,8 @@
 		type MediaLane,
 		type MediaTimeline,
 		type SourceEdit,
-		createSourceEdit,
 	} from "../../media";
-	import {
-		hiddenSlides,
-		slidesLeftBehind,
-	} from "../../editor/slideshow-source";
+	import { hiddenSlides } from "../../editor/slideshow-source";
 	import {
 		loadMediaPool,
 		loadMediaPoolSlides,
@@ -234,6 +230,7 @@
 	import { createProjectImports } from "../../editor/project-imports";
 	import { createAudioLaneEdits } from "../../editor/audio-lane-edits";
 	import { createProjectLength } from "../../editor/project-length";
+	import { createPoolEdits, type PoolEntry } from "../../editor/pool-edits";
 	import { ChainTimelineState } from "../../editor/chain-timeline-state.svelte";
 	import { mediaTimelineOps, textTimelineOps } from "../../editor/timeline-ops";
 	import {
@@ -1755,6 +1752,20 @@
 		});
 	};
 
+	const {
+		poolHistory,
+		poolNow,
+		dropFromPool,
+		keepAddsThroughPoolUndo,
+		setPool,
+		removeSequenceSource,
+		clearPool,
+	} = createPoolEdits({
+		registry: () => sourceRegistry,
+		media: () => mediaState,
+		slideOnlyIds: () => slideOnlyIds,
+	});
+
 	/** Once per session: a browser that won't store files refuses every add. */
 	let mediaSaveFailed = false;
 	const sourceRegistry = new SequenceSourceRegistry(
@@ -2070,107 +2081,13 @@
 	/** Empty the pool; clips that drew from it lose their media, deleted from storage too. */
 	function clearSequenceSources() {
 		showClearSourcesConfirm = false;
-		if (sequenceSources.length === 0) return;
-		// Undoable like a single removal: the stack keeps the files.
-		asOneEdit(() => {
-			poolHistory.push(poolNow());
-			mediaState.pushHistory();
-		});
-		for (const src of sequenceSources) {
-			mediaState.set(detachMediaSource(mediaState.timeline, src.id));
-		}
-		sourceRegistry.clear();
-		restoreAttempted.clear();
+		if (clearPool()) restoreAttempted.clear();
 	}
 
 	/** Clips pointing at a removed source draw nothing; an empty pool shows the placeholder. */
 	function sourceProxyAction(id: string, action: ProxyAction["kind"]) {
 		if (action === "retry") sourceRegistry.retryProxy(id);
 		else sourceRegistry.setProxyEnabled(id, action === "enable");
-	}
-
-	/** The pool as undo holds it: files by reference, so a removed one can come back. */
-	interface PoolEntry {
-		id: string;
-		file: File;
-		edit?: SourceEdit;
-	}
-	const poolHistory = createSnapshotHistory<PoolEntry[]>();
-
-	function poolNow(): PoolEntry[] {
-		return sourceRegistry.sources.map((s) => ({
-			id: s.id,
-			file: s.file,
-			edit: sourceRegistry.edits[s.id],
-		}));
-	}
-
-	/** Ids an undo or redo is bringing back, which the stack already holds. */
-	const poolUndoIds = new Set<string>();
-
-	/** Adds aren't undoable, so every stored pool gains them: otherwise undoing an older
-	 * removal would take out media added since. */
-	function keepAddsThroughPoolUndo(added: SequenceSource[]) {
-		const fresh = added.filter((s) => !poolUndoIds.has(s.id));
-		if (fresh.length === 0) return;
-		poolHistory.amend((entries) => [
-			...entries,
-			...fresh
-				.filter((s) => !entries.some((e) => e.id === s.id))
-				.map((s) => ({ id: s.id, file: s.file })),
-		]);
-	}
-
-	/** Undo and redo of a removal: the clips come back from the media stack. */
-	async function setPool(entries: PoolEntry[]) {
-		const want = new Set(entries.map((e) => e.id));
-		for (const s of [...sourceRegistry.sources]) {
-			if (want.has(s.id)) continue;
-			sourceRegistry.remove(s.id);
-			mediaState.set(detachMediaSource(mediaState.timeline, s.id));
-		}
-		// Edits come back too: an undo can be of a crop, key or erase alone.
-		for (const e of entries) {
-			if (sourceRegistry.get(e.id)) {
-				sourceRegistry.setEdit(e.id, e.edit ?? createSourceEdit());
-			}
-		}
-		const missing = entries.filter((e) => !sourceRegistry.get(e.id));
-		if (missing.length === 0) return;
-		for (const e of missing) poolUndoIds.add(e.id);
-		try {
-			await sourceRegistry.add(missing.map((e) => e.file));
-		} finally {
-			for (const e of missing) poolUndoIds.delete(e.id);
-		}
-		for (const e of missing) if (e.edit) sourceRegistry.setEdit(e.id, e.edit);
-		entries.forEach((e, to) => {
-			const from = sourceRegistry.sources.findIndex((s) => s.id === e.id);
-			if (from !== -1) sourceRegistry.reorder(from, to);
-		});
-	}
-
-	function removeSequenceSource(id: string) {
-		if (!sourceRegistry.get(id)) return;
-		asOneEdit(() => {
-			poolHistory.push(poolNow());
-			mediaState.pushHistory();
-		});
-		dropFromPool(id);
-	}
-
-	/** A slideshow takes the slides only it played with it. */
-	function dropFromPool(id: string) {
-		const slides = slidesLeftBehind(
-			sequenceSources,
-			id,
-			mediaState.timeline,
-			slideOnlyIds,
-		);
-		for (const gone of [id, ...slides]) {
-			sourceRegistry.remove(gone);
-			mediaState.set(detachMediaSource(mediaState.timeline, gone));
-		}
 	}
 
 	/** Grid replaces the preview while the pool is arranged; the timeline stays under it. */
