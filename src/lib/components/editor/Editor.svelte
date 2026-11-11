@@ -31,7 +31,6 @@
 	} from "../../project-file/export";
 	import type { AudioResponse } from "../../audio/auto-range";
 	import { createTrackStore } from "../../audio/track-persistence";
-	import { loadTimeline, saveTimeline } from "../../editor/timeline-store";
 	import {
 		loadRenderSettings,
 		saveRenderSettings,
@@ -185,7 +184,6 @@
 		pruneSequenceMediaThrottled,
 		isOwnSessionKey,
 		saveMediaPool,
-		StaleWriteError,
 		stableSourceId,
 	} from "../../editor/sequence-media-store";
 	import {
@@ -201,6 +199,7 @@
 	import { createProjectImports } from "../../editor/project-imports";
 	import { SingleVideo } from "../../editor/single-video.svelte";
 	import { ProjectTempo } from "../../editor/project-tempo.svelte";
+	import { TimelinePersistence } from "../../editor/timeline-persistence.svelte";
 	import {
 		SequenceClock,
 		SingleClock,
@@ -216,11 +215,8 @@
 	import { ChainTimelineState } from "../../editor/chain-timeline-state.svelte";
 	import { mediaTimelineOps, textTimelineOps } from "../../editor/timeline-ops";
 	import {
-		isNewerEntry,
-		readSeqEntry,
 		SEQ_ENTRY_VERSION,
 		type LegacySegmentEntry,
-		type RestoredEntry,
 		type SeqEntry,
 	} from "../../editor/seq-entry";
 	import type { GlRenderer, SourceFit } from "../../gl/renderer";
@@ -862,8 +858,8 @@
 			removeSong();
 			return;
 		}
-		// Before the key changes out from under them; see flushSequenceSave.
-		flushSequenceSave();
+		// Before the key changes out from under them; see TimelinePersistence.flush.
+		timelines.flush();
 		flushMediaPoolSave();
 		audio.clearTrack();
 		currentTrackId = null;
@@ -896,11 +892,11 @@
 			return;
 		}
 		const key = seqKeyPrefix + trackId;
-		loadedTimelineKey = null;
-		const savedSeq = await loadSeqEntry(trackId);
+		timelines.loadedKey = null;
+		const savedSeq = await timelines.load(trackId);
 		// A later switch overtook this load; that one owns the state now.
 		if (seqStoreKey !== key) return;
-		loadedTimelineKey = key;
+		timelines.loadedKey = key;
 		if (savedSeq === null) {
 			// The last song's text stays saved under its own key.
 			if (clearOnMissing) {
@@ -926,8 +922,8 @@
 	 * what the song's older single-mode timeline kept. Neither leaves detection to run. */
 	async function restoreProjectSongBpm(trackId: string) {
 		const [own, song] = await Promise.all([
-			loadSeqEntry(singleProjectBase!),
-			loadSeqEntry(trackId),
+			timelines.load(singleProjectBase!),
+			timelines.load(trackId),
 		]);
 		if (currentTrackId !== trackId) return;
 		const found = own?.song === trackId && own.bpm > 0 ? own : song;
@@ -1122,58 +1118,6 @@
 	const seqKeyPrefix = $derived(isSequenceMode ? "seq:" : "single:");
 	let seqStoreKey = $derived(seqBaseKey && seqKeyPrefix + seqBaseKey);
 
-	/** The key whose stored timeline has landed; saving waits for the on-screen key to match. */
-	let loadedTimelineKey: string | null = null;
-
-	/** Read this mode's entry for a song, falling back to the legacy un-prefixed entry. */
-	async function loadSeqEntry(baseKey: string): Promise<RestoredEntry | null> {
-		const key = seqKeyPrefix + baseKey;
-		let entry: SeqEntry | null;
-		try {
-			entry =
-				(await loadTimeline<SeqEntry>(key)) ??
-				(isSequenceMode ? await loadTimeline<SeqEntry>(baseKey) : null);
-		} catch {
-			holdTimeline(key, "unreadable");
-			return null;
-		}
-		if (entry && isNewerEntry(entry)) {
-			holdTimeline(key, "newer");
-			return null;
-		}
-		return entry && readSeqEntry(entry, file ? stableSourceId(file) : "");
-	}
-
-	/** Timelines saved by a newer OpenMosh, or that couldn't be read: left as they
-	 * are, never written over. */
-	const heldTimelineKeys = new Set<string>();
-
-	function holdTimeline(
-		key: string,
-		reason: "newer" | "unreadable" | "elsewhere",
-	) {
-		if (heldTimelineKeys.has(key)) return;
-		heldTimelineKeys.add(key);
-		showToast(
-			reason === "newer"
-				? "A newer version of OpenMosh saved this. Reload the page to open it; changes here won't be saved."
-				: reason === "elsewhere"
-					? "This project changed in another tab. Reload the page to see it; changes here won't be saved."
-					: "Couldn't read this project's saved timeline. Reload the page to try again; changes here won't be saved.",
-			"error",
-			0,
-		);
-	}
-
-	/** A save another tab got to first holds the project rather than writing over it. */
-	function holdIfStale(key: string, write: Promise<boolean>): Promise<boolean> {
-		return write.catch((err) => {
-			if (!(err instanceof StaleWriteError)) throw err;
-			holdTimeline(key, "elsewhere");
-			return false;
-		});
-	}
-
 	// The video's own timeline, whenever it is the master: when it opens, and again once
 	// a song leaves. With a song loaded, onLibraryLoadTrack owns restoring.
 	$effect(() => {
@@ -1184,13 +1128,13 @@
 	});
 
 	function restoreVideoTimeline(key: string, storeKey: string) {
-		loadedTimelineKey = null;
+		timelines.loadedKey = null;
 		void (async () => {
-			const saved = await loadSeqEntry(key);
+			const saved = await timelines.load(key);
 			// A song adopted while this was out owns the state now.
 			if (seqStoreKey !== storeKey) return;
 			// Marked even with nothing to restore: a video with no saved timeline still saves.
-			loadedTimelineKey = storeKey;
+			timelines.loadedKey = storeKey;
 			if (saved === null) return;
 			restoreTextTimeline(saved.text);
 			restoreMediaTimeline(saved.media);
@@ -1203,10 +1147,10 @@
 		if (!singleProjectBase) return;
 		const storeKey = seqKeyPrefix + singleProjectBase;
 		untrack(() => {
-			loadedTimelineKey = null;
+			timelines.loadedKey = null;
 			void (async () => {
-				const saved = await loadSeqEntry(singleProjectBase);
-				loadedTimelineKey = storeKey;
+				const saved = await timelines.load(singleProjectBase);
+				timelines.loadedKey = storeKey;
 				if (saved === null) return;
 				if (saved.song && saved.song === currentTrackId) {
 					tempo.restore(saved.bpm, saved.beatOffset);
@@ -1225,33 +1169,14 @@
 			audio.audioPlaying || singleVideo.isPlaying || mixer.playing;
 	});
 
-	// Persist the sequence timeline per library track (deep snapshot read).
-	// Skipped while playing: the volume-link tick mutates the chains each frame.
-	let seqSaveTimer: ReturnType<typeof setTimeout> | undefined;
-	/** Something on screen isn't written yet. Playback counts: it skips the debounce.
-	 * Flushes write only then, or an idle tab closing would save its stale copy over
-	 * another tab's newer work. */
-	let seqSavePending = false;
-	$effect(() => {
-		const playing =
-			audio.audioPlaying || singleVideo.isPlaying || mixer.playing;
-		if (playing) {
-			seqSavePending = true;
-			return;
-		}
-		const entry = seqEntryNow();
-		const key = seqStoreKey;
-		if (!key || key !== loadedTimelineKey || !entry) return;
-		if (heldTimelineKeys.has(key)) return;
-		clearTimeout(seqSaveTimer);
-		untrack(() => saves.schedule("timeline"));
-		seqSavePending = true;
-		seqSaveTimer = setTimeout(() => {
-			seqSavePending = false;
-			void saves
-				.track("timeline", holdIfStale(key, saveTimeline(key, entry)))
-				.then(reportSeqSave);
-		}, 300);
+	const timelines = new TimelinePersistence({
+		saves,
+		prefix: untrack(() => seqKeyPrefix),
+		readsLegacy: untrack(() => isSequenceMode),
+		storeKey: () => seqStoreKey,
+		entry: seqEntryNow,
+		playing: () => audio.audioPlaying || singleVideo.isPlaying || mixer.playing,
+		baseSourceId: () => (file ? stableSourceId(file) : ""),
 	});
 
 	/** What gets saved, read deep; null while a project is still working out its length. */
@@ -1280,42 +1205,6 @@
 		entry.song = currentTrackId;
 		if (tempo.poolSource) entry.bpmSource = tempo.poolSource;
 		return entry;
-	}
-
-	/** Only the transition into failure is announced, or it would toast every tick. */
-	let seqSaveFailed = false;
-	function reportSeqSave(ok: boolean) {
-		// A held project has said so already.
-		if (!ok && seqStoreKey && heldTimelineKeys.has(seqStoreKey)) return;
-		if (ok === !seqSaveFailed) return;
-		seqSaveFailed = !ok;
-		if (ok) return;
-		showToast(
-			"Couldn't save this timeline — your recent changes may not survive a reload.",
-			"error",
-			10000,
-		);
-	}
-
-	/** Write the current timeline under the current key now; a track switch outruns the effect. */
-	function flushSequenceSave() {
-		clearTimeout(seqSaveTimer);
-		if (!seqSavePending) return;
-		seqSavePending = false;
-		const key = seqStoreKey;
-		const entry = seqEntryNow();
-		if (
-			!key ||
-			key !== loadedTimelineKey ||
-			!entry ||
-			heldTimelineKeys.has(key)
-		) {
-			saves.drop("timeline");
-			return;
-		}
-		void saves
-			.track("timeline", holdIfStale(key, saveTimeline(key, entry)))
-			.then(reportSeqSave);
 	}
 
 	/** What's on screen, for a project file that doesn't wait on autosaves. */
@@ -1347,7 +1236,7 @@
 	async function saveProjectFile() {
 		const key = isSequenceMode ? projectKey : singleSessionKey;
 		if (!key) return;
-		flushSequenceSave();
+		timelines.flush();
 		flushMediaPoolSave();
 		await downloadProjectFile(key, {
 			mode: isSequenceMode ? "sequence" : "single",
@@ -1359,7 +1248,7 @@
 	// Hidden counts too: a phone can discard a background tab without a pagehide.
 	onMount(() => {
 		const onHide = () => {
-			flushSequenceSave();
+			timelines.flush();
 			flushMediaPoolSave();
 			sessionSave.flush();
 		};
@@ -1596,7 +1485,7 @@
 				if (ids) await sourceRegistry.setPool(ids);
 			} catch {
 				// Saving what did load would drop the rest from the project.
-				if (poolKey === key) holdTimeline(seqKeyPrefix + key, "unreadable");
+				if (poolKey === key) timelines.hold(seqKeyPrefix + key, "unreadable");
 			}
 			if (poolKey === key) poolReady = true;
 		})();
@@ -1620,14 +1509,14 @@
 	function savePool(key: string, ids: string[]) {
 		poolSavePending = false;
 		// Held (newer or unreadable): nothing of it is written, as the toast promised.
-		if (heldTimelineKeys.has(seqKeyPrefix + key)) {
+		if (timelines.isHeld(seqKeyPrefix + key)) {
 			saves.drop("pool");
 			return;
 		}
 		void saves
 			.track(
 				"pool",
-				holdIfStale(
+				timelines.holdIfStale(
 					seqKeyPrefix + key,
 					saveMediaPool(key, ids, [...slideOnlyIds]).then(() => true),
 				),
@@ -1637,7 +1526,7 @@
 			});
 	}
 
-	/** Pool counterpart to flushSequenceSave; same track-switch race. */
+	/** Pool counterpart to the timeline's flush; same track-switch race. */
 	function flushMediaPoolSave() {
 		clearTimeout(poolSaveTimer);
 		if (!poolSavePending) return;
@@ -1783,14 +1672,14 @@
 
 	async function loadProject(key: string) {
 		const storeKey = seqKeyPrefix + key;
-		loadedTimelineKey = null;
+		timelines.loadedKey = null;
 		projectReady = false;
 		// Pending from the start, so the bar can't say Saved before the name is stored.
 		const unnamed = key.startsWith("proj-") && !readProjectNames()[key];
 		if (unnamed) saves.schedule("name");
-		let saved: Awaited<ReturnType<typeof loadSeqEntry>>;
+		let saved: Awaited<ReturnType<TimelinePersistence["load"]>>;
 		try {
-			saved = await loadSeqEntry(key);
+			saved = await timelines.load(key);
 		} catch (e) {
 			if (unnamed) saves.drop("name");
 			throw e;
@@ -1799,12 +1688,12 @@
 			unnamed &&
 			saved === null &&
 			seqStoreKey === storeKey &&
-			!heldTimelineKeys.has(storeKey);
+			!timelines.isHeld(storeKey);
 		if (unnamed && !naming) saves.drop("name");
 		if (seqStoreKey !== storeKey) return;
-		loadedTimelineKey = storeKey;
+		timelines.loadedKey = storeKey;
 		// Not ready, so nothing of it is seeded or saved over.
-		if (heldTimelineKeys.has(storeKey)) return;
+		if (timelines.isHeld(storeKey)) return;
 		if (saved === null) {
 			// Named after its song, else what it was opened with, until the user names it.
 			if (naming) {
@@ -2894,9 +2783,9 @@
 		file: () => file,
 		trackId: () => currentTrackId,
 		sessionKey: singleSessionKey,
-		held: () => !!seqStoreKey && heldTimelineKeys.has(seqStoreKey),
+		held: () => !!seqStoreKey && timelines.isHeld(seqStoreKey),
 		onStale: () => {
-			if (seqStoreKey) holdTimeline(seqStoreKey, "elsewhere");
+			if (seqStoreKey) timelines.hold(seqStoreKey, "elsewhere");
 		},
 		playing: () => audio.audioPlaying || singleVideo.isPlaying,
 		saves,
