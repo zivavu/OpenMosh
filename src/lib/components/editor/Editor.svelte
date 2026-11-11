@@ -2,7 +2,6 @@
 	import LoadFailed from "../ui/LoadFailed.svelte";
 	import { onMount, tick, untrack } from "svelte";
 	import { hasKeyboard, modKey } from "../../input-device";
-	import Checkbox from "../ui/Checkbox.svelte";
 	import {
 		ChevronsDownUp,
 		ChevronsUpDown,
@@ -245,7 +244,8 @@
 	import ButtonGroup from "../ui/ButtonGroup.svelte";
 	import MobileSheet from "../ui/MobileSheet.svelte";
 	import NumberField from "../ui/NumberField.svelte";
-	import ResizeSettings from "../ui/ResizeSettings.svelte";
+	import OutputSettings from "./OutputSettings.svelte";
+	import RecordSettings from "./RecordSettings.svelte";
 	import { uiPrefs } from "../../ui-prefs.svelte";
 	import TrackAddBar from "../ui/TrackAddBar.svelte";
 	import TrackLibrary from "../ui/TrackLibrary.svelte";
@@ -3028,12 +3028,8 @@
 	let showRecordSettings = $state(false);
 	let recordDuration = $state(5);
 	let recordFps = $state(60);
-	/** Seconds. A ceiling on typos, not a format limit: the encoder has no cap. */
-	const MAX_RECORD_DURATION = 600;
 	/** A ceiling on typos for the editor's project length. */
 	const MAX_PROJECT_LENGTH = 3600;
-	/** One click for the lengths people actually reach for. */
-	const RECORD_DURATION_PRESETS = [5, 10, 30, 60, 120];
 
 	/** Which project the export settings belong to; `seqStoreKey` carries the mode prefix. */
 	let renderKey = $derived(
@@ -4378,55 +4374,13 @@
 			>
 				{#snippet settingsContent()}
 					{@render formatPicker()}
-					<div class="settings-divider"></div>
-					<div class="mosh-setting-row">
-						<label for="show-fps">Show FPS</label>
-						<Checkbox id="show-fps" bind:checked={showFps} />
-					</div>
-					{#if isSequenceMode}
-						<div class="mosh-setting-row">
-							<label
-								for="layer-highlight"
-								title="Outline the shape of a layer on the preview when you select it, until the next mosh"
-							>
-								Highlight selected layer
-							</label>
-							<Checkbox
-								id="layer-highlight"
-								bind:checked={layerHighlight.value}
-							/>
-						</div>
-						<div class="mosh-setting-row">
-							<label
-								for="project-song"
-								title="What to do with a project's song when you add it with Add a project"
-							>
-								Project songs
-							</label>
-							<select id="project-song" bind:value={projectSong}>
-								<option value="ask">Ask each time</option>
-								<option value="add">Always add</option>
-								<option value="skip">Leave out</option>
-							</select>
-						</div>
-					{/if}
-					<div class="mosh-setting-row">
-						<label
-							for="source-fit"
-							title="How to fit sources that don't match the output aspect"
-						>
-							Fit sources
-						</label>
-						<select id="source-fit" bind:value={sourceFit}>
-							<option value="contain">Contain</option>
-							<option value="cover">Cover</option>
-							<option value="stretch">Stretch</option>
-						</select>
-					</div>
-					<div class="settings-divider"></div>
-					<ResizeSettings
-						bind:width={resizeWidth}
-						bind:height={resizeHeight}
+					<OutputSettings
+						editor={isSequenceMode}
+						bind:showFps
+						bind:projectSong
+						bind:sourceFit
+						bind:resizeWidth
+						bind:resizeHeight
 						{naturalWidth}
 						{naturalHeight}
 					/>
@@ -4485,56 +4439,13 @@
 					bind:showSettings={showRecordSettings}
 				>
 					{#snippet settingsContent()}
-						{#if !isSequenceMode && !audio.trackFile && !isVideo}
-							<div class="mosh-setting-row">
-								<label for="rec-duration">Duration</label>
-								<NumberField
-									id="rec-duration"
-									value={recordDuration}
-									min={1}
-									max={MAX_RECORD_DURATION}
-									step={1}
-									fineStep={0.5}
-									allowEmpty={false}
-									unit="duration"
-									upTitle="Longer (shift for half a second)"
-									downTitle="Shorter (shift for half a second)"
-									onChange={(v) => (recordDuration = v)}
-								/>
-								<span class="rec-duration-unit">sec</span>
-							</div>
-							<div class="rec-duration-presets">
-								{#each RECORD_DURATION_PRESETS as preset (preset)}
-									<button
-										class="rec-preset-btn"
-										class:active={recordDuration === preset}
-										onclick={() => (recordDuration = preset)}
-									>
-										{preset}s
-									</button>
-								{/each}
-							</div>
-						{:else}
-							<div class="mosh-setting-row">
-								<span class="rec-duration-label">Duration</span>
-								<span class="mosh-setting-val"
-									>{effectiveDuration.toFixed(1)}s</span
-								>
-							</div>
-						{/if}
-						<div class="mosh-setting-row">
-							<label for="rec-fps">FPS</label>
-							<select id="rec-fps" bind:value={recordFps}>
-								<option value={15}>15</option>
-								<option value={24}>24</option>
-								<option value={30}>30</option>
-								<option value={60}>60</option>
-								<option value={120}>120</option>
-							</select>
-						</div>
-						<button class="rec-start-btn" onclick={startRecording}>
-							Start Recording
-						</button>
+						<RecordSettings
+							durationEditable={!isSequenceMode && !audio.trackFile && !isVideo}
+							bind:duration={recordDuration}
+							{effectiveDuration}
+							bind:fps={recordFps}
+							onStart={startRecording}
+						/>
 					{/snippet}
 				</RecordGroup>
 			{/if}
@@ -5348,12 +5259,6 @@
 		}
 	}
 
-	.settings-divider {
-		height: 1px;
-		background: var(--line);
-		margin: 0.15rem 0;
-	}
-
 	/* The strip under the preview: a hairline off the canvas, then the switch clusters. */
 	.action-bar {
 		display: flex;
@@ -5508,80 +5413,6 @@
 		}
 	}
 
-	.mosh-setting-row {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-	}
-
-	.mosh-setting-row label,
-	.rec-duration-label {
-		font-family: var(--font-mono);
-		font-size: 0.62rem;
-		font-weight: 500;
-		letter-spacing: 0.1em;
-		text-transform: uppercase;
-		color: var(--text-3);
-		min-width: 72px;
-		flex-shrink: 0;
-	}
-
-	.rec-duration-unit {
-		font-family: var(--font-mono);
-		font-size: 0.62rem;
-		letter-spacing: 0.09em;
-		text-transform: uppercase;
-		color: var(--text-3);
-	}
-
-	/* Under the field, aligned past the label so the row still reads as one. */
-	.rec-duration-presets {
-		display: flex;
-		gap: 4px;
-		margin: -0.25rem 0 0 calc(72px + 0.5rem);
-	}
-
-	.rec-preset-btn {
-		padding: 0.15rem 0.4rem;
-		background: var(--sunken);
-		border: 1px solid var(--line);
-		border-radius: var(--r-1);
-		color: var(--text-3);
-		font-family: var(--font-mono);
-		font-size: 0.6rem;
-		cursor: pointer;
-	}
-
-	.rec-preset-btn:hover {
-		color: var(--text);
-		border-color: var(--line-strong);
-	}
-
-	.rec-preset-btn.active {
-		color: var(--live);
-		border-color: var(--live-dim);
-	}
-
-	.mosh-setting-row select {
-		flex: 1;
-		background-color: var(--sunken);
-		color: var(--text-2);
-		border-radius: var(--r-1);
-		padding-block: 0.2rem;
-		padding-left: 0.4rem;
-		font-family: var(--font-mono);
-		font-size: 0.66rem;
-	}
-
-	.mosh-setting-val {
-		font-family: var(--font-mono);
-		font-size: 0.66rem;
-		color: var(--text-2);
-		min-width: 20px;
-		text-align: right;
-		font-variant-numeric: tabular-nums;
-	}
-
 	.editor.drag-over::before {
 		content: "";
 		position: absolute;
@@ -5590,29 +5421,6 @@
 		border: 2px dashed var(--line-strong);
 		border-radius: var(--r-3);
 		pointer-events: none;
-	}
-
-	.rec-start-btn {
-		margin-top: 0.25rem;
-		padding: 0.45rem 1rem;
-		border: 1.5px solid var(--rec-dim);
-		border-radius: var(--r-2);
-		background: rgba(255, 95, 86, 0.1);
-		color: var(--rec);
-		font-family: var(--font-mono);
-		font-size: 0.66rem;
-		font-weight: 600;
-		letter-spacing: 0.1em;
-		text-transform: uppercase;
-		cursor: pointer;
-		transition:
-			background var(--t-fast),
-			color var(--t-fast);
-	}
-
-	.rec-start-btn:hover {
-		background: rgba(255, 95, 86, 0.2);
-		color: #ffa8a2;
 	}
 
 	.drop-overlay {
