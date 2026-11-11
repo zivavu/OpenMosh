@@ -117,7 +117,6 @@
 		type FreqBand,
 		type Preset,
 	} from "../../effects";
-	import { updateMediaClips } from "../../media/resolve";
 	import {
 		appendTextLane,
 		applyBpmToTextClips,
@@ -209,7 +208,6 @@
 		detachMediaSource,
 		duplicateMediaLane,
 		EMPTY_MEDIA_TIMELINE,
-		findMediaClip,
 		findMediaClipLane,
 		fitMediaTimeline,
 		MAX_MEDIA_LANES,
@@ -218,7 +216,6 @@
 		mediaTimelineSourceIds,
 		newClipSpan,
 		resolveMediaLayersAt,
-		retargetMediaSource,
 		setMediaClipSources,
 		syncMediaClipsToPreset,
 		updateMediaLane as updateMediaLaneIn,
@@ -229,16 +226,9 @@
 		createSourceEdit,
 	} from "../../media";
 	import {
-		freezeSavedSlideshow,
 		hiddenSlides,
 		slidesLeftBehind,
 	} from "../../editor/slideshow-source";
-	import {
-		openSavedSingle,
-		singleClipIds,
-		withSingleChain,
-		type SavedSingle,
-	} from "../../editor/single-source";
 	import {
 		loadMediaPool,
 		loadMediaPoolSlides,
@@ -259,6 +249,7 @@
 		prependMediaLane,
 	} from "../../editor/legacy-segments";
 	import { FxLaneState } from "../../editor/fx-lane-state.svelte";
+	import { createProjectImports } from "../../editor/project-imports";
 	import { ChainTimelineState } from "../../editor/chain-timeline-state.svelte";
 	import { mediaTimelineOps, textTimelineOps } from "../../editor/timeline-ops";
 	import {
@@ -688,237 +679,6 @@
 			`Take on ${next.lanes.find((l) => l.id === laneId)?.name}`,
 			"info",
 		);
-	}
-
-	/** A saved slideshow on a lane of its own on top, from the playhead, with its song
-	 * under it. The project grows to fit it. */
-	async function addSlideshow(
-		sessionKey: string,
-		name: string,
-		includeSong: boolean,
-	) {
-		const frozen = await freezeSavedSlideshow(sessionKey, name).catch(
-			() => null,
-		);
-		if (!frozen) {
-			showToast("That slideshow couldn't be opened", "error");
-			return;
-		}
-		if (mediaState.timeline.lanes.length >= MAX_MEDIA_LANES) {
-			showToast("No room for the slideshow: every lane is full", "error");
-			return;
-		}
-		const cuts = await addSlideshowSource(frozen.slides, frozen.cutFile);
-		if (!cuts) return;
-		projectPickerOpen = false;
-
-		const start = timelineAxis?.staticTime ?? 0;
-		const end = start + frozen.cutList.duration;
-		const songId =
-			includeSong && frozen.trackId ? trackSourceId(frozen.trackId) : null;
-		const audioLanes = mediaState.timeline.audioLanes ?? [];
-		const withSong = songId && audioLanes.length < MAX_AUDIO_LANES;
-		if (withSong) await audioBank.settle([songId]);
-		const isSong = !!withSong && !audio.trackFile;
-
-		asOneEdit(() => {
-			if (end > mixer.duration) growProjectTo(end);
-			let next = appendMediaLane(
-				mediaState.timeline,
-				cuts.id,
-				nextLayerZ(layerOrder),
-			);
-			const lane = next.lanes[next.lanes.length - 1]!;
-			const clip = createMediaClip(start, end);
-			next = updateMediaLaneIn(next, lane.id, (l) => ({
-				...l,
-				name,
-				clips: [autoOnSlideshow(clip, true)],
-			}));
-			if (withSong) {
-				const songLane = createAudioLane(nextAudioLaneName(audioLanes), isSong);
-				songLane.clips = [
-					createAudioClip(start, end, songId, frozen.cutList.songStart),
-				];
-				next = {
-					...next,
-					audioLanes: isSong
-						? [songLane, ...audioLanes]
-						: [...audioLanes, songLane],
-				};
-			}
-			mediaState.pushHistory();
-			mediaState.set(next);
-			mediaState.selectedClipId =
-				next.lanes[next.lanes.length - 1]!.clips[0].id;
-			mediaState.selectedClipIds = [mediaState.selectedClipId];
-			void revealLaneRow(lane.id);
-		});
-		if (isSong) await loadSong(frozen.trackId);
-	}
-
-	/** Slides first, so the slideshow's thumbnail finds them. Media already in the pool
-	 * stays listed; the rest hides behind the slideshow. */
-	async function addSlideshowSource(
-		slides: File[],
-		cutFile: File,
-	): Promise<SequenceSource | null> {
-		const fresh = slides
-			.map(stableSourceId)
-			.filter((id) => !sourceRegistry.get(id));
-		if (fresh.length > 0) slideOnlyIds = new Set([...slideOnlyIds, ...fresh]);
-		await sourceRegistry.add(slides);
-		const missing = slides.filter(
-			(f) => !sourceRegistry.get(stableSourceId(f)),
-		);
-		if (missing.length === slides.length) {
-			showToast("None of that slideshow's slides could be read", "error");
-			return null;
-		}
-		const [cuts] = await sourceRegistry.add([cutFile]);
-		return cuts ?? null;
-	}
-
-	/** Freeze a slideshow source again: its clips show the new cuts, keeping their
-	 * place and effects, and slides it dropped leave the pool. */
-	async function refreshSlideshow(sourceId: string) {
-		const old = sourceRegistry.get(sourceId)?.cutList;
-		if (!old) return;
-		const frozen = await freezeSavedSlideshow(old.sessionKey, old.name).catch(
-			() => null,
-		);
-		if (!frozen) {
-			showToast("Couldn't find that slideshow to update from", "error");
-			return;
-		}
-		const before = poolNow();
-		const cuts = await addSlideshowSource(frozen.slides, frozen.cutFile);
-		if (!cuts) return;
-		asOneEdit(() => {
-			poolHistory.push(before);
-			mediaState.pushHistory();
-		});
-		mediaState.set(retargetMediaSource(mediaState.timeline, sourceId, cuts.id));
-		dropFromPool(sourceId);
-		showToast(`Updated “${old.name}”`, "info");
-	}
-
-	/** A saved single edit on a lane of its own on top, from the playhead: its media
-	 * with its chain held on the clip, and its song under it. */
-	async function addSingleEdit(
-		sessionKey: string,
-		name: string,
-		includeSong: boolean,
-	) {
-		const saved = await openSavedSingle(sessionKey).catch(() => null);
-		if (!saved) {
-			showToast("That edit couldn't be opened", "error");
-			return;
-		}
-		if (mediaState.timeline.lanes.length >= MAX_MEDIA_LANES) {
-			showToast("No room for the edit: every lane is full", "error");
-			return;
-		}
-		const source = await addSingleSource(saved);
-		if (!source) return;
-		projectPickerOpen = false;
-
-		const start = timelineAxis?.staticTime ?? 0;
-		const span = saved.songSpan;
-		const end =
-			start +
-			(span
-				? span.end - span.start
-				: droppedClipLength(source, sourceRegistry.edits[source.id]));
-		const songId =
-			includeSong && span && saved.trackId
-				? trackSourceId(saved.trackId)
-				: null;
-		const audioLanes = mediaState.timeline.audioLanes ?? [];
-		const withSong = songId && audioLanes.length < MAX_AUDIO_LANES;
-		if (withSong) await audioBank.settle([songId]);
-		const isSong = !!withSong && !audio.trackFile;
-
-		asOneEdit(() => {
-			if (end > mixer.duration) growProjectTo(end);
-			let next = appendMediaLane(
-				mediaState.timeline,
-				source.id,
-				nextLayerZ(layerOrder),
-			);
-			const lane = next.lanes[next.lanes.length - 1]!;
-			const clip = {
-				...withSingleChain(createMediaClip(start, end), saved.effects),
-				single: { sessionKey, name },
-			};
-			next = updateMediaLaneIn(next, lane.id, (l) => ({
-				...l,
-				name,
-				clips: [clip],
-			}));
-			if (withSong) {
-				const songLane = createAudioLane(nextAudioLaneName(audioLanes), isSong);
-				songLane.clips = [createAudioClip(start, end, songId, span!.start)];
-				next = {
-					...next,
-					audioLanes: isSong
-						? [songLane, ...audioLanes]
-						: [...audioLanes, songLane],
-				};
-			}
-			mediaState.pushHistory();
-			mediaState.set(next);
-			mediaState.selectedClipId = clip.id;
-			mediaState.selectedClipIds = [clip.id];
-			void revealLaneRow(lane.id);
-		});
-		if (isSong) await loadSong(saved.trackId);
-	}
-
-	/** The edit's file joins the pool listed, with its crop, key and erase unless the
-	 * pool already has its own. */
-	async function addSingleSource(
-		saved: SavedSingle,
-	): Promise<SequenceSource | null> {
-		const id = stableSourceId(saved.file);
-		if (slideOnlyIds.has(id)) {
-			slideOnlyIds = new Set([...slideOnlyIds].filter((s) => s !== id));
-		}
-		await sourceRegistry.add([saved.file]);
-		const source = sourceRegistry.get(id);
-		if (!source) {
-			showToast("That edit's media couldn't be read", "error");
-			return null;
-		}
-		if (saved.sourceEdit && !sourceRegistry.edits[id]) {
-			sourceRegistry.setEdit(id, saved.sourceEdit);
-		}
-		return source;
-	}
-
-	/** Read the single edit again: its clips take its chain and media now, keeping
-	 * their place and what's locked on them. */
-	async function refreshSingleEdit(sessionKey: string) {
-		const saved = await openSavedSingle(sessionKey).catch(() => null);
-		if (!saved) {
-			showToast("Couldn't find that edit to update from", "error");
-			return;
-		}
-		const before = poolNow();
-		const source = await addSingleSource(saved);
-		if (!source) return;
-		const ids = singleClipIds(mediaState.timeline, sessionKey);
-		const name = findMediaClip(mediaState.timeline, ids[0] ?? null)?.single
-			?.name;
-		asOneEdit(() => {
-			poolHistory.push(before);
-			mediaState.pushHistory();
-		});
-		const next = updateMediaClips(mediaState.timeline, new Set(ids), (clip) =>
-			withSingleChain(clip, saved.effects),
-		);
-		mediaState.set(setMediaClipSources(next, ids, source.id));
-		showToast(name ? `Updated “${name}”` : "Updated", "info");
 	}
 
 	/** A pool thumb dropped on the picture: a lane of its own on top, centred where it
@@ -4369,6 +4129,28 @@
 		lengthHistory.reset();
 		bpmHistory.reset();
 	}
+
+	const { addSlideshow, refreshSlideshow, addSingleEdit, refreshSingleEdit } =
+		createProjectImports({
+			registry: sourceRegistry,
+			media: mediaState,
+			slideOnlyIds: () => slideOnlyIds,
+			setSlideOnlyIds: (ids) => (slideOnlyIds = ids),
+			settleAudio: (ids) => audioBank.settle(ids),
+			hasSong: () => !!audio.trackFile,
+			loadSong,
+			projectLength: () => mixer.duration,
+			growProjectTo,
+			playhead: () => timelineAxis?.staticTime ?? 0,
+			nextLaneZ: () => nextLayerZ(layerOrder),
+			revealLane: (id) => void revealLaneRow(id),
+			capturePool: () => {
+				const before = poolNow();
+				return () => poolHistory.push(before);
+			},
+			dropFromPool,
+			closePicker: () => (projectPickerOpen = false),
+		});
 
 	/** What a new lane starts on: the first thing in the pool. */
 	function defaultLayerSourceId(): string | null {
