@@ -1,11 +1,13 @@
 # The e2e specs CI runs on its first runner; ci-part-2.txt to ci-part-4.txt are
 # the next three, and the fifth runs everything in none of them
 # (--test-list-invert), so a new spec can't fall between them. Balanced by each
-# spec's time in CI, about 200s per part, not by test count: the renderer specs
-# are many tests but take seconds.
-storage-manager.spec.ts
-slideshow-in-editor.spec.ts
+# spec's time run serially, as CI runs them, not by test count: the renderer
+# specs are many tests but take seconds. The fifth also builds for preview.spec.ts,
+# so it gets less, and it takes every new spec: rebalance when it outgrows the rest.
+media-drop.spec.ts
+links.spec.ts
+slideshow-segments.spec.ts
 editor-no-song.spec.ts
-editor-export.spec.ts
-effect-scale.spec.ts
-capabilities.spec.ts
+paste.spec.ts
+effect-groups.spec.ts
+chains.spec.ts
