@@ -1996,17 +1996,35 @@
 		const storeKey = seqKeyPrefix + key;
 		loadedTimelineKey = null;
 		projectReady = false;
-		const saved = await loadSeqEntry(key);
+		// Pending from the start, so the bar can't say Saved before the name is stored.
+		const unnamed = key.startsWith("proj-") && !readProjectNames()[key];
+		if (unnamed) saves.schedule("name");
+		let saved: Awaited<ReturnType<typeof loadSeqEntry>>;
+		try {
+			saved = await loadSeqEntry(key);
+		} catch (e) {
+			if (unnamed) saves.drop("name");
+			throw e;
+		}
+		const naming =
+			unnamed &&
+			saved === null &&
+			seqStoreKey === storeKey &&
+			!heldTimelineKeys.has(storeKey);
+		if (unnamed && !naming) saves.drop("name");
 		if (seqStoreKey !== storeKey) return;
 		loadedTimelineKey = storeKey;
 		// Not ready, so nothing of it is seeded or saved over.
 		if (heldTimelineKeys.has(storeKey)) return;
 		if (saved === null) {
 			// Named after its song, else what it was opened with, until the user names it.
-			if (key.startsWith("proj-") && !readProjectNames()[key]) {
-				await nameNewProject(
-					key,
-					initialAudioFile?.name ?? file?.name ?? "Untitled project",
+			if (naming) {
+				await saves.track(
+					"name",
+					nameNewProject(
+						key,
+						initialAudioFile?.name ?? file?.name ?? "Untitled project",
+					).then(() => true),
 				);
 				if (seqStoreKey !== storeKey) return;
 			}
