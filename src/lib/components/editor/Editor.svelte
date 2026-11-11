@@ -46,10 +46,7 @@
 	} from "../../editor/render-settings";
 	import { addTrack, getTrack, trackToFile } from "../../audio/track-library";
 	import { SequenceMixer } from "../../mix/mixer.svelte";
-	import {
-		MicRecorder,
-		type MicTakeResult,
-	} from "../../mix/mic-recorder.svelte";
+	import { MicRecorder } from "../../mix/mic-recorder.svelte";
 	import { SourceAudioBank } from "../../mix/source-audio.svelte";
 	import {
 		planMix,
@@ -69,15 +66,10 @@
 		createAudioLane,
 		MAX_AUDIO_LANES,
 		nextAudioLaneName,
-		punchInAudioClip,
-		removeAudioSource,
-		removeAudioSourceIn,
 		retargetAudioSource,
-		setAudioClipSources,
 		trackIdOf,
 		trackSourceId,
 		type AudioClip,
-		type AudioLane,
 	} from "../../mix/types";
 	import {
 		readProjectNames,
@@ -208,7 +200,6 @@
 		detachMediaSource,
 		duplicateMediaLane,
 		EMPTY_MEDIA_TIMELINE,
-		findMediaClipLane,
 		fitMediaTimeline,
 		MAX_MEDIA_LANES,
 		MIN_CLIP_LENGTH,
@@ -250,6 +241,7 @@
 	} from "../../editor/legacy-segments";
 	import { FxLaneState } from "../../editor/fx-lane-state.svelte";
 	import { createProjectImports } from "../../editor/project-imports";
+	import { createAudioLaneEdits } from "../../editor/audio-lane-edits";
 	import { ChainTimelineState } from "../../editor/chain-timeline-state.svelte";
 	import { mediaTimelineOps, textTimelineOps } from "../../editor/timeline-ops";
 	import {
@@ -2610,62 +2602,6 @@
 		}
 	}
 
-	/** A new lane holding one clip of `sourceId` from `at`. The first music into a project
-	 * with no sound yet grows it to fit, and stretches a backdrop that filled it. */
-	function placeAudio(
-		sourceId: string,
-		length: number,
-		at: number,
-		drives: boolean,
-	) {
-		const lanes = mediaState.timeline.audioLanes ?? [];
-		if (lanes.length >= MAX_AUDIO_LANES) {
-			showToast(`${MAX_AUDIO_LANES} audio lanes is the limit`, "error");
-			return;
-		}
-		asOneEdit(() => placeAudioLane(sourceId, length, at, drives, lanes));
-	}
-
-	function placeAudioLane(
-		sourceId: string,
-		length: number,
-		at: number,
-		drives: boolean,
-		lanes: AudioLane[],
-	) {
-		mediaState.pushHistory();
-		let next = mediaState.timeline;
-		const before = mixer.duration;
-		if (drives && lanes.length === 0 && length > before) {
-			lengthHistory.push(before);
-			const spanBefore = { start: mixer.spanStart, end: mixer.spanEnd };
-			next = {
-				...next,
-				lanes: next.lanes.map((l) =>
-					l.clips.length === 1 &&
-					l.clips[0].start === 0 &&
-					Math.abs(l.clips[0].end - before) < 1e-6
-						? { ...l, clips: [{ ...l.clips[0], end: length }] }
-						: l,
-				),
-			};
-			mixer.setDuration(length);
-			mixSpanHistory.pushMoved(spanBefore);
-		}
-		const duration = mixer.duration;
-		const start = Math.min(at, Math.max(0, duration - MIN_CLIP_LENGTH));
-		const lane = createAudioLane(nextAudioLaneName(lanes), drives);
-		lane.clips = [
-			createAudioClip(start, Math.min(duration, start + length), sourceId),
-		];
-		mediaState.set({
-			...next,
-			audioLanes: drives ? [lane, ...lanes] : [...lanes, lane],
-		});
-		selectedAudioClipId = lane.clips[0].id;
-		selectedAudioClipIds = [lane.clips[0].id];
-	}
-
 	// Decoding starts as a song leaves the library, so the lanes can show its length.
 	$effect(() => {
 		const trackId = draggedTrackId();
@@ -2676,109 +2612,9 @@
 		return audioBank.buffer(sourceId)?.duration ?? null;
 	}
 
-	/** A library song dropped on the lanes: on clips it swaps their sound, on empty
-	 * space it adds a clip there. The first into a project with no song becomes it. */
-	async function dropTrack(
-		trackId: string,
-		target: { clipIds: string[] } | { laneId: string; time: number },
-	) {
-		const sourceId = trackSourceId(trackId);
-		if ("clipIds" in target) {
-			const ids = new Set(target.clipIds);
-			const changes = (mediaState.timeline.audioLanes ?? []).some((l) =>
-				l.clips.some((c) => ids.has(c.id) && c.sourceId !== sourceId),
-			);
-			if (!changes) return;
-			mediaState.pushHistory();
-			mediaState.set({
-				...mediaState.timeline,
-				audioLanes: setAudioClipSources(
-					mediaState.timeline.audioLanes ?? [],
-					target.clipIds,
-					sourceId,
-				),
-			});
-		} else {
-			const length = (await audioBank.load(sourceId))?.duration ?? null;
-			if (length === null) {
-				showToast("That track has no sound that could be decoded", "error");
-				return;
-			}
-			const lanes = mediaState.timeline.audioLanes ?? [];
-			const lane = lanes.find((l) => l.id === target.laneId);
-			if (!lane) return;
-			const clip = createAudioClip(target.time, target.time + length, sourceId);
-			const next = addClip(lane, clip, mixer.duration);
-			if (next === lane) return;
-			mediaState.pushHistory();
-			mediaState.set({
-				...mediaState.timeline,
-				audioLanes: lanes.map((l) => (l.id === lane.id ? next : l)),
-			});
-			selectedAudioClipId = clip.id;
-			selectedAudioClipIds = [clip.id];
-		}
-		if (!audio.trackFile) await loadSong(trackId);
-	}
-
 	function toggleMicTake(laneId: string) {
 		if (micRecorder.take || micRecorder.arming) micRecorder.stop();
 		else void micRecorder.start(laneId, timelineAxis?.staticTime ?? 0);
-	}
-
-	/** A finished take is stored beside the songs, off the library's list, and covers
-	 * what was on its lane from where it began. */
-	async function placeMicTake({ laneId, file, start, length }: MicTakeResult) {
-		let track;
-		try {
-			track = await addTrack(file, { take: true });
-		} catch (e) {
-			console.error("Failed to store take:", e);
-			showToast("Couldn't store the take. Storage refused the write.", "error");
-			return;
-		}
-		const sourceId = trackSourceId(track.id);
-		await audioBank.load(sourceId);
-		const end = Math.min(mixer.duration, start + length);
-		if (end - start < MIN_CLIP_LENGTH) return;
-		const lane = (mediaState.timeline.audioLanes ?? []).find(
-			(l) => l.id === laneId,
-		);
-		if (!lane) {
-			placeAudio(sourceId, length, start, false);
-			return;
-		}
-		const clip = createAudioClip(start, end, sourceId);
-		mediaState.pushHistory();
-		mediaState.set({
-			...mediaState.timeline,
-			audioLanes: (mediaState.timeline.audioLanes ?? []).map((l) =>
-				l.id === laneId
-					? punchInAudioClip(l, clip, sourceRegistry.edits, videoLengths)
-					: l,
-			),
-		});
-		selectedAudioClipId = clip.id;
-		selectedAudioClipIds = [clip.id];
-		showToast(`Take on ${lane.name}`, "info");
-	}
-
-	/** A lane with no sound yet, for clips pasted or dragged in from another. Goes
-	 * under the audio lane last pressed, or last. */
-	function addEmptyAudioLane() {
-		const lanes = mediaState.timeline.audioLanes ?? [];
-		if (lanes.length >= MAX_AUDIO_LANES) return;
-		const active = lanes.findIndex((l) => l.id === timelineAxis?.activeLaneId);
-		const at = active === -1 ? lanes.length : active + 1;
-		mediaState.pushHistory();
-		mediaState.set({
-			...mediaState.timeline,
-			audioLanes: [
-				...lanes.slice(0, at),
-				createAudioLane(nextAudioLaneName(lanes)),
-				...lanes.slice(at),
-			],
-		});
 	}
 
 	/** The library picked a song: it takes the old one's clips, or a lane of its own. */
@@ -2846,17 +2682,6 @@
 	/** A library track deleted while clips here still play it. */
 	function dropDeletedTrack(trackId: string) {
 		removeAudioClipsOf(trackSourceId(trackId));
-	}
-
-	function removeAudioClipsOf(sourceId: string) {
-		const lanes = mediaState.timeline.audioLanes ?? [];
-		if (!lanes.some((l) => l.clips.some((c) => c.sourceId === sourceId)))
-			return;
-		mediaState.pushHistory();
-		mediaState.set({
-			...mediaState.timeline,
-			audioLanes: removeAudioSource(lanes, sourceId),
-		});
 	}
 
 	/** The project's length, set by hand. Shorter cuts clips straddling the new end
@@ -2954,82 +2779,6 @@
 			repeatSpan = { start: at(repeatSpan.start), end: at(repeatSpan.end) };
 		}
 		mixer.seek(at(playhead));
-	}
-
-	/** Detach each video clip's sound onto an audio lane of its own. */
-	function detachClipsAudio(clipIds: string[]) {
-		let timeline = mediaState.timeline;
-		let lanes = timeline.audioLanes ?? [];
-		for (const clipId of clipIds) {
-			const lane = findMediaClipLane(timeline, clipId);
-			const clip = lane?.clips.find((c) => c.id === clipId);
-			const sourceId = lane && clip ? clipSourceId(lane, clip) : null;
-			if (!lane || !clip || !sourceId || clip.audioDetached) continue;
-			const source = sequenceSources.find((s) => s.id === sourceId);
-			if (source?.kind !== "video" || audioBank.isSilent(sourceId)) continue;
-			// The first free-standing lane with room takes it; otherwise a new one does.
-			const fits = (l: AudioLane) =>
-				l.clips.every((c) => c.end <= clip.start || c.start >= clip.end);
-			const target = lanes.find((l) => !l.drives && fits(l));
-			if (!target && lanes.length >= MAX_AUDIO_LANES) {
-				showToast(`${MAX_AUDIO_LANES} audio lanes is the limit`, "error");
-				break;
-			}
-			const detached = {
-				...createAudioClip(clip.start, clip.end, sourceId, clip.sourceStart),
-				gain: clip.gain,
-				fadeInSec: clip.fadeInSec,
-				fadeOutSec: clip.fadeOutSec,
-				bounce: clip.bounce,
-				bounceBack: clip.bounceBack,
-			};
-			lanes = target
-				? lanes.map((l) =>
-						l.id === target.id
-							? {
-									...l,
-									clips: [...l.clips, detached].sort(
-										(a, b) => a.start - b.start,
-									),
-								}
-							: l,
-					)
-				: [
-						...lanes,
-						{ ...createAudioLane(nextAudioLaneName(lanes)), clips: [detached] },
-					];
-			timeline = updateMediaLaneIn(timeline, lane.id, (l) => ({
-				...l,
-				clips: l.clips.map((c) =>
-					c.id === clipId ? { ...c, audioDetached: true } : c,
-				),
-			}));
-		}
-		if (timeline === mediaState.timeline) return;
-		mediaState.pushHistory();
-		mediaState.set({ ...timeline, audioLanes: lanes });
-	}
-
-	/** Give video clips their sound back: the audio clips playing it under each go. */
-	function reattachClipsAudio(clipIds: string[]) {
-		let timeline = mediaState.timeline;
-		let lanes = timeline.audioLanes ?? [];
-		for (const clipId of clipIds) {
-			const lane = findMediaClipLane(timeline, clipId);
-			const clip = lane?.clips.find((c) => c.id === clipId);
-			const sourceId = lane && clip ? clipSourceId(lane, clip) : null;
-			if (!lane || !clip?.audioDetached || !sourceId) continue;
-			lanes = removeAudioSourceIn(lanes, sourceId, clip.start, clip.end);
-			timeline = updateMediaLaneIn(timeline, lane.id, (l) => ({
-				...l,
-				clips: l.clips.map((c) =>
-					c.id === clipId ? { ...c, audioDetached: undefined } : c,
-				),
-			}));
-		}
-		if (timeline === mediaState.timeline) return;
-		mediaState.pushHistory();
-		mediaState.set({ ...timeline, audioLanes: lanes });
 	}
 
 	/** What is on screen now: the main chain, then each fx lane's in lane order. */
@@ -4151,6 +3900,34 @@
 			dropFromPool,
 			closePicker: () => (projectPickerOpen = false),
 		});
+
+	const {
+		placeAudio,
+		dropTrack,
+		placeMicTake,
+		addEmptyAudioLane,
+		removeAudioClipsOf,
+		detachClipsAudio,
+		reattachClipsAudio,
+	} = createAudioLaneEdits({
+		media: mediaState,
+		mixer,
+		bank: audioBank,
+		lengthHistory,
+		spanHistory: mixSpanHistory,
+		selectAudioClip: (id) => {
+			selectedAudioClipId = id;
+			selectedAudioClipIds = [id];
+		},
+		hasVideoSound: (id) =>
+			sequenceSources.find((s) => s.id === id)?.kind === "video" &&
+			!audioBank.isSilent(id),
+		edits: () => sourceRegistry.edits,
+		videoLengths: () => videoLengths,
+		activeLaneId: () => timelineAxis?.activeLaneId,
+		hasSong: () => !!audio.trackFile,
+		loadSong,
+	});
 
 	/** What a new lane starts on: the first thing in the pool. */
 	function defaultLayerSourceId(): string | null {
