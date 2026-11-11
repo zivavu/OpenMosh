@@ -161,11 +161,7 @@
 	} from "../../editor/sequence-sources.svelte";
 	import { MediaLayerDriver } from "../../editor/media-layer-driver";
 	import { isMeshFile, MESH_ACCEPT } from "../../mesh";
-	import {
-		diagnoseModel,
-		isOtherModelFile,
-		type ModelProblem,
-	} from "../../mesh/support";
+	import { isOtherModelFile, type ModelProblem } from "../../mesh/support";
 	import { SingleProxy } from "../../editor/single-proxy.svelte";
 	import { droppedClipLength } from "../../editor/sequence-source-ui";
 	import type { ProxyAction } from "../../video/proxy-status";
@@ -223,6 +219,7 @@
 	import { createPoolEdits, type PoolEntry } from "../../editor/pool-edits";
 	import { LaneSettingsPanel } from "../../editor/lane-settings-panel.svelte";
 	import { LayerStack } from "../../editor/layer-stack.svelte";
+	import { createPoolAdds } from "../../editor/pool-adds";
 	import { ChainTimelineState } from "../../editor/chain-timeline-state.svelte";
 	import { mediaTimelineOps, textTimelineOps } from "../../editor/timeline-ops";
 	import {
@@ -1883,103 +1880,22 @@
 		void sourceRegistry.restore(missing).catch(() => {});
 	});
 
-	/** Add to the pool, then seat a source-less lane on the first file added. */
-	async function addLayerSources(files: File[]) {
-		const added = await addSequenceSources(files);
-		// An image the browser couldn't read may already be out of the pool.
-		const first = added.find((s) => sourceRegistry.get(s.id));
-		if (!first) return;
-		// Nothing anywhere on the lane to draw; clips that each point somewhere already carry media.
-		const unset = mediaState.timeline.lanes.find(
-			(l) => !l.sourceId && l.clips.every((c) => !c.sourceId),
-		);
-		if (!unset) return;
-		mediaState.pushHistory();
-		mediaState.set(
-			updateMediaLaneIn(mediaState.timeline, unset.id, (l) => ({
-				...l,
-				sourceId: first.id,
-			})),
-		);
-	}
-
-	async function addSequenceSources(files: File[]) {
-		if (!isSequenceMode && files.some(isMeshFile)) {
-			showToast("3D models work in the Editor", "error");
-			files = files.filter((f) => !isMeshFile(f));
-		}
-		const otherModels = files.filter(isOtherModelFile);
-		files = files.filter((f) => !isOtherModelFile(f));
-		const repeats = alreadyPooled(files);
-		// Added on its own, a slideshow's slide joins the pool's list.
-		const own = files.map(stableSourceId).filter((id) => slideOnlyIds.has(id));
-		if (own.length > 0) {
-			slideOnlyIds = new Set(
-				[...slideOnlyIds].filter((id) => !own.includes(id)),
-			);
-		}
-		// Single mode's pool is session-scoped: no song to persist under.
-		const added = await sourceRegistry.add(files, {
-			persist: isSequenceMode,
+	const { addSequenceSources, addLayerSources, explainRejectedModels } =
+		createPoolAdds({
+			registry: sourceRegistry,
+			media: () => mediaState,
+			persistent: () => isSequenceMode,
+			slideOnlyIds: () => slideOnlyIds,
+			setSlideOnlyIds: (ids) => (slideOnlyIds = ids),
+			reportModelProblems: (problems) =>
+				(modelProblems = [...modelProblems, ...problems]),
 		});
-		if (isSequenceMode && added.some((s) => s.kind === "model")) {
-			showToast("To turn a model, add a 3D Transform to its clip", "info");
-		}
-		const rejectedModels = await explainRejectedModels([
-			...otherModels,
-			...files,
-		]);
-		const skipped =
-			files.length -
-			added.length -
-			repeats.length -
-			(rejectedModels - otherModels.length);
-		if (skipped > 0) {
-			showToast(
-				`Skipped ${skipped} file${skipped === 1 ? "" : "s"} that couldn't be decoded`,
-				"error",
-			);
-		}
-		if (repeats.length > 0 && added.length === 0 && skipped <= 0) {
-			showToast(
-				repeats.length === 1
-					? `"${repeats[0].name}" is already in the pool`
-					: `Those ${repeats.length} files are already in the pool`,
-				"info",
-			);
-		}
-		return added;
-	}
-
-	/** Files the pool holds already, or that repeat one earlier in the batch. */
-	function alreadyPooled(files: File[]): File[] {
-		const seen = new Set<string>();
-		return files.filter((f) => {
-			const id = stableSourceId(f);
-			const repeat = seen.has(id) || !!sourceRegistry.get(id);
-			seen.add(id);
-			return repeat;
-		});
-	}
 
 	/** 3D files the pool turned down, and why; the dialog is up while there are any. */
 	let modelProblems = $state<ModelProblem[]>([]);
 	const loadUnsupportedModelDialog = lazy(
 		() => import("../ui/UnsupportedModelDialog.svelte"),
 	);
-
-	/** Say why models that didn't make the pool were turned down; returns how many. */
-	async function explainRejectedModels(files: File[]): Promise<number> {
-		const rejected = files.filter(
-			(f) =>
-				isOtherModelFile(f) ||
-				(isMeshFile(f) && !sourceRegistry.get(stableSourceId(f))),
-		);
-		if (rejected.length === 0) return 0;
-		const problems = await Promise.all(rejected.map(diagnoseModel));
-		modelProblems = [...modelProblems, ...problems];
-		return rejected.length;
-	}
 
 	let showClearSourcesConfirm = $state(false);
 
