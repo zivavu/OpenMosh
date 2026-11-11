@@ -46,6 +46,9 @@ export interface EditorClock {
 	pause(): void;
 	/** Seek the song (or the mix) alone. */
 	seekSong(t: number): void;
+	/** The library's play and pause: the mix in the editor, the song alone in single mode. */
+	playSong(): void;
+	pauseSong(): void;
 	transport(): ClockTransport;
 	/** The master source is playing, the free-running loop aside. */
 	sourcePlaying(): boolean;
@@ -114,6 +117,8 @@ export class SequenceClock implements EditorClock {
 	};
 	pause = () => this.#host.mixer.pause();
 	seekSong = (t: number) => this.#host.mixer.seek(t);
+	playSong = () => this.playSpan();
+	pauseSong = () => this.pause();
 	seek = (t: number) => this.#host.mixer.seek(t);
 	toggle = () => {
 		if (this.#host.mixer.playing) this.pause();
@@ -246,6 +251,8 @@ export class SingleClock implements EditorClock {
 		if (this.#host.isVideo()) this.#host.video.pause();
 	};
 	seekSong = (t: number) => this.#host.audio.seekTo(t);
+	playSong = () => this.#host.audio.playAudio();
+	pauseSong = () => this.#host.audio.pauseAudio();
 
 	toggle = () => {
 		const { audio, video } = this.#host;
