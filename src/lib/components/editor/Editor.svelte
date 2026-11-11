@@ -2884,8 +2884,8 @@
 		}}
 		onUnloadTrack={clearTrack}
 		onTrackDeleted={isSequenceMode ? projectSongs.dropDeleted : undefined}
-		onPlay={isSequenceMode ? clock.playSpan : () => audio.playAudio()}
-		onPause={isSequenceMode ? clock.pause : () => audio.pauseAudio()}
+		onPlay={clock.playSong}
+		onPause={clock.pauseSong}
 		mainPlaying={clock.soundPlaying}
 		pendingTrack={audio.trackFile}
 		onNormalizeChange={(gain) => audio.setNormalizeGain(gain)}
