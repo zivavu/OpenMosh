@@ -185,6 +185,8 @@ what Vercel serves. `main` itself only deploys as a Vercel preview.
 - A tidy also opens the release's section with a short summary: a paragraph of what users
   will notice, then one on what happens to saved projects. Below it, related lines merge
   into one, their links in one parenthesis, comma-separated.
+- Skip the saved-projects paragraph when nothing happens to them. Never write "Saved projects
+  open as before, and nothing they store has changed" or any stand-in for it.
 - Keep the commit (and PR) links release-please puts after each changelog line. 0.9.2 went out
   without them only because its lines all came from one override on a single commit.
 - Run changelog text through the `/humanizer` skill before it goes in: the release PR's
