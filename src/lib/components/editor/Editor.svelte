@@ -180,6 +180,11 @@
 	import { ProjectOpener } from "../../editor/project-opener.svelte";
 	import { SingleSong } from "../../editor/single-song.svelte";
 	import { ProjectSongs } from "../../editor/project-songs";
+	import {
+		ProjectKeys,
+		SessionKeys,
+		type EditorKeys,
+	} from "../../editor/editor-keys";
 	import type { SongHandler } from "../../editor/song-handler";
 	import { contentEnd, contentStart } from "../../editor/project-seed";
 	import {
@@ -918,7 +923,7 @@
 	} | null>(null);
 	$effect(() => {
 		const pending = legacySegments;
-		if (!pending || pending.key !== seqStoreKey) return;
+		if (!pending || pending.key !== keys.storeKey) return;
 		const duration = clock.duration;
 		if (duration <= 0) return;
 		legacySegments = null;
@@ -944,18 +949,16 @@
 			? `video:${file.name}:${file.size}:${file.lastModified}`
 			: null,
 	);
-	/** Sequence mode's project id: the song's id for projects from before v3, else its own. */
-	let projectKey = $state<string | null>(
-		untrack(() =>
-			mode === "sequence"
-				? (initialProjectKey ?? initialTrackId ?? `proj-${generateId()}`)
-				: null,
-		),
-	);
 
 	/** Single mode's session key; read once, since the edit keeps it for life. */
 	const singleSessionKey = untrack(() =>
 		mode === "sequence" ? null : (sessionKey ?? newSessionKey("single")),
+	);
+	/** The project's id: the song's id for projects from before v3, else its own. */
+	const projectKey = untrack(() =>
+		mode === "sequence"
+			? (initialProjectKey ?? initialTrackId ?? `proj-${generateId()}`)
+			: null,
 	);
 	/** A single edit keyed by its own id saves its timeline there too, not under its
 	 * song or video, so two edits of the same file or song never share one. */
@@ -964,26 +967,22 @@
 			? singleSessionKey.slice("single:".length)
 			: null;
 
-	// The song/video this editor saves against, before the mode prefix.
-	let seqBaseKey = $derived(
-		isSequenceMode
-			? projectKey
-			: (singleProjectBase ??
-					(clock.masterIsAudio
-						? currentTrackId
-						: (videoSeqKey ?? currentTrackId))),
-	);
-
-	/** Single and sequence share this component, so the store is namespaced. */
-	const seqKeyPrefix = $derived(isSequenceMode ? "seq:" : "single:");
-	let seqStoreKey = $derived(seqBaseKey && seqKeyPrefix + seqBaseKey);
+	const keys: EditorKeys = projectKey
+		? new ProjectKeys(projectKey)
+		: new SessionKeys({
+				sessionKey: singleSessionKey!,
+				projectBase: singleProjectBase,
+				masterIsAudio: () => clock.masterIsAudio,
+				trackId: () => currentTrackId,
+				videoKey: () => videoSeqKey,
+			});
 
 	// The video's own timeline, whenever it is the master: when it opens, and again once
 	// a song leaves. With a song loaded, onLibraryLoadTrack owns restoring.
 	$effect(() => {
 		const key = videoSeqKey;
 		if (singleProjectBase || !key || clock.masterIsAudio) return;
-		const storeKey = seqKeyPrefix + key;
+		const storeKey = keys.prefix + key;
 		untrack(() => restoreVideoTimeline(key, storeKey));
 	});
 
@@ -992,7 +991,7 @@
 		void (async () => {
 			const saved = await timelines.load(key);
 			// A song adopted while this was out owns the state now.
-			if (seqStoreKey !== storeKey) return;
+			if (keys.storeKey !== storeKey) return;
 			// Marked even with nothing to restore: a video with no saved timeline still saves.
 			timelines.loadedKey = storeKey;
 			if (saved === null) return;
@@ -1005,7 +1004,7 @@
 	// A single edit with its own key restores its timeline once, whatever song it plays.
 	$effect(() => {
 		if (!singleProjectBase) return;
-		const storeKey = seqKeyPrefix + singleProjectBase;
+		const storeKey = keys.prefix + singleProjectBase;
 		untrack(() => {
 			timelines.loadedKey = null;
 			void (async () => {
@@ -1031,9 +1030,9 @@
 
 	const timelines = new TimelinePersistence({
 		saves,
-		prefix: untrack(() => seqKeyPrefix),
+		prefix: keys.prefix,
 		readsLegacy: untrack(() => isSequenceMode),
-		storeKey: () => seqStoreKey,
+		storeKey: () => keys.storeKey,
 		entry: seqEntryNow,
 		playing: () => audio.audioPlaying || singleVideo.isPlaying || mixer.playing,
 		baseSourceId: () => (file ? stableSourceId(file) : ""),
@@ -1094,12 +1093,12 @@
 	/** Save the whole project as a `.openmosh` file: the timeline, its pool, songs and
 	 * fonts. The pending autosave is flushed first so the file matches what's on screen. */
 	async function saveProjectFile() {
-		const key = isSequenceMode ? projectKey : singleSessionKey;
+		const key = keys.ownKey;
 		if (!key) return;
 		timelines.flush();
 		pool.flush();
 		await downloadProjectFile(key, {
-			mode: isSequenceMode ? "sequence" : "single",
+			mode: keys.mode,
 			live: liveProject() ?? undefined,
 		});
 	}
@@ -1268,8 +1267,8 @@
 	const pool = new PoolPersistence({
 		active: untrack(() => isSequenceMode),
 		registry: sourceRegistry,
-		baseKey: () => seqBaseKey,
-		prefix: untrack(() => seqKeyPrefix),
+		baseKey: () => keys.baseKey,
+		prefix: keys.prefix,
 		timelines,
 		saves,
 		slideOnlyIds: () => slideOnlyIds,
@@ -2068,9 +2067,9 @@
 	/** A ceiling on typos for the editor's project length. */
 	const MAX_PROJECT_LENGTH = 3600;
 
-	/** Which project the export settings belong to; `seqStoreKey` carries the mode prefix. */
+	/** Which project the export settings belong to; `keys.storeKey` carries the mode prefix. */
 	let renderKey = $derived(
-		seqStoreKey ??
+		keys.storeKey ??
 			(isSequenceMode || !file
 				? null
 				: `single:file:${file.name}:${file.size}:${file.lastModified}`),
@@ -2213,9 +2212,9 @@
 		file: () => file,
 		trackId: () => currentTrackId,
 		sessionKey: singleSessionKey,
-		held: () => !!seqStoreKey && timelines.isHeld(seqStoreKey),
+		held: () => !!keys.storeKey && timelines.isHeld(keys.storeKey),
 		onStale: () => {
-			if (seqStoreKey) timelines.hold(seqStoreKey, "elsewhere");
+			if (keys.storeKey) timelines.hold(keys.storeKey, "elsewhere");
 		},
 		playing: () => audio.audioPlaying || singleVideo.isPlaying,
 		saves,
@@ -2403,8 +2402,8 @@
 	const opener = new ProjectOpener({
 		active: untrack(() => isSequenceMode),
 		projectKey: () => projectKey,
-		storeKey: () => seqStoreKey,
-		prefix: untrack(() => seqKeyPrefix),
+		storeKey: () => keys.storeKey,
+		prefix: keys.prefix,
 		timelines,
 		saves,
 		tempo,
@@ -2458,8 +2457,8 @@
 		restoreMedia: restoreMediaTimeline,
 		trackId: () => currentTrackId,
 		setTrackId: (id) => (currentTrackId = id),
-		storeKey: () => seqStoreKey,
-		prefix: untrack(() => seqKeyPrefix),
+		storeKey: () => keys.storeKey,
+		prefix: keys.prefix,
 		projectBase: singleProjectBase,
 		savedSpan: (trackId) => spanStore.load(trackId),
 		initialSpan: untrack(() => {
@@ -2891,11 +2890,11 @@
 		pendingTrack={audio.trackFile}
 		onNormalizeChange={(gain) => audio.setNormalizeGain(gain)}
 		onAutoAdded={adoptLibraryTrack}
-		projectMode={isSequenceMode ? "sequence" : "single"}
-		activeProjectKey={isSequenceMode ? projectKey : singleSessionKey}
+		projectMode={keys.mode}
+		activeProjectKey={keys.ownKey}
 		tracksDraggable={isSequenceMode}
 		songOnLanes={isSequenceMode}
-		openKey={isSequenceMode ? seqStoreKey : singleSessionKey}
+		openKey={keys.openKey}
 		onOpenProject={onOpenProject ? openOtherProject : undefined}
 	/>
 	<div
