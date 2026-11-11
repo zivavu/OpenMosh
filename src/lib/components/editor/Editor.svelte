@@ -152,15 +152,7 @@
 		type UndoSource,
 	} from "../../editor/undo-router";
 	import { BpmDetection } from "../../editor/bpm-detection.svelte";
-	import {
-		applyLayerMoves,
-		combinedLayerOrder,
-		zAbove,
-		nextLayerZ,
-		moveLayerTo,
-		stackIndex,
-		startLayerRowDrag,
-	} from "../../timeline/layer-order";
+	import { startLayerRowDrag } from "../../timeline/layer-order";
 	import { clipAt, type TimelineClip } from "../../timeline/clips";
 	import type { LayerPick } from "../../editor/layer-pick";
 	import {
@@ -188,7 +180,6 @@
 		createMediaClip,
 		createMediaLane,
 		detachMediaSource,
-		duplicateMediaLane,
 		EMPTY_MEDIA_TIMELINE,
 		fitMediaTimeline,
 		MAX_MEDIA_LANES,
@@ -231,6 +222,7 @@
 	import { createProjectLength } from "../../editor/project-length";
 	import { createPoolEdits, type PoolEntry } from "../../editor/pool-edits";
 	import { LaneSettingsPanel } from "../../editor/lane-settings-panel.svelte";
+	import { LayerStack } from "../../editor/layer-stack.svelte";
 	import { ChainTimelineState } from "../../editor/chain-timeline-state.svelte";
 	import { mediaTimelineOps, textTimelineOps } from "../../editor/timeline-ops";
 	import {
@@ -643,7 +635,7 @@
 				showToast("No room for the take: every lane is full", "error");
 				return;
 			}
-			next = appendMediaLane(next, source.id, nextLayerZ(layerOrder));
+			next = appendMediaLane(next, source.id, layerStack.topZ());
 			const lane = next.lanes[next.lanes.length - 1]!;
 			laneId = lane.id;
 			span = newClipSpan(lane, start, duration, want);
@@ -675,7 +667,7 @@
 		const next = appendMediaLane(
 			mediaState.timeline,
 			source.id,
-			nextLayerZ(layerOrder),
+			layerStack.topZ(),
 		);
 		const lane = next.lanes[next.lanes.length - 1]!;
 		const span = newClipSpan(
@@ -1249,7 +1241,7 @@
 		moshOptions: getMoshOptions,
 		newLaneSettings: currentFxLaneSettings,
 		duration: () => seqMasterDuration,
-		newLaneZ: () => newLaneZ(),
+		newLaneZ: (): number => newLaneZ(),
 		rollAlive,
 	});
 
@@ -3486,57 +3478,14 @@
 		return () => cancelAnimationFrame(raf);
 	});
 
-	/** Every layer in both timelines, front first; one order spans the two kinds. */
-	let layerOrder = $derived(
-		combinedLayerOrder(
-			mediaState.timeline.lanes,
-			textState.timeline.lanes,
-			fxState.lanes,
-		),
-	);
-
-	/** Drop a layer at `toIndex` in the shared stack, whichever timeline holds it. */
-	function reorderLayer(laneId: string, toIndex: number, coalesceKey?: string) {
-		const moves = moveLayerTo(layerOrder, laneId, toIndex);
-		if (!moves) return;
-		// Only the stacks whose lanes moved record it, under one stamp: one Ctrl+Z.
-		asOneEdit(() => {
-			if (movesAny(moves, mediaState.timeline.lanes)) {
-				mediaState.pushHistory(coalesceKey);
-				mediaState.set({
-					...mediaState.timeline,
-					lanes: applyLayerMoves(mediaState.timeline.lanes, moves),
-				});
-			}
-			restackFxAndText(moves, coalesceKey);
-		});
-	}
-
-	function movesAny(moves: { id: string }[], lanes: { id: string }[]) {
-		return lanes.some((l) => moves.some((m) => m.id === l.id));
-	}
-
-	function restackFxAndText(
-		moves: { id: string; z: number }[],
-		coalesceKey?: string,
-	) {
-		if (movesAny(moves, fxState.lanes)) {
-			fxState.pushHistory(coalesceKey);
-			fxState.set(applyLayerMoves(fxState.lanes, moves));
-		}
-		if (movesAny(moves, textState.timeline.lanes)) {
-			textState.pushHistory(coalesceKey);
-			textState.set({
-				...textState.timeline,
-				lanes: applyLayerMoves(textState.timeline.lanes, moves),
-			});
-		}
-	}
-
-	/** Where a new stacked lane goes: just above the lane last pressed, else on top. */
-	function newLaneZ(): number {
-		return zAbove(layerOrder, timelineAxis?.activeLaneId ?? null);
-	}
+	const layerStack = new LayerStack({
+		media: mediaState,
+		text: textState,
+		fx: fxState,
+		activeLaneId: () => timelineAxis?.activeLaneId,
+		revealLane: (id) => void revealLaneRow(id),
+	});
+	const { reorder: reorderLayer, newLaneZ, copyMediaLane } = layerStack;
 
 	/** Scroll the stack just enough to show a lane's row. */
 	async function revealLaneRow(laneId: string) {
@@ -3546,36 +3495,12 @@
 			?.scrollIntoView({ block: "nearest", inline: "nearest" });
 	}
 
-	/** A copy of the media lane, stacked right above it, in one undo step. */
-	function copyMediaLane(laneId: string) {
-		const lane = mediaState.timeline.lanes.find((l) => l.id === laneId);
-		if (!lane || mediaState.timeline.lanes.length >= MAX_MEDIA_LANES) return;
-		const copy = duplicateMediaLane(lane, nextLayerZ(layerOrder));
-		const lanes = [...mediaState.timeline.lanes, copy];
-		const order = combinedLayerOrder(
-			lanes,
-			textState.timeline.lanes,
-			fxState.lanes,
-		);
-		const moves =
-			moveLayerTo(order, copy.id, stackIndex(layerOrder, laneId)) ?? [];
-		asOneEdit(() => {
-			mediaState.pushHistory();
-			mediaState.set({
-				...mediaState.timeline,
-				lanes: applyLayerMoves(lanes, moves),
-			});
-			restackFxAndText(moves);
-		});
-		revealLaneRow(copy.id);
-	}
-
 	// Owned here rather than by either lane component: a drag crosses between text and media rows.
 	let draggingLaneId = $state<string | null>(null);
 
 	function startLayerDrag(laneId: string, e: PointerEvent) {
 		startLayerRowDrag(e, laneId, {
-			order: () => layerOrder,
+			order: () => layerStack.order,
 			reorder: reorderLayer,
 			setDragging: (id) => (draggingLaneId = id),
 		});
@@ -3616,7 +3541,7 @@
 			projectLength: () => mixer.duration,
 			growProjectTo: (length) => growProjectTo(length),
 			playhead: () => timelineAxis?.staticTime ?? 0,
-			nextLaneZ: () => nextLayerZ(layerOrder),
+			nextLaneZ: () => layerStack.topZ(),
 			revealLane: (id) => void revealLaneRow(id),
 			capturePool: () => {
 				const before = poolNow();
@@ -3864,7 +3789,7 @@
 		textState.pushHistory();
 		textState.timeline = toggledTextTimeline(
 			textState.timeline,
-			nextLayerZ(layerOrder),
+			layerStack.topZ(),
 		);
 		if (!textState.timeline.enabled) {
 			textState.selectedClipId = null;
@@ -3933,7 +3858,7 @@
 		textState.timeline = applyLyricsToTimeline(
 			textState.timeline,
 			clips,
-			nextLayerZ(layerOrder),
+			layerStack.topZ(),
 		);
 		textState.selectedClipId = clips[0].id;
 	}
@@ -4917,7 +4842,7 @@
 							timeline={mediaState.timeline}
 							foldedLaneIds={laneFolds.ids}
 							onToggleFold={laneFolds.toggle}
-							{layerOrder}
+							layerOrder={layerStack.order}
 							{draggingLaneId}
 							onLaneDragStart={startLayerDrag}
 							sources={sequenceSources}
@@ -4947,7 +4872,7 @@
 							timeline={textState.timeline}
 							foldedLaneIds={laneFolds.ids}
 							onToggleFold={laneFolds.toggle}
-							{layerOrder}
+							layerOrder={layerStack.order}
 							{draggingLaneId}
 							onLaneDragStart={startLayerDrag}
 							bind:selectedClipId={textState.selectedClipId}
@@ -4968,7 +4893,7 @@
 							lanes={fxState.lanes}
 							foldedLaneIds={laneFolds.ids}
 							onToggleFold={laneFolds.toggle}
-							{layerOrder}
+							layerOrder={layerStack.order}
 							{draggingLaneId}
 							onLaneDragStart={startLayerDrag}
 							bind:selectedClipId={fxState.selectedClipId}
@@ -5000,7 +4925,7 @@
 							edits={sourceRegistry.edits}
 							{videoLengths}
 							sourceEndsOf={audioSourceEnds}
-							orderBase={layerOrder.length}
+							orderBase={layerStack.order.length}
 							foldedLaneIds={laneFolds.ids}
 							onToggleFold={laneFolds.toggle}
 							trackLength={decodedLength}
