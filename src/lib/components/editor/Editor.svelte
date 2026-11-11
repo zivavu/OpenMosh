@@ -51,12 +51,7 @@
 	import { getDecodedAudioBuffer } from "../../audio/audio-buffer-cache";
 	import { songProfileOf } from "../../audio/build-song-profile";
 	import { publishSongProfile } from "../../audio/song-profile";
-	import {
-		retargetAudioSource,
-		trackIdOf,
-		trackSourceId,
-		type AudioClip,
-	} from "../../mix/types";
+	import { trackIdOf, trackSourceId, type AudioClip } from "../../mix/types";
 	import { draggedTrackId } from "../../editor/source-drag.svelte";
 	import { generateId } from "../../effects/types";
 	import AudioLanes from "../timeline/AudioLanes.svelte";
@@ -184,6 +179,8 @@
 	import { PoolPersistence } from "../../editor/pool-persistence.svelte";
 	import { ProjectOpener } from "../../editor/project-opener.svelte";
 	import { SingleSong } from "../../editor/single-song.svelte";
+	import { ProjectSongs } from "../../editor/project-songs";
+	import type { SongHandler } from "../../editor/song-handler";
 	import { contentEnd, contentStart } from "../../editor/project-seed";
 	import {
 		SequenceClock,
@@ -814,25 +811,18 @@
 	function onTrackInputChange() {
 		const files = Array.from(trackInput?.files ?? []);
 		trackInput.value = "";
-		if (files.length === 0) return;
-		if (isSequenceMode) {
-			void addAudioFiles(files);
-			return;
-		}
-		singleSong.replaceFile(files[0]);
+		if (files.length > 0) songs.addFiles(files);
 	}
 
 	function clearTrack() {
-		if (isSequenceMode) removeSong();
-		else singleSong.clear();
+		songs.clear();
 	}
 
 	/** The editor learned a track's library id without being asked to load it. */
 	function adoptLibraryTrack(trackId: string) {
 		if (currentTrackId === trackId) return;
 		currentTrackId = trackId;
-		// The project, not its song, owns what's saved in sequence mode.
-		if (!isSequenceMode) singleSong.adopted(trackId);
+		songs.adopted(trackId);
 	}
 
 	/** Give a song that arrived without a library id one; the id keys everything per-song. */
@@ -858,8 +848,7 @@
 	});
 
 	function onLibraryLoadTrack(file: File, trackId: string, autoplay = false) {
-		if (isSequenceMode) replaceSong(file, trackId);
-		else singleSong.load(file, trackId, autoplay);
+		songs.pick(file, trackId, autoplay);
 	}
 
 	// An AudioContext created before a user gesture starts suspended and can't be resumed.
@@ -1528,61 +1517,6 @@
 		return sourceRegistry.get(id)?.name ?? "Missing media";
 	}
 
-	/** Bumped per song pick, so a slower read can't land over a newer pick. */
-	let songPick = 0;
-
-	/** Load a library track as the song, or drop the song for null. */
-	async function loadSong(trackId: string | null) {
-		const pick = ++songPick;
-		if (!trackId) {
-			dropSong();
-			return;
-		}
-		const track = await getTrack(trackId).catch(() => null);
-		if (!track || pick !== songPick) return;
-		setSong(trackToFile(track), trackId);
-	}
-
-	/** The project's song: the BPM source, and the track the library shows as loaded. */
-	function setSong(songFile: File, trackId: string) {
-		audio.trackFile = songFile;
-		currentTrackId = trackId;
-	}
-
-	function dropSong() {
-		audio.clearTrack();
-		currentTrackId = null;
-		if (!tempo.poolSource) {
-			tempo.bpm = 0;
-			tempo.beatOffset = 0;
-		}
-	}
-
-	/** Sequence mode: sound files onto lanes. The first becomes the song when there's none. */
-	async function addAudioFiles(files: File[]) {
-		const at = timelineAxis?.staticTime ?? 0;
-		for (const f of files) {
-			let track;
-			try {
-				track = await addTrack(f);
-			} catch (e) {
-				console.error("Failed to store track:", e);
-				showToast(`Couldn't store "${f.name}"`, "error");
-				continue;
-			}
-			const sourceId = trackSourceId(track.id);
-			const isSong = !audio.trackFile;
-			if (isSong) setSong(f, track.id);
-			const buffer = await audioBank.load(sourceId);
-			if (!buffer) {
-				showToast(`"${f.name}" has no sound that could be decoded`, "error");
-				if (isSong) dropSong();
-				continue;
-			}
-			placeAudio(sourceId, buffer.duration, isSong ? 0 : at, isSong);
-		}
-	}
-
 	// Decoding starts as a song leaves the library, so the lanes can show its length.
 	$effect(() => {
 		const trackId = draggedTrackId();
@@ -1596,73 +1530,6 @@
 	function toggleMicTake(laneId: string) {
 		if (micRecorder.take || micRecorder.arming) micRecorder.stop();
 		else void micRecorder.start(laneId, timelineAxis?.staticTime ?? 0);
-	}
-
-	/** The library picked a song: it takes the old one's clips, or a lane of its own. */
-	function replaceSong(songFile: File, trackId: string) {
-		if (trackId === currentTrackId) return;
-		const from = songSourceId;
-		const to = trackSourceId(trackId);
-		tempo.bpm = 0;
-		tempo.beatOffset = 0;
-		tempo.poolSource = null;
-		setSong(songFile, trackId);
-		const lanes = mediaState.timeline.audioLanes ?? [];
-		if (from && lanes.some((l) => l.clips.some((c) => c.sourceId === from))) {
-			mediaState.pushHistory();
-			mediaState.set({
-				...mediaState.timeline,
-				audioLanes: retargetAudioSource(lanes, from, to),
-			});
-			return;
-		}
-		void audioBank.load(to).then((buffer) => {
-			if (buffer && currentTrackId === trackId) {
-				placeAudio(to, buffer.duration, 0, true);
-			}
-		});
-	}
-
-	/** A track already on the lanes becomes the song, the one the BPM is measured from;
-	 * a video's sound is measured without becoming the song. Unlike replaceSong, every
-	 * clip stays where it is. */
-	async function setBpmSource(sourceId: string) {
-		const trackId = trackIdOf(sourceId);
-		if (!trackId) {
-			if (sourceId === tempo.poolSource) return;
-			tempo.poolSource = sourceId;
-			tempo.bpm = 0;
-			tempo.beatOffset = 0;
-			return;
-		}
-		if (trackId === currentTrackId) {
-			if (!tempo.poolSource) return;
-			tempo.poolSource = null;
-			tempo.bpm = 0;
-			tempo.beatOffset = 0;
-			return;
-		}
-		tempo.poolSource = null;
-		const track = await getTrack(trackId).catch(() => null);
-		if (!track) {
-			showToast("That track is no longer in the library", "error");
-			return;
-		}
-		// Zero, so the new song is measured rather than keeping the old one's tempo.
-		tempo.bpm = 0;
-		tempo.beatOffset = 0;
-		setSong(trackToFile(track), trackId);
-	}
-
-	/** Unloading the song takes its clips off the lanes too. */
-	function removeSong() {
-		if (songSourceId) removeAudioClipsOf(songSourceId);
-		dropSong();
-	}
-
-	/** A library track deleted while clips here still play it. */
-	function dropDeletedTrack(trackId: string) {
-		removeAudioClipsOf(trackSourceId(trackId));
 	}
 
 	/** What is on screen now: the main chain, then each fx lane's in lane order. */
@@ -2457,7 +2324,7 @@
 			setSlideOnlyIds: (ids) => (slideOnlyIds = ids),
 			settleAudio: (ids) => audioBank.settle(ids),
 			hasSong: () => !!audio.trackFile,
-			loadSong,
+			loadSong: (id) => projectSongs.load(id),
 			projectLength: () => mixer.duration,
 			growProjectTo: (length) => growProjectTo(length),
 			playhead: () => timelineAxis?.staticTime ?? 0,
@@ -2496,7 +2363,7 @@
 		videoLengths: () => videoLengths,
 		activeLaneId: () => timelineAxis?.activeLaneId,
 		hasSong: () => !!audio.trackFile,
-		loadSong,
+		loadSong: (id) => projectSongs.load(id),
 	});
 
 	const { setProjectLength, growProjectTo, growProjectFront } =
@@ -2550,7 +2417,7 @@
 		restoreMedia: restoreMediaTimeline,
 		setLegacySegments: (pending) => (legacySegments = pending),
 		currentTrackId: () => currentTrackId,
-		loadSong,
+		loadSong: (id) => projectSongs.load(id),
 		openedName: () =>
 			initialAudioFile?.name ?? file?.name ?? "Untitled project",
 		song: () => {
@@ -2602,6 +2469,21 @@
 				: null;
 		}),
 	});
+	const projectSongs = new ProjectSongs({
+		audio,
+		tempo,
+		bank: audioBank,
+		media: () => mediaState,
+		trackId: () => currentTrackId,
+		setTrackId: (id) => (currentTrackId = id),
+		playhead: () => timelineAxis?.staticTime ?? 0,
+		placeAudio,
+		removeAudioClipsOf,
+	});
+	// Fixed per editor, like the clock.
+	const songs: SongHandler = untrack(() => isSequenceMode)
+		? projectSongs
+		: singleSong;
 
 	/** What a new lane starts on: the first thing in the pool. */
 	function defaultLayerSourceId(): string | null {
@@ -2944,11 +2826,7 @@
 	function handleDroppedFiles(files: FileList | File[]) {
 		const all = Array.from(files, withMediaType);
 		const audioFiles = all.filter((f) => f.type.startsWith("audio/"));
-		if (isSequenceMode && audioFiles.length > 0) {
-			void addAudioFiles(audioFiles);
-		} else if (audioFiles[0]) {
-			singleSong.replaceFile(audioFiles[0]);
-		}
+		if (audioFiles.length > 0) songs.addFiles(audioFiles);
 		if (!isSequenceMode && all.some(isMeshFile)) {
 			showToast("3D models work in the Editor", "error");
 		}
@@ -3006,7 +2884,7 @@
 				audioTrackNames = { ...audioTrackNames, [id]: name };
 		}}
 		onUnloadTrack={clearTrack}
-		onTrackDeleted={isSequenceMode ? dropDeletedTrack : undefined}
+		onTrackDeleted={isSequenceMode ? projectSongs.dropDeleted : undefined}
 		onPlay={isSequenceMode ? clock.playSpan : () => audio.playAudio()}
 		onPause={isSequenceMode ? clock.pause : () => audio.pauseAudio()}
 		mainPlaying={clock.soundPlaying}
@@ -3637,7 +3515,7 @@
 							version={audioBank.version}
 							sourceName={audioSourceName}
 							bpmSourceId={tempo.poolSource ?? songSourceId}
-							onSetBpmSource={setBpmSource}
+							onSetBpmSource={projectSongs.setBpmSource}
 							repeatsOf={audioClipRepeats}
 							edits={sourceRegistry.edits}
 							{videoLengths}
