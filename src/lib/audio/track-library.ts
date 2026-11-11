@@ -45,6 +45,16 @@ export async function getTrack(id: string): Promise<StoredTrack | null> {
 	return (await db.get<StoredTrack>(id)) ?? null;
 }
 
+const addedListeners = new Set<(track: StoredTrack) => void>();
+
+/** Called with each song newly stored, from anywhere; mic takes stay off it. */
+export function onTrackAdded(listener: (track: StoredTrack) => void) {
+	addedListeners.add(listener);
+	return () => {
+		addedListeners.delete(listener);
+	};
+}
+
 /**
  * Save the file, or hand back the entry it was already saved as. The lookup runs
  * inside the write transaction on purpose: two callers can save the same song at
@@ -57,7 +67,10 @@ export async function addTrack(
 	const different = new Set<string>();
 	for (;;) {
 		const { track, isNew } = await findOrSave(file, different, take);
-		if (isNew) return track;
+		if (isNew) {
+			if (!take) for (const listener of addedListeners) listener(track);
+			return track;
+		}
 		// Name and size can match a different song. Its bytes are read out here, since an
 		// await on anything but the store would end the write transaction.
 		if (await sameBytes(track.blob, file)) return track;

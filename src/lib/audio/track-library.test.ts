@@ -1,6 +1,12 @@
 import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, test } from "bun:test";
-import { addTrack, clearTracks, getAllTracks } from "./track-library";
+import {
+	addTrack,
+	clearTracks,
+	getAllTracks,
+	onTrackAdded,
+	type StoredTrack,
+} from "./track-library";
 
 beforeEach(() => clearTracks());
 
@@ -26,5 +32,18 @@ describe("addTrack", () => {
 		const song = await addTrack(new File(["wxyz"], "song.wav"));
 		expect(take.take).toBe(true);
 		expect(song.take).toBeUndefined();
+	});
+});
+
+describe("onTrackAdded", () => {
+	test("hears each new song once, and neither repeats nor takes", async () => {
+		const heard: StoredTrack[] = [];
+		const stop = onTrackAdded((track) => heard.push(track));
+		const song = await addTrack(new File(["abcd"], "song.mp3"));
+		await addTrack(new File(["abcd"], "song.mp3"));
+		await addTrack(new File(["wxyz"], "Mic take.wav"), { take: true });
+		stop();
+		await addTrack(new File(["efgh"], "later.mp3"));
+		expect(heard.map((t) => t.id)).toEqual([song.id]);
 	});
 });

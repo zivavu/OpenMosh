@@ -66,8 +66,10 @@ test("sound added beside the song lands on a lane of its own", async ({
 		1,
 	);
 
-	// The song stays the one loaded.
+	// The library lists it at once, and the song stays the one loaded.
 	const rows = await openLibrarySongs(page);
+	await expect(rows).toHaveCount(2);
+	await expect(rows.filter({ hasText: "voice.wav" })).toHaveCount(1);
 	await expect(rows.and(page.locator(".active"))).toContainText("first.wav");
 });
 

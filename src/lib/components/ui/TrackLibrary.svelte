@@ -29,6 +29,7 @@
 		addTrack,
 		deleteTrack,
 		getAllTracks,
+		onTrackAdded,
 		renameTrack,
 		trackFileName,
 		trackToFile,
@@ -249,6 +250,15 @@
 			})
 			.catch((e) => console.error("Failed to auto-save track:", e));
 	});
+
+	// A song stored elsewhere (sound added on an editor lane) is listed at once.
+	onMount(() =>
+		onTrackAdded((track) => {
+			if (tracks.some((t) => t.id === track.id)) return;
+			tracks = [...tracks, track];
+			autoNormalize(track);
+		}),
+	);
 
 	onMount(async () => {
 		try {
