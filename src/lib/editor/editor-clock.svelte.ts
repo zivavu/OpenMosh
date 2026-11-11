@@ -4,6 +4,7 @@
 
 import { untrack } from "svelte";
 import type { AudioManager } from "../audio/audio-manager.svelte";
+import type { SpectrumData } from "../types";
 import type { SequenceMixer } from "../mix/mixer.svelte";
 import type { SingleVideo } from "./single-video.svelte";
 
@@ -46,6 +47,20 @@ export interface EditorClock {
 	/** Seek the song (or the mix) alone. */
 	seekSong(t: number): void;
 	transport(): ClockTransport;
+	/** The master source is playing, the free-running loop aside. */
+	sourcePlaying(): boolean;
+	/** Some sound drives the audio links. */
+	readonly hasDrive: boolean;
+	/** The links have sound to follow now, for the panels' spectra. */
+	readonly linksHaveAudio: boolean;
+	readonly spectrumData: SpectrumData | null;
+	readonly frequencyData: Uint8Array | null;
+	readonly spectrumSampleRate: number;
+	/** The song, or the mix, is playing. */
+	readonly soundPlaying: boolean;
+	readonly looping: boolean;
+	/** How long an export runs. */
+	readonly exportDuration: number;
 }
 
 export interface SequenceClockHost {
@@ -107,6 +122,34 @@ export class SequenceClock implements EditorClock {
 	toggleLoop = () => {
 		this.#host.mixer.loop = !this.#host.mixer.loop;
 	};
+
+	sourcePlaying() {
+		return this.#host.mixer.playing;
+	}
+	get hasDrive() {
+		return this.#host.mixer.hasDrive;
+	}
+	get linksHaveAudio() {
+		return this.#host.mixer.hasDrive;
+	}
+	get spectrumData() {
+		return this.#host.mixer.spectrumData;
+	}
+	get frequencyData() {
+		return this.#host.mixer.frequencyData;
+	}
+	get spectrumSampleRate() {
+		return this.#host.mixer.spectrumData?.sampleRate ?? 0;
+	}
+	get soundPlaying() {
+		return this.#host.mixer.playing;
+	}
+	get looping() {
+		return this.#host.mixer.loop;
+	}
+	get exportDuration() {
+		return this.#host.mixer.spanEnd - this.#host.mixer.spanStart;
+	}
 
 	transport(): ClockTransport {
 		const { mixer } = this.#host;
@@ -231,6 +274,48 @@ export class SingleClock implements EditorClock {
 		if (this.masterIsAudio) audio.loopAudio = !audio.loopAudio;
 		else this.#host.setLoop(!this.#host.loop());
 	};
+
+	sourcePlaying() {
+		const { audio, video } = this.#host;
+		return this.masterIsAudio ? audio.audioPlaying : video.isPlaying;
+	}
+	get hasDrive() {
+		const { audio, video } = this.#host;
+		return !!audio.trackFile || (this.#host.isVideo() && video.hasAudio);
+	}
+	get linksHaveAudio() {
+		const { audio } = this.#host;
+		return !!audio.trackFile || (this.#host.isVideo() && !!audio.analyserNode);
+	}
+	get spectrumData() {
+		return this.#host.audio.spectrumData;
+	}
+	get frequencyData() {
+		return this.#host.audio.frequencyData;
+	}
+	get spectrumSampleRate() {
+		return this.#host.audio.audioSampleRate;
+	}
+	get soundPlaying() {
+		return this.#host.audio.audioPlaying;
+	}
+	get looping() {
+		return this.masterIsAudio ? this.#host.audio.loopAudio : this.#host.loop();
+	}
+	get exportDuration() {
+		const { audio, video } = this.#host;
+		if (
+			audio.trackFile &&
+			audio.trackDuration > 0 &&
+			audio.spanEnd - audio.spanStart > 0
+		) {
+			return audio.spanEnd - audio.spanStart;
+		}
+		if (this.#host.isVideo() && video.duration > 0) {
+			return (video.spanEnd - video.spanStart) / video.speed;
+		}
+		return this.#host.exportLength();
+	}
 
 	transport(): ClockTransport {
 		const { audio, video } = this.#host;

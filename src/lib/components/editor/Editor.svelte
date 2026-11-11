@@ -985,20 +985,10 @@
 	// An AudioContext created before a user gesture starts suspended and can't be resumed.
 
 	// Not gated on audioContext: the graph is only built on first play.
-	const hasAudio = $derived(
-		isSequenceMode
-			? mixer.hasDrive
-			: !!audio.trackFile || (isVideo && singleVideo.hasAudio),
-	);
+	const hasAudio = $derived.by(() => clock.hasDrive);
 	/** Whether the audio links have something to follow, for the panels' spectra. */
-	let linksHaveAudio = $derived(
-		isSequenceMode
-			? mixer.hasDrive
-			: !!audio.trackFile || (isVideo && !!audio.analyserNode),
-	);
-	let liveSpectrum = $derived(
-		isSequenceMode ? mixer.spectrumData : audio.spectrumData,
-	);
+	let linksHaveAudio = $derived.by(() => clock.linksHaveAudio);
+	let liveSpectrum = $derived.by(() => clock.spectrumData);
 
 	function getMoshOptions() {
 		return {
@@ -1594,8 +1584,7 @@
 	});
 
 	function seqPlaying(): boolean {
-		if (isSequenceMode) return mixer.playing;
-		return clock.masterIsAudio ? audio.audioPlaying : singleVideo.isPlaying;
+		return clock.sourcePlaying();
 	}
 
 	const mediaLayers = new MediaLayerDriver({
@@ -3144,17 +3133,7 @@
 		);
 		textState.selectedClipId = clips[0].id;
 	}
-	let effectiveDuration = $derived(
-		isSequenceMode
-			? mixer.spanEnd - mixer.spanStart
-			: audio.trackFile &&
-				  audio.trackDuration > 0 &&
-				  audio.spanEnd - audio.spanStart > 0
-				? audio.spanEnd - audio.spanStart
-				: isVideo && singleVideo.duration > 0
-					? (singleVideo.spanEnd - singleVideo.spanStart) / singleVideo.speed
-					: recordDuration,
-	);
+	let effectiveDuration = $derived(clock.exportDuration);
 	const recordingState = createRecordingState();
 
 	async function startRecording() {
@@ -3358,7 +3337,7 @@
 		onTrackDeleted={isSequenceMode ? dropDeletedTrack : undefined}
 		onPlay={isSequenceMode ? clock.playSpan : () => audio.playAudio()}
 		onPause={isSequenceMode ? clock.pause : () => audio.pauseAudio()}
-		mainPlaying={isSequenceMode ? mixer.playing : audio.audioPlaying}
+		mainPlaying={clock.soundPlaying}
 		pendingTrack={audio.trackFile}
 		onNormalizeChange={(gain) => audio.setNormalizeGain(gain)}
 		onAutoAdded={adoptLibraryTrack}
@@ -3607,10 +3586,8 @@
 					: noSequenceMedia
 						? noMediaOverlay
 						: undefined}
-				spectrum={isSequenceMode ? mixer.frequencyData : audio.frequencyData}
-				spectrumSampleRate={isSequenceMode
-					? (mixer.spectrumData?.sampleRate ?? 0)
-					: audio.audioSampleRate}
+				spectrum={clock.frequencyData}
+				spectrumSampleRate={clock.spectrumSampleRate}
 				{sourceFit}
 				sourceEdits={sourceRegistry.edits}
 				{sourceDurations}
@@ -3858,11 +3835,7 @@
 				selectionHint={isSequenceMode
 					? "Click a media clip or an FX clip to edit it"
 					: null}
-				loopEnabled={isSequenceMode
-					? mixer.loop
-					: clock.masterIsAudio
-						? audio.loopAudio
-						: videoLoop}
+				loopEnabled={clock.looping}
 				onToggleLoop={isSequenceMode || audioIsMaster || videoIsMaster
 					? clock.toggleLoop
 					: null}
