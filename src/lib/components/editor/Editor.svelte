@@ -204,6 +204,11 @@
 	import { FxLaneState } from "../../editor/fx-lane-state.svelte";
 	import { createProjectImports } from "../../editor/project-imports";
 	import { SingleVideo } from "../../editor/single-video.svelte";
+	import {
+		SequenceClock,
+		SingleClock,
+		type EditorClock,
+	} from "../../editor/editor-clock.svelte";
 	import { SingleSessionSave } from "../../editor/single-session-save.svelte";
 	import { createAudioLaneEdits } from "../../editor/audio-lane-edits";
 	import { createProjectLength } from "../../editor/project-length";
@@ -454,17 +459,17 @@
 
 	function takeTransport(playing: boolean) {
 		if (playing) {
-			takeStart = timelineAxis?.staticTime ?? seqMasterTime();
-			playSpan();
+			takeStart = timelineAxis?.staticTime ?? clock.masterTime();
+			clock.playSpan();
 		} else {
-			pauseTrack();
+			clock.pause();
 		}
 	}
 
 	async function useTake(file: File) {
 		const [source] = await addSequenceSources([file]);
 		if (!source) return;
-		const duration = seqMasterDuration;
+		const duration = clock.duration;
 		if (duration <= 0) return;
 		const want = source.duration > 0 ? source.duration : MIN_CLIP_LENGTH;
 		const start = Math.min(takeStart, Math.max(0, duration - MIN_CLIP_LENGTH));
@@ -500,7 +505,7 @@
 	 * landed, its clip under the playhead. */
 	function dropSourceOnCanvas(sourceId: string, at: { x: number; y: number }) {
 		const source = sourceRegistry.get(sourceId);
-		const duration = seqMasterDuration;
+		const duration = clock.duration;
 		if (!source || duration <= 0) return;
 		if (mediaState.timeline.lanes.length >= MAX_MEDIA_LANES) {
 			showToast("No room for another lane: every lane is full", "error");
@@ -514,7 +519,7 @@
 		const lane = next.lanes[next.lanes.length - 1]!;
 		const span = newClipSpan(
 			lane,
-			seqMasterTime(),
+			clock.masterTime(),
 			duration,
 			droppedClipLength(source, sourceRegistry.edits[source.id]),
 		);
@@ -611,7 +616,7 @@
 		// A media lane's chain is its clip's under the playhead, read off the resolved layers.
 		...resolveMediaLayersAt(
 			mediaState.timeline,
-			textTime,
+			clock.time,
 			sourceRegistry.edits,
 			previewMediaChains,
 			sourceDurations,
@@ -620,13 +625,15 @@
 			effects: layer.effects,
 			response: layer.response ?? audioResponse,
 		})),
-		...resolveTextLayersAt(textState.timeline, textTime, previewTextChains).map(
-			(layer) => ({
-				scope: layer.laneId,
-				effects: layer.effects,
-				response: audioResponse,
-			}),
-		),
+		...resolveTextLayersAt(
+			textState.timeline,
+			clock.time,
+			previewTextChains,
+		).map((layer) => ({
+			scope: layer.laneId,
+			effects: layer.effects,
+			response: audioResponse,
+		})),
 	];
 
 	const audio = new AudioManager({
@@ -1018,22 +1025,29 @@
 		active: () => isSequenceMode,
 		moshOptions: getMoshOptions,
 		newLaneSettings: currentFxLaneSettings,
-		duration: () => seqMasterDuration,
+		duration: () => clock.duration,
 		newLaneZ: (): number => newLaneZ(),
 		rollAlive,
 	});
 
-	// Single mode: with an external track the audio is the master clock, matching export.
-	// Loading the file makes it master, not "and its duration is known". Sequence mode's
-	// clock is the mixer, whatever the lanes hold.
-	let seqMasterIsAudio = $derived(!isSequenceMode && !!audio.trackFile);
-	let seqMasterDuration = $derived(
-		isSequenceMode
-			? mixer.duration
-			: seqMasterIsAudio
-				? audio.trackDuration
-				: singleVideo.duration,
-	);
+	// Fixed per editor: a project or a session is a fresh editor.
+	const clock: EditorClock =
+		untrack(() => mode) === "sequence"
+			? new SequenceClock({
+					mixer,
+					marker: () => timelineAxis?.staticTime ?? null,
+					busy: () => mediaBusy,
+					exportLength: () => recordDuration,
+				})
+			: new SingleClock({
+					audio,
+					video: singleVideo,
+					isVideo: () => isVideo,
+					marker: () => timelineAxis?.staticTime ?? null,
+					exportLength: () => recordDuration,
+					loop: () => videoLoop,
+					setLoop: (on) => (videoLoop = on),
+				});
 
 	// Beats per minute, feeding the auto clips' re-roll spacing; 0 = not detected yet.
 	let sequenceBpm = $state(0);
@@ -1048,7 +1062,7 @@
 	$effect(() => {
 		const pending = legacySegments;
 		if (!pending || pending.key !== seqStoreKey) return;
-		const duration = seqMasterDuration;
+		const duration = clock.duration;
 		if (duration <= 0) return;
 		legacySegments = null;
 		const { fxLane, mediaLane } = migrateLegacySegments(
@@ -1098,7 +1112,7 @@
 		isSequenceMode
 			? projectKey
 			: (singleProjectBase ??
-					(seqMasterIsAudio
+					(clock.masterIsAudio
 						? currentTrackId
 						: (videoSeqKey ?? currentTrackId))),
 	);
@@ -1163,7 +1177,7 @@
 	// a song leaves. With a song loaded, onLibraryLoadTrack owns restoring.
 	$effect(() => {
 		const key = videoSeqKey;
-		if (singleProjectBase || !key || seqMasterIsAudio) return;
+		if (singleProjectBase || !key || clock.masterIsAudio) return;
 		const storeKey = seqKeyPrefix + key;
 		untrack(() => restoreVideoTimeline(key, storeKey));
 	});
@@ -1373,7 +1387,7 @@
 	// Pull the clip lanes back inside the master clock when it changes. Not in sequence
 	// mode: a shorter project leaves clips past its end alone, to come back if it grows.
 	$effect(() => {
-		const duration = seqMasterDuration;
+		const duration = clock.duration;
 		if (duration <= 0 || isSequenceMode) return;
 		untrack(() => {
 			const media = fitMediaTimeline(mediaState.timeline, duration);
@@ -1384,12 +1398,6 @@
 			if (fx !== fxState.lanes) fxState.set(fx);
 		});
 	});
-
-	function seqMasterTime(): number {
-		if (isSequenceMode) return mixer.currentTime;
-		if (seqMasterIsAudio) return audio.trackCurrentTime;
-		return singleVideo.clock;
-	}
 
 	/** The project's length, beside the lanes a change to it trims or shifts. */
 	const lengthHistory = createSnapshotHistory<number>();
@@ -1418,7 +1426,7 @@
 
 	/** The stacked lanes for this frame, with fade weights. */
 	let fxLayers = $derived(
-		isSequenceMode ? fxState.previewSource(seqMasterTime()) : [],
+		isSequenceMode ? fxState.previewSource(clock.masterTime()) : [],
 	);
 
 	/** The same effects flat, for the panel-facing chain and the audio tick. */
@@ -1547,7 +1555,7 @@
 	/** Playback waits for the project to open; media added while it plays joins in. */
 	let mediaBusy = $derived(mediaLoading);
 	$effect(() => {
-		if (mediaBusy && untrack(() => mixer.playing)) pauseTrack();
+		if (mediaBusy && untrack(() => mixer.playing)) clock.pause();
 	});
 
 	onMount(() => {
@@ -1705,7 +1713,7 @@
 
 	function seqPlaying(): boolean {
 		if (isSequenceMode) return mixer.playing;
-		return seqMasterIsAudio ? audio.audioPlaying : singleVideo.isPlaying;
+		return clock.masterIsAudio ? audio.audioPlaying : singleVideo.isPlaying;
 	}
 
 	const mediaLayers = new MediaLayerDriver({
@@ -2398,19 +2406,6 @@
 		}
 	}
 
-	function playSpan() {
-		if (isSequenceMode) {
-			// Playback starts at the static marker, not wherever the clock last stopped.
-			if (timelineAxis && !mixer.playing) mixer.seek(timelineAxis.staticTime);
-			mixer.play();
-			return;
-		}
-		if (timelineAxis && !audio.audioPlaying)
-			audio.seekTo(timelineAxis.staticTime);
-		audio.playAudio();
-		if (isVideo) singleVideo.play();
-	}
-
 	/** Clips of any lane kind the preview goes round, spanning first start to last end. */
 	let repeatClipIds = $state<string[]>([]);
 	/** The span once dragged on the ruler; it stops following the clips from then on. */
@@ -2418,7 +2413,7 @@
 	let repeatRange = $derived.by(() => {
 		if (repeatClipIds.length === 0) return null;
 		if (repeatSpan) {
-			const end = Math.min(repeatSpan.end, seqMasterDuration);
+			const end = Math.min(repeatSpan.end, clock.duration);
 			return end > repeatSpan.start ? { start: repeatSpan.start, end } : null;
 		}
 		const ids = new Set(repeatClipIds);
@@ -2437,7 +2432,7 @@
 				end = Math.max(end, c.end);
 			}
 		}
-		end = Math.min(end, seqMasterDuration);
+		end = Math.min(end, clock.duration);
 		return end > start ? { start, end } : null;
 	});
 	$effect(() => {
@@ -2456,15 +2451,9 @@
 	$effect(() => {
 		const range = repeatRange;
 		if (isSequenceMode || !range) return;
-		const t = seqMasterTime();
-		if (t < range.start - 0.05 || t >= range.end) seekMaster(range.start);
+		const t = clock.masterTime();
+		if (t < range.start - 0.05 || t >= range.end) clock.seek(range.start);
 	});
-
-	function masterPlaying(): boolean {
-		if (isSequenceMode) return mixer.playing;
-		if (textNeedsTransport) return stillPlaying;
-		return seqMasterIsAudio ? audio.audioPlaying : singleVideo.isPlaying;
-	}
 
 	/** Repeat these clips, or stop if they're the ones repeating. Starts playback there. */
 	function toggleRepeat(clipIds: string[]) {
@@ -2481,8 +2470,8 @@
 		if (!range) return;
 		// Ahead of the effect, so play() already clamps to the range.
 		if (isSequenceMode) mixer.repeat = range;
-		seekMaster(range.start);
-		if (!masterPlaying()) toggleMasterPlay();
+		clock.seek(range.start);
+		if (!clock.playing()) clock.toggle();
 	}
 
 	/** R: the selection, whichever lane it's on. */
@@ -2497,15 +2486,6 @@
 						: selectedAudioClipIds;
 		// R with nothing picked still stops a repeat.
 		toggleRepeat(ids.length > 0 ? ids : repeatClipIds);
-	}
-
-	function pauseTrack() {
-		if (isSequenceMode) {
-			mixer.pause();
-			return;
-		}
-		audio.pauseAudio();
-		if (isVideo) singleVideo.pause();
 	}
 
 	/** True while the media edit modal is up. */
@@ -2529,7 +2509,7 @@
 				edit: e.edit && ($state.snapshot(e.edit) as SourceEdit),
 			}));
 			sourceEditOpen = true;
-			pauseTrack();
+			clock.pause();
 		},
 		onClose: () => {
 			const before = poolBeforeSourceEdit;
@@ -2547,11 +2527,6 @@
 	/** Called from the reporters' effects: untracked, or they'd re-run on what this reads. */
 	function onSourceEditingChange(reporter: "rail" | "clip", open: boolean) {
 		untrack(() => sourceEditSession.report(reporter, open));
-	}
-
-	function seekTo(t: number) {
-		if (isSequenceMode) mixer.seek(t);
-		else audio.seekTo(t);
 	}
 
 	let moshGroupRef: MoshGroup | undefined = $state(undefined);
@@ -2798,7 +2773,7 @@
 			if (timelineAxis)
 				timelineAxis.followPlayhead = !timelineAxis.followPlayhead;
 		},
-		togglePlay: toggleMasterPlay,
+		togglePlay: clock.toggle,
 		toggleRepeat: toggleSelectionRepeat,
 		splitAtPlayhead: () =>
 			timelineAxis?.activeLaneSplitAt?.(timelineAxis.currentTime),
@@ -2996,96 +2971,30 @@
 	);
 
 	// A still image with no track has no clock, so the text timeline supplies one.
-	let stillClock = $state(0);
-	let stillPlaying = $state(false);
-	/** Bumped on every seek, so the running loop re-anchors on the new time. */
-	let stillSeekTick = $state(0);
-
-	let textDuration = $derived(
-		seqMasterDuration > 0 ? seqMasterDuration : recordDuration,
-	);
-	/** True when nothing else owns a playhead, so the text ruler grows one. */
-	let textNeedsTransport = $derived(!isSequenceMode && seqMasterDuration <= 0);
-	let textTime = $derived(textNeedsTransport ? stillClock : seqMasterTime());
 	/** Clips are half-open, so a playhead parked on the project's end would draw none of
 	 * the ones ending there; the export's last frame shows them. */
 	let previewTime = $derived(
 		isSequenceMode && mixer.duration > 0
-			? Math.min(textTime, mixer.duration - 1e-3)
-			: textTime,
+			? Math.min(clock.time, mixer.duration - 1e-3)
+			: clock.time,
 	);
-	// An export's frame 0 is not the master clock's zero; it starts at the audio span.
-	let textTimeOffset = $derived(
-		isSequenceMode
-			? mixer.spanStart
-			: audio.trackFile && audio.trackDuration > 0
-				? audio.spanStart
-				: isVideo && singleVideo.duration > 0
-					? singleVideo.spanStart
-					: 0,
-	);
-	let textTimeScale = $derived(
-		!audio.trackFile && isVideo && singleVideo.duration > 0
-			? singleVideo.speed
-			: 1,
-	);
-	let textClockRunning = $derived(
-		isSequenceMode
-			? mixer.playing
-			: textNeedsTransport
-				? stillPlaying
-				: audio.audioPlaying || singleVideo.isPlaying,
-	);
-
 	// Every lane shares the master clock's axis; a video under its own span is a second clock.
 	let showVideoBar = $derived(
 		isVideo &&
 			singleVideo.duration > 0 &&
-			!(isSequenceMode && seqMasterIsAudio),
+			!(isSequenceMode && clock.masterIsAudio),
 	);
-	let videoIsMaster = $derived(showVideoBar && !seqMasterIsAudio);
+	let videoIsMaster = $derived(showVideoBar && !clock.masterIsAudio);
 	let audioIsMaster = $derived(audio.trackFile && audio.trackDuration > 0);
 	let showStack = $derived(
 		isSequenceMode
-			? seqMasterDuration > 0
-			: textDuration > 0 &&
+			? clock.duration > 0
+			: clock.length > 0 &&
 					(textState.timeline.enabled ||
 						mediaState.timeline.enabled ||
 						videoIsMaster ||
 						audioIsMaster),
 	);
-
-	function toggleMasterPlay() {
-		if (isSequenceMode) {
-			if (mixer.playing) pauseTrack();
-			else if (!mediaBusy) playSpan();
-		} else if (textNeedsTransport) {
-			stillPlaying = !stillPlaying;
-		} else if (seqMasterIsAudio) {
-			if (audio.audioPlaying) pauseTrack();
-			else playSpan();
-		} else if (singleVideo.isPlaying) {
-			singleVideo.pause();
-		} else {
-			singleVideo.play();
-		}
-	}
-
-	function seekMaster(t: number) {
-		if (isSequenceMode) {
-			mixer.seek(t);
-		} else if (textNeedsTransport) {
-			stillClock = t;
-			stillSeekTick++;
-		} else if (seqMasterIsAudio) seekTo(t);
-		else singleVideo.seekTo(t);
-	}
-
-	function toggleMasterLoop() {
-		if (isSequenceMode) mixer.loop = !mixer.loop;
-		else if (seqMasterIsAudio) audio.loopAudio = !audio.loopAudio;
-		else videoLoop = !videoLoop;
-	}
 
 	// The lanes' own actions, gathered into one toolbar rather than a header row each.
 	let sourceInput = $state<HTMLInputElement | undefined>(undefined);
@@ -3094,19 +3003,6 @@
 		textState.pushHistory();
 		textState.set(appendTextLane(textState.timeline, newLaneZ()));
 	}
-
-	$effect(() => {
-		if (!stillPlaying) return;
-		// Tracked, so a seek mid-run restarts the loop on the new position.
-		stillSeekTick;
-		const span = Math.max(0.1, textDuration);
-		const started = performance.now() - untrack(() => stillClock) * 1000;
-		let raf = requestAnimationFrame(function loop(now) {
-			stillClock = ((now - started) / 1000) % span;
-			raf = requestAnimationFrame(loop);
-		});
-		return () => cancelAnimationFrame(raf);
-	});
 
 	const layerStack = new LayerStack({
 		media: mediaState,
@@ -3217,7 +3113,7 @@
 			mixer,
 			lengthHistory,
 			spanHistory: mixSpanHistory,
-			pause: () => pauseTrack(),
+			pause: () => clock.pause(),
 			repeatSpan: () => repeatSpan,
 			setRepeatSpan: (span) => (repeatSpan = span),
 		});
@@ -3302,7 +3198,7 @@
 	function pickLayer(pick: LayerPick | null) {
 		if (pick?.kind === "media") {
 			const lane = mediaState.timeline.lanes.find((l) => l.id === pick.laneId);
-			const clip = lane ? clipAt(lane, textTime) : null;
+			const clip = lane ? clipAt(lane, clock.time) : null;
 			if (!clip) return;
 			mediaState.selectedClipId = clip.id;
 			mediaState.selectedClipIds = [clip.id];
@@ -3310,7 +3206,7 @@
 		}
 		if (pick?.kind === "text") {
 			const lane = textState.timeline.lanes.find((l) => l.id === pick.laneId);
-			const clip = lane ? clipAt(lane, textTime) : null;
+			const clip = lane ? clipAt(lane, clock.time) : null;
 			if (clip) textState.selectedClipId = clip.id;
 			return;
 		}
@@ -3429,56 +3325,9 @@
 
 	/** Transport for the lyrics-sync modal, on whichever clock owns the master timeline. */
 	let lyricsSync = $derived<LyricsSyncProps | null>(
-		textState.timeline.enabled && isSequenceMode
-			? {
-					isPlaying: mixer.playing,
-					spanStart: mixer.spanStart,
-					spanEnd: mixer.spanEnd,
-					getCurrentTime: () => mixer.currentTime,
-					onPlay: playSpan,
-					onPause: pauseTrack,
-					onSeek: (t) => mixer.seek(t),
-					onApply: applyLyrics,
-				}
-			: textState.timeline.enabled
-				? {
-						isPlaying: textNeedsTransport
-							? stillPlaying
-							: audio.audioPlaying || singleVideo.isPlaying,
-						spanStart: textNeedsTransport
-							? 0
-							: seqMasterIsAudio
-								? audio.spanStart
-								: singleVideo.spanStart,
-						spanEnd: textNeedsTransport
-							? textDuration
-							: seqMasterIsAudio
-								? audio.spanEnd
-								: singleVideo.spanEnd,
-						getCurrentTime: () =>
-							textNeedsTransport
-								? stillClock
-								: seqMasterIsAudio
-									? audio.trackCurrentTime
-									: singleVideo.clock,
-						onPlay: textNeedsTransport
-							? () => (stillPlaying = true)
-							: seqMasterIsAudio
-								? playSpan
-								: singleVideo.play,
-						onPause: textNeedsTransport
-							? () => (stillPlaying = false)
-							: seqMasterIsAudio
-								? pauseTrack
-								: singleVideo.pause,
-						onSeek: textNeedsTransport
-							? (t) => (stillClock = t)
-							: seqMasterIsAudio
-								? seekTo
-								: singleVideo.seekTo,
-						onApply: applyLyrics,
-					}
-				: null,
+		textState.timeline.enabled
+			? { ...clock.transport(), onApply: applyLyrics }
+			: null,
 	);
 
 	/** Drop the synced lines into the lyrics lane and select the first one. */
@@ -3587,14 +3436,14 @@
 						string,
 						SourceEdit
 					>,
-					textTimeOffset,
-					textTimeScale,
+					textTimeOffset: clock.exportOffset,
+					textTimeScale: clock.exportScale,
 					bpm: sequenceBpm,
 					beatOffset: sequenceBeatOffset,
 					sequence: isSequenceMode
 						? {
 								moshOptions: getMoshOptions(),
-								duration: seqMasterDuration,
+								duration: clock.duration,
 								masterIsAudio: true,
 								fxLanes: $state.snapshot(fxState.lanes) as FxLane[],
 								span,
@@ -3704,8 +3553,8 @@
 		}}
 		onUnloadTrack={clearTrack}
 		onTrackDeleted={isSequenceMode ? dropDeletedTrack : undefined}
-		onPlay={isSequenceMode ? playSpan : () => audio.playAudio()}
-		onPause={isSequenceMode ? pauseTrack : () => audio.pauseAudio()}
+		onPlay={isSequenceMode ? clock.playSpan : () => audio.playAudio()}
+		onPause={isSequenceMode ? clock.pause : () => audio.pauseAudio()}
 		mainPlaying={isSequenceMode ? mixer.playing : audio.audioPlaying}
 		pendingTrack={audio.trackFile}
 		onNormalizeChange={(gain) => audio.setNormalizeGain(gain)}
@@ -3949,7 +3798,7 @@
 				beatOffset={sequenceBeatOffset}
 				forceAnimation={isLive ||
 					((textState.timeline.enabled || mediaState.timeline.enabled) &&
-						textClockRunning)}
+						clock.running)}
 				overlay={mediaLoading
 					? loadingOverlay
 					: noSequenceMedia
@@ -4049,7 +3898,7 @@
 				onUndo={undoMosh}
 				canUndo={moshSession.canUndoMosh}
 				canClear={moshSession.touched}
-				hideActions={isSequenceMode && seqMasterDuration > 0}
+				hideActions={isSequenceMode && clock.duration > 0}
 				bind:showSettings={showMoshSettings}
 			>
 				{#snippet settingsContent()}
@@ -4084,15 +3933,15 @@
 				<!-- The same transport as the timeline toolbar's, at the size the slideshow gives it. -->
 				<button
 					class="bar-key live"
-					onclick={toggleMasterPlay}
-					disabled={mediaBusy && !textClockRunning}
+					onclick={clock.toggle}
+					disabled={mediaBusy && !clock.running}
 					title={mediaBusy
 						? "Media is still loading"
-						: textClockRunning
+						: clock.running
 							? "Stop (Space)"
 							: "Play (Space)"}
 				>
-					{#if textClockRunning}
+					{#if clock.running}
 						<Pause size={14} fill="currentColor" stroke="none" />
 						<span class="key-label">STOP</span>
 					{:else}
@@ -4194,13 +4043,13 @@
 				height={timelineSplit.height}
 				bind:axis={timelineAxis}
 				wheelScrollsLanes={isSequenceMode}
-				trackDuration={textDuration}
-				currentTime={textTime}
-				isPlaying={textClockRunning}
-				onTogglePlay={toggleMasterPlay}
+				trackDuration={clock.length}
+				currentTime={clock.time}
+				isPlaying={clock.running}
+				onTogglePlay={clock.toggle}
 				playDisabled={mediaBusy}
-				onSeek={seekMaster}
-				spanStart={textTimeOffset}
+				onSeek={clock.seek}
+				spanStart={clock.exportOffset}
 				bpm={isSequenceMode ? sequenceBpm : 0}
 				beatOffset={sequenceBeatOffset}
 				selectionHint={isSequenceMode
@@ -4208,11 +4057,11 @@
 					: null}
 				loopEnabled={isSequenceMode
 					? mixer.loop
-					: seqMasterIsAudio
+					: clock.masterIsAudio
 						? audio.loopAudio
 						: videoLoop}
 				onToggleLoop={isSequenceMode || audioIsMaster || videoIsMaster
-					? toggleMasterLoop
+					? clock.toggleLoop
 					: null}
 				{repeatRange}
 				onStopRepeat={stopRepeat}
@@ -4234,7 +4083,7 @@
 							? mediaState.timeline.lanes.length
 							: null}
 						onAddMediaLane={addMediaLane}
-						project={isSequenceMode && seqMasterDuration > 0
+						project={isSequenceMode && clock.duration > 0
 							? {
 									audioLaneCount: mediaState.timeline.audioLanes?.length ?? 0,
 									fxLaneCount: fxState.lanes.length,
@@ -4393,9 +4242,9 @@
 						spanEnd={mixer.spanEnd}
 						isPlaying={mixer.playing}
 						outputVolume={mixer.outputVolume}
-						onPlay={playSpan}
-						onPause={pauseTrack}
-						onSeek={seekTo}
+						onPlay={clock.playSpan}
+						onPause={clock.pause}
+						onSeek={clock.seekSong}
 						onSpanCommit={mixSpanHistory.push}
 						onSpanStartChange={(t) => (mixer.spanStart = t)}
 						onSpanEndChange={(t) => (mixer.spanEnd = t)}
@@ -4412,9 +4261,9 @@
 						spanEnd={audio.spanEnd}
 						isPlaying={audio.audioPlaying}
 						outputVolume={audio.outputVolume}
-						onPlay={playSpan}
-						onPause={pauseTrack}
-						onSeek={seekTo}
+						onPlay={clock.playSpan}
+						onPause={clock.pause}
+						onSeek={clock.seekSong}
 						onSpanCommit={spanHistory.push}
 						onSpanStartChange={(t) => (audio.spanStart = t)}
 						onSpanEndChange={(t) => (audio.spanEnd = t)}
