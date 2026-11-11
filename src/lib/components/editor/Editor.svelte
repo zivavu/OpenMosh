@@ -52,10 +52,6 @@
 	import { songProfileOf } from "../../audio/build-song-profile";
 	import { publishSongProfile } from "../../audio/song-profile";
 	import {
-		audioLanesEnd,
-		createAudioClip,
-		createAudioLane,
-		nextAudioLaneName,
 		retargetAudioSource,
 		trackIdOf,
 		trackSourceId,
@@ -159,7 +155,6 @@
 		dealMediaClipSources,
 		createMediaChainSource,
 		createMediaClip,
-		createMediaLane,
 		detachMediaSource,
 		EMPTY_MEDIA_TIMELINE,
 		fitMediaTimeline,
@@ -200,6 +195,12 @@
 	import { SingleVideo } from "../../editor/single-video.svelte";
 	import { ProjectTempo } from "../../editor/project-tempo.svelte";
 	import { TimelinePersistence } from "../../editor/timeline-persistence.svelte";
+	import {
+		contentEnd,
+		contentStart,
+		seedLength,
+		seedTimeline,
+	} from "../../editor/project-seed";
 	import {
 		SequenceClock,
 		SingleClock,
@@ -1639,8 +1640,6 @@
 	let projectReady = $state(false);
 	/** A project still working out its length, from its song and its opened media. */
 	let pendingInit = $state<{ key: string; seed: boolean } | null>(null);
-	/** Length a new project takes when nothing else gives it one. */
-	const DEFAULT_PROJECT_LENGTH = 30;
 
 	// Ready means it saves from here on, so a reload can come back to it.
 	$effect(() => {
@@ -1768,29 +1767,20 @@
 
 	/** The latest clip end on any lane. */
 	function timelineContentEnd(): number {
-		let end = audioLanesEnd(mediaState.timeline.audioLanes);
-		for (const lane of [
-			...mediaState.timeline.lanes,
-			...textState.timeline.lanes,
-			...fxState.lanes,
-		]) {
-			for (const clip of lane.clips) end = Math.max(end, clip.end);
-		}
-		return end;
+		return contentEnd(
+			mediaState.timeline,
+			textState.timeline.lanes,
+			fxState.lanes,
+		);
 	}
 
 	/** Where the first clip on any lane starts; 0 for an empty project. */
 	function timelineContentStart(): number {
-		let start = Infinity;
-		for (const lane of [
-			...mediaState.timeline.lanes,
-			...(mediaState.timeline.audioLanes ?? []),
-			...textState.timeline.lanes,
-			...fxState.lanes,
-		]) {
-			for (const clip of lane.clips) start = Math.min(start, clip.start);
-		}
-		return Number.isFinite(start) ? start : 0;
+		return contentStart(
+			mediaState.timeline,
+			textState.timeline.lanes,
+			fxState.lanes,
+		);
 	}
 
 	/** Trim the project to its clips at both ends, as one undo step. */
@@ -1808,15 +1798,11 @@
 		songId: string | null,
 		songLength: number,
 	) {
-		const contentEnd = timelineContentEnd();
-		const length =
-			songLength > 0
-				? songLength
-				: contentEnd > 0
-					? contentEnd
-					: seedFrom && seedFrom.duration > 0
-						? seedFrom.duration
-						: DEFAULT_PROJECT_LENGTH;
+		const length = seedLength({
+			songLength,
+			contentEnd: timelineContentEnd(),
+			mediaLength: seedFrom?.duration ?? 0,
+		});
 		mixer.setDuration(length);
 		// Before v3 the span was kept per song.
 		const savedSpan = currentTrackId ? spanStore.load(currentTrackId) : null;
@@ -1827,25 +1813,11 @@
 			mixer.spanStart = 0;
 			mixer.spanEnd = length;
 		}
-		let next = mediaState.timeline;
-		const lanes = next.audioLanes ?? [];
-		if (
-			songId &&
-			songLength > 0 &&
-			!lanes.some((l) => l.clips.some((c) => c.sourceId === songId))
-		) {
-			const lane = createAudioLane(nextAudioLaneName(lanes), true);
-			lane.clips = [createAudioClip(0, Math.min(songLength, length), songId)];
-			next = { ...next, audioLanes: [lane, ...lanes] };
-		}
-		if (seedFrom && next.lanes.length === 0) {
-			const lane = createMediaLane("Media 1", seedFrom.id, 0);
-			lane.clips = [createMediaClip(0, length)];
-			// Under a song the opened video is a backdrop; its own sound would fight it.
-			if (songId && lane.audio) lane.audio = { ...lane.audio, muted: true };
-			next = { ...next, enabled: true, lanes: [lane] };
-		}
-		mediaState.timeline = next;
+		mediaState.timeline = seedTimeline(mediaState.timeline, {
+			length,
+			song: songId ? { sourceId: songId, length: songLength } : null,
+			mediaSourceId: seedFrom?.id ?? null,
+		});
 		mediaState.history.reset();
 		poolHistory.reset();
 		lengthHistory.reset();
