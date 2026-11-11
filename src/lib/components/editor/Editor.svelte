@@ -118,15 +118,11 @@
 		type Preset,
 	} from "../../effects";
 	import { updateMediaClips } from "../../media/resolve";
-	import { updateTextClips } from "../../text/resolve";
 	import {
 		appendTextLane,
 		applyBpmToTextClips,
-		clearTextClips,
 		createTextChainSource,
-		createTextHistory,
 		EMPTY_TEXT_TIMELINE,
-		fillTextClipsFromPreset,
 		findTextClip,
 		fitTextTimeline,
 		findTextClipLane,
@@ -134,20 +130,13 @@
 		applyLyricsToTimeline,
 		replaceTextClip,
 		resolveTextLayersAt,
-		restoreTextClipMosh,
-		rollTextClips,
-		setTextClipsMode,
 		syncTextClipsToPreset,
 		toggledTextTimeline,
 		type TextClip,
 		type TextLane,
 		type TextTimeline,
 	} from "../../text";
-	import {
-		handBuiltLabel,
-		isHandBuiltLabel,
-		type ChainMode,
-	} from "../../editor/sequence";
+	import { handBuiltLabel, isHandBuiltLabel } from "../../editor/sequence";
 	import {
 		applyBpmToFxLanes,
 		findFxClip,
@@ -160,17 +149,7 @@
 		type FxLane,
 		type FxLaneSettings,
 	} from "../../editor/fx-lanes";
-	import {
-		fanOutEdit,
-		fanOutNote,
-		withAllLinkBands,
-	} from "../../editor/chain-fanout";
-	import {
-		fanOutMediaClipFields,
-		fanOutMediaLaneEdit,
-		fanOutTextClipFields,
-		fanOutTextLaneEdit,
-	} from "../../editor/field-fanout";
+	import { fanOutEdit, withAllLinkBands } from "../../editor/chain-fanout";
 	import {
 		createSnapshotHistory,
 		snapshotUndoSource,
@@ -223,16 +202,13 @@
 		applyBpmToMediaClips,
 		autoOnSlideshow,
 		autoOnSlideshows,
-		clearMediaClips,
 		dealMediaClipSources,
 		createMediaChainSource,
 		createMediaClip,
-		createMediaHistory,
 		createMediaLane,
 		detachMediaSource,
 		duplicateMediaLane,
 		EMPTY_MEDIA_TIMELINE,
-		fillMediaClipsFromPreset,
 		findMediaClip,
 		findMediaClipLane,
 		fitMediaTimeline,
@@ -241,12 +217,8 @@
 		clipSourceId,
 		mediaTimelineSourceIds,
 		newClipSpan,
-		replaceMediaClip,
 		resolveMediaLayersAt,
-		restoreMediaClipMosh,
-		rollMediaClips,
 		retargetMediaSource,
-		setMediaClipsMode,
 		setMediaClipSources,
 		syncMediaClipsToPreset,
 		updateMediaLane as updateMediaLaneIn,
@@ -256,7 +228,6 @@
 		type SourceEdit,
 		createSourceEdit,
 	} from "../../media";
-	import { chainClipMoshSnapshot } from "../../editor/chain-clip";
 	import {
 		freezeSavedSlideshow,
 		hiddenSlides,
@@ -287,8 +258,9 @@
 		migrateLegacySegments,
 		prependMediaLane,
 	} from "../../editor/legacy-segments";
-	import { ClipMoshes } from "../../editor/clip-moshes.svelte";
 	import { FxLaneState } from "../../editor/fx-lane-state.svelte";
+	import { ChainTimelineState } from "../../editor/chain-timeline-state.svelte";
+	import { mediaTimelineOps, textTimelineOps } from "../../editor/timeline-ops";
 	import {
 		isNewerEntry,
 		readSeqEntry,
@@ -690,10 +662,10 @@
 		if (duration <= 0) return;
 		const want = source.duration > 0 ? source.duration : MIN_CLIP_LENGTH;
 		const start = Math.min(takeStart, Math.max(0, duration - MIN_CLIP_LENGTH));
-		const picked = selectedMediaLane;
+		const picked = mediaState.selectedLane;
 		let laneId = picked?.id ?? null;
 		let span = picked ? newClipSpan(picked, start, duration, want) : null;
-		let next = mediaTimeline;
+		let next = mediaState.timeline;
 		if (!span) {
 			if (next.lanes.length >= MAX_MEDIA_LANES) {
 				showToast("No room for the take: every lane is full", "error");
@@ -706,12 +678,12 @@
 			if (!span) return;
 		}
 		const clip = createMediaClip(span.start, span.end, 0, source.id);
-		pushMediaHistory();
-		setMediaTimeline(
+		mediaState.pushHistory();
+		mediaState.set(
 			updateMediaLaneIn(next, laneId!, (l) => addClip(l, clip, duration)),
 		);
-		selectedMediaClipId = clip.id;
-		selectedMediaClipIds = [clip.id];
+		mediaState.selectedClipId = clip.id;
+		mediaState.selectedClipIds = [clip.id];
 		showToast(
 			`Take on ${next.lanes.find((l) => l.id === laneId)?.name}`,
 			"info",
@@ -732,7 +704,7 @@
 			showToast("That slideshow couldn't be opened", "error");
 			return;
 		}
-		if (mediaTimeline.lanes.length >= MAX_MEDIA_LANES) {
+		if (mediaState.timeline.lanes.length >= MAX_MEDIA_LANES) {
 			showToast("No room for the slideshow: every lane is full", "error");
 			return;
 		}
@@ -744,7 +716,7 @@
 		const end = start + frozen.cutList.duration;
 		const songId =
 			includeSong && frozen.trackId ? trackSourceId(frozen.trackId) : null;
-		const audioLanes = mediaTimeline.audioLanes ?? [];
+		const audioLanes = mediaState.timeline.audioLanes ?? [];
 		const withSong = songId && audioLanes.length < MAX_AUDIO_LANES;
 		if (withSong) await audioBank.settle([songId]);
 		const isSong = !!withSong && !audio.trackFile;
@@ -752,7 +724,7 @@
 		asOneEdit(() => {
 			if (end > mixer.duration) growProjectTo(end);
 			let next = appendMediaLane(
-				mediaTimeline,
+				mediaState.timeline,
 				cuts.id,
 				nextLayerZ(layerOrder),
 			);
@@ -775,10 +747,11 @@
 						: [...audioLanes, songLane],
 				};
 			}
-			pushMediaHistory();
-			setMediaTimeline(next);
-			selectedMediaClipId = next.lanes[next.lanes.length - 1]!.clips[0].id;
-			selectedMediaClipIds = [selectedMediaClipId];
+			mediaState.pushHistory();
+			mediaState.set(next);
+			mediaState.selectedClipId =
+				next.lanes[next.lanes.length - 1]!.clips[0].id;
+			mediaState.selectedClipIds = [mediaState.selectedClipId];
 			void revealLaneRow(lane.id);
 		});
 		if (isSong) await loadSong(frozen.trackId);
@@ -823,9 +796,9 @@
 		if (!cuts) return;
 		asOneEdit(() => {
 			poolHistory.push(before);
-			pushMediaHistory();
+			mediaState.pushHistory();
 		});
-		setMediaTimeline(retargetMediaSource(mediaTimeline, sourceId, cuts.id));
+		mediaState.set(retargetMediaSource(mediaState.timeline, sourceId, cuts.id));
 		dropFromPool(sourceId);
 		showToast(`Updated “${old.name}”`, "info");
 	}
@@ -842,7 +815,7 @@
 			showToast("That edit couldn't be opened", "error");
 			return;
 		}
-		if (mediaTimeline.lanes.length >= MAX_MEDIA_LANES) {
+		if (mediaState.timeline.lanes.length >= MAX_MEDIA_LANES) {
 			showToast("No room for the edit: every lane is full", "error");
 			return;
 		}
@@ -861,7 +834,7 @@
 			includeSong && span && saved.trackId
 				? trackSourceId(saved.trackId)
 				: null;
-		const audioLanes = mediaTimeline.audioLanes ?? [];
+		const audioLanes = mediaState.timeline.audioLanes ?? [];
 		const withSong = songId && audioLanes.length < MAX_AUDIO_LANES;
 		if (withSong) await audioBank.settle([songId]);
 		const isSong = !!withSong && !audio.trackFile;
@@ -869,7 +842,7 @@
 		asOneEdit(() => {
 			if (end > mixer.duration) growProjectTo(end);
 			let next = appendMediaLane(
-				mediaTimeline,
+				mediaState.timeline,
 				source.id,
 				nextLayerZ(layerOrder),
 			);
@@ -893,10 +866,10 @@
 						: [...audioLanes, songLane],
 				};
 			}
-			pushMediaHistory();
-			setMediaTimeline(next);
-			selectedMediaClipId = clip.id;
-			selectedMediaClipIds = [clip.id];
+			mediaState.pushHistory();
+			mediaState.set(next);
+			mediaState.selectedClipId = clip.id;
+			mediaState.selectedClipIds = [clip.id];
 			void revealLaneRow(lane.id);
 		});
 		if (isSong) await loadSong(saved.trackId);
@@ -934,16 +907,17 @@
 		const before = poolNow();
 		const source = await addSingleSource(saved);
 		if (!source) return;
-		const ids = singleClipIds(mediaTimeline, sessionKey);
-		const name = findMediaClip(mediaTimeline, ids[0] ?? null)?.single?.name;
+		const ids = singleClipIds(mediaState.timeline, sessionKey);
+		const name = findMediaClip(mediaState.timeline, ids[0] ?? null)?.single
+			?.name;
 		asOneEdit(() => {
 			poolHistory.push(before);
-			pushMediaHistory();
+			mediaState.pushHistory();
 		});
-		const next = updateMediaClips(mediaTimeline, new Set(ids), (clip) =>
+		const next = updateMediaClips(mediaState.timeline, new Set(ids), (clip) =>
 			withSingleChain(clip, saved.effects),
 		);
-		setMediaTimeline(setMediaClipSources(next, ids, source.id));
+		mediaState.set(setMediaClipSources(next, ids, source.id));
 		showToast(name ? `Updated “${name}”` : "Updated", "info");
 	}
 
@@ -953,12 +927,12 @@
 		const source = sourceRegistry.get(sourceId);
 		const duration = seqMasterDuration;
 		if (!source || duration <= 0) return;
-		if (mediaTimeline.lanes.length >= MAX_MEDIA_LANES) {
+		if (mediaState.timeline.lanes.length >= MAX_MEDIA_LANES) {
 			showToast("No room for another lane: every lane is full", "error");
 			return;
 		}
 		const next = appendMediaLane(
-			mediaTimeline,
+			mediaState.timeline,
 			source.id,
 			nextLayerZ(layerOrder),
 		);
@@ -974,15 +948,15 @@
 			createMediaClip(span.start, span.end),
 			source.kind === "cuts",
 		);
-		pushMediaHistory();
-		setMediaTimeline(
+		mediaState.pushHistory();
+		mediaState.set(
 			updateMediaLaneIn(next, lane.id, (l) => ({
 				...addClip(l, clip, duration),
 				style: { ...l.style, x: at.x, y: at.y },
 			})),
 		);
-		selectedMediaClipId = clip.id;
-		selectedMediaClipIds = [clip.id];
+		mediaState.selectedClipId = clip.id;
+		mediaState.selectedClipIds = [clip.id];
 		void revealLaneRow(lane.id);
 	}
 
@@ -1061,7 +1035,7 @@
 		})),
 		// A media lane's chain is its clip's under the playhead, read off the resolved layers.
 		...resolveMediaLayersAt(
-			mediaTimeline,
+			mediaState.timeline,
 			textTime,
 			sourceRegistry.edits,
 			previewMediaChains,
@@ -1071,7 +1045,7 @@
 			effects: layer.effects,
 			response: layer.response ?? audioResponse,
 		})),
-		...resolveTextLayersAt(textTimeline, textTime, previewTextChains).map(
+		...resolveTextLayersAt(textState.timeline, textTime, previewTextChains).map(
 			(layer) => ({
 				scope: layer.laneId,
 				effects: layer.effects,
@@ -1572,9 +1546,10 @@
 		);
 		untrack(() => {
 			if (fxLane) fxState.set([fxLane, ...fxState.lanes]);
-			if (mediaLane) mediaTimeline = prependMediaLane(mediaTimeline, mediaLane);
+			if (mediaLane)
+				mediaState.timeline = prependMediaLane(mediaState.timeline, mediaLane);
 			fxState.history.reset();
-			mediaHistory.reset();
+			mediaState.history.reset();
 			poolHistory.reset();
 			lengthHistory.reset();
 			bpmHistory.reset();
@@ -1766,10 +1741,10 @@
 			bpm: sequenceBpm,
 			beatOffset: sequenceBeatOffset,
 			text: layersAsLoaded(
-				$state.snapshot(textTimeline) as TextTimeline,
+				$state.snapshot(textState.timeline) as TextTimeline,
 				"text",
 			),
-			media: $state.snapshot(mediaTimeline) as MediaTimeline,
+			media: $state.snapshot(mediaState.timeline) as MediaTimeline,
 			fx: $state.snapshot(fxState.lanes) as FxLane[],
 			sourceEdits: $state.snapshot(sourceRegistry.edits) as Record<
 				string,
@@ -1888,10 +1863,10 @@
 		const duration = seqMasterDuration;
 		if (duration <= 0 || isSequenceMode) return;
 		untrack(() => {
-			const media = fitMediaTimeline(mediaTimeline, duration);
-			if (media !== mediaTimeline) mediaTimeline = media;
-			const text = fitTextTimeline(textTimeline, duration);
-			if (text !== textTimeline) textTimeline = text;
+			const media = fitMediaTimeline(mediaState.timeline, duration);
+			if (media !== mediaState.timeline) mediaState.timeline = media;
+			const text = fitTextTimeline(textState.timeline, duration);
+			if (text !== textState.timeline) textState.timeline = text;
 			const fx = fitFxLanes(fxState.lanes, duration);
 			if (fx !== fxState.lanes) fxState.set(fx);
 		});
@@ -1929,7 +1904,7 @@
 		if (byClip) return byClip;
 		return (
 			fxState.lanes.find((l) => l.id === fxState.selectedLaneId) ??
-			selectedMediaLane
+			mediaState.selectedLane
 		);
 	});
 
@@ -1944,8 +1919,10 @@
 			? fxState.lanes.filter((l) =>
 					l.clips.some((c) => fxState.selectedClipIds.includes(c.id)),
 				)
-			: lane === selectedMediaLane
-				? mediaTimeline.lanes.filter((l) => selectedMediaLaneIds.includes(l.id))
+			: lane === mediaState.selectedLane
+				? mediaState.timeline.lanes.filter((l) =>
+						mediaState.selectedLaneIds.includes(l.id),
+					)
 				: [];
 		return [lane, ...rest.filter((l) => l.id !== lane.id)];
 	});
@@ -2061,7 +2038,7 @@
 	/** The pool has dropped these already; the lanes that drew them let go too. */
 	function reportUnreadableImages(sources: SequenceSource[]) {
 		for (const src of sources) {
-			setMediaTimeline(detachMediaSource(mediaTimeline, src.id));
+			mediaState.set(detachMediaSource(mediaState.timeline, src.id));
 		}
 		const heic = sources.some((s) => /^image\/hei[cf]$/.test(s.file.type));
 		const what =
@@ -2090,7 +2067,11 @@
 	let slideOnlyIds = $state<ReadonlySet<string>>(new Set());
 	/** The pool as its views list it: a slideshow's slides stay behind it. */
 	let poolSources = $derived.by(() => {
-		const hidden = hiddenSlides(sequenceSources, mediaTimeline, slideOnlyIds);
+		const hidden = hiddenSlides(
+			sequenceSources,
+			mediaState.timeline,
+			slideOnlyIds,
+		);
 		return hidden.size === 0
 			? sequenceSources
 			: sequenceSources.filter((s) => !hidden.has(s.id));
@@ -2234,7 +2215,7 @@
 	$effect(() => {
 		if (!isSequenceMode) return;
 		const missing = [
-			...mediaTimelineSourceIds(mediaTimeline),
+			...mediaTimelineSourceIds(mediaState.timeline),
 			...sequenceSources.flatMap((s) => s.cutList?.slides ?? []),
 		].filter((id) => !sourceRegistry.get(id) && !restoreAttempted.has(id));
 		if (missing.length === 0) return;
@@ -2249,13 +2230,13 @@
 		const first = added.find((s) => sourceRegistry.get(s.id));
 		if (!first) return;
 		// Nothing anywhere on the lane to draw; clips that each point somewhere already carry media.
-		const unset = mediaTimeline.lanes.find(
+		const unset = mediaState.timeline.lanes.find(
 			(l) => !l.sourceId && l.clips.every((c) => !c.sourceId),
 		);
 		if (!unset) return;
-		pushMediaHistory();
-		setMediaTimeline(
-			updateMediaLaneIn(mediaTimeline, unset.id, (l) => ({
+		mediaState.pushHistory();
+		mediaState.set(
+			updateMediaLaneIn(mediaState.timeline, unset.id, (l) => ({
 				...l,
 				sourceId: first.id,
 			})),
@@ -2349,10 +2330,10 @@
 		// Undoable like a single removal: the stack keeps the files.
 		asOneEdit(() => {
 			poolHistory.push(poolNow());
-			pushMediaHistory();
+			mediaState.pushHistory();
 		});
 		for (const src of sequenceSources) {
-			setMediaTimeline(detachMediaSource(mediaTimeline, src.id));
+			mediaState.set(detachMediaSource(mediaState.timeline, src.id));
 		}
 		sourceRegistry.clear();
 		restoreAttempted.clear();
@@ -2402,7 +2383,7 @@
 		for (const s of [...sourceRegistry.sources]) {
 			if (want.has(s.id)) continue;
 			sourceRegistry.remove(s.id);
-			setMediaTimeline(detachMediaSource(mediaTimeline, s.id));
+			mediaState.set(detachMediaSource(mediaState.timeline, s.id));
 		}
 		// Edits come back too: an undo can be of a crop, key or erase alone.
 		for (const e of entries) {
@@ -2429,7 +2410,7 @@
 		if (!sourceRegistry.get(id)) return;
 		asOneEdit(() => {
 			poolHistory.push(poolNow());
-			pushMediaHistory();
+			mediaState.pushHistory();
 		});
 		dropFromPool(id);
 	}
@@ -2439,12 +2420,12 @@
 		const slides = slidesLeftBehind(
 			sequenceSources,
 			id,
-			mediaTimeline,
+			mediaState.timeline,
 			slideOnlyIds,
 		);
 		for (const gone of [id, ...slides]) {
 			sourceRegistry.remove(gone);
-			setMediaTimeline(detachMediaSource(mediaTimeline, gone));
+			mediaState.set(detachMediaSource(mediaState.timeline, gone));
 		}
 	}
 
@@ -2615,10 +2596,10 @@
 
 	/** The latest clip end on any lane. */
 	function timelineContentEnd(): number {
-		let end = audioLanesEnd(mediaTimeline.audioLanes);
+		let end = audioLanesEnd(mediaState.timeline.audioLanes);
 		for (const lane of [
-			...mediaTimeline.lanes,
-			...textTimeline.lanes,
+			...mediaState.timeline.lanes,
+			...textState.timeline.lanes,
 			...fxState.lanes,
 		]) {
 			for (const clip of lane.clips) end = Math.max(end, clip.end);
@@ -2630,9 +2611,9 @@
 	function timelineContentStart(): number {
 		let start = Infinity;
 		for (const lane of [
-			...mediaTimeline.lanes,
-			...(mediaTimeline.audioLanes ?? []),
-			...textTimeline.lanes,
+			...mediaState.timeline.lanes,
+			...(mediaState.timeline.audioLanes ?? []),
+			...textState.timeline.lanes,
 			...fxState.lanes,
 		]) {
 			for (const clip of lane.clips) start = Math.min(start, clip.start);
@@ -2674,7 +2655,7 @@
 			mixer.spanStart = 0;
 			mixer.spanEnd = length;
 		}
-		let next = mediaTimeline;
+		let next = mediaState.timeline;
 		const lanes = next.audioLanes ?? [];
 		if (
 			songId &&
@@ -2692,8 +2673,8 @@
 			if (songId && lane.audio) lane.audio = { ...lane.audio, muted: true };
 			next = { ...next, enabled: true, lanes: [lane] };
 		}
-		mediaTimeline = next;
-		mediaHistory.reset();
+		mediaState.timeline = next;
+		mediaState.history.reset();
 		poolHistory.reset();
 		lengthHistory.reset();
 		bpmHistory.reset();
@@ -2714,7 +2695,7 @@
 	let trackLengths = $derived.by(() => {
 		audioBank.version;
 		const lengths: Record<string, number> = {};
-		for (const lane of mediaTimeline.audioLanes ?? []) {
+		for (const lane of mediaState.timeline.audioLanes ?? []) {
 			for (const clip of lane.clips) {
 				const id = clip.sourceId;
 				const buffer = id && trackIdOf(id) ? audioBank.buffer(id) : null;
@@ -2731,7 +2712,7 @@
 	let mixPlan = $derived.by(() =>
 		isSequenceMode
 			? planMix({
-					timeline: mediaTimeline,
+					timeline: mediaState.timeline,
 					edits: sourceRegistry.edits,
 					videos: videoLengths,
 					tracks: trackLengths,
@@ -2761,7 +2742,7 @@
 	/** Names of library tracks on the lanes, filled in as they're looked up. */
 	let audioTrackNames = $state<Record<string, string>>({});
 	$effect(() => {
-		for (const lane of mediaTimeline.audioLanes ?? []) {
+		for (const lane of mediaState.timeline.audioLanes ?? []) {
 			for (const clip of lane.clips) {
 				const trackId = clip.sourceId ? trackIdOf(clip.sourceId) : null;
 				if (!trackId || untrack(() => audioTrackNames[trackId])) continue;
@@ -2877,7 +2858,7 @@
 		at: number,
 		drives: boolean,
 	) {
-		const lanes = mediaTimeline.audioLanes ?? [];
+		const lanes = mediaState.timeline.audioLanes ?? [];
 		if (lanes.length >= MAX_AUDIO_LANES) {
 			showToast(`${MAX_AUDIO_LANES} audio lanes is the limit`, "error");
 			return;
@@ -2892,8 +2873,8 @@
 		drives: boolean,
 		lanes: AudioLane[],
 	) {
-		pushMediaHistory();
-		let next = mediaTimeline;
+		mediaState.pushHistory();
+		let next = mediaState.timeline;
 		const before = mixer.duration;
 		if (drives && lanes.length === 0 && length > before) {
 			lengthHistory.push(before);
@@ -2917,7 +2898,7 @@
 		lane.clips = [
 			createAudioClip(start, Math.min(duration, start + length), sourceId),
 		];
-		setMediaTimeline({
+		mediaState.set({
 			...next,
 			audioLanes: drives ? [lane, ...lanes] : [...lanes, lane],
 		});
@@ -2944,15 +2925,15 @@
 		const sourceId = trackSourceId(trackId);
 		if ("clipIds" in target) {
 			const ids = new Set(target.clipIds);
-			const changes = (mediaTimeline.audioLanes ?? []).some((l) =>
+			const changes = (mediaState.timeline.audioLanes ?? []).some((l) =>
 				l.clips.some((c) => ids.has(c.id) && c.sourceId !== sourceId),
 			);
 			if (!changes) return;
-			pushMediaHistory();
-			setMediaTimeline({
-				...mediaTimeline,
+			mediaState.pushHistory();
+			mediaState.set({
+				...mediaState.timeline,
 				audioLanes: setAudioClipSources(
-					mediaTimeline.audioLanes ?? [],
+					mediaState.timeline.audioLanes ?? [],
 					target.clipIds,
 					sourceId,
 				),
@@ -2963,15 +2944,15 @@
 				showToast("That track has no sound that could be decoded", "error");
 				return;
 			}
-			const lanes = mediaTimeline.audioLanes ?? [];
+			const lanes = mediaState.timeline.audioLanes ?? [];
 			const lane = lanes.find((l) => l.id === target.laneId);
 			if (!lane) return;
 			const clip = createAudioClip(target.time, target.time + length, sourceId);
 			const next = addClip(lane, clip, mixer.duration);
 			if (next === lane) return;
-			pushMediaHistory();
-			setMediaTimeline({
-				...mediaTimeline,
+			mediaState.pushHistory();
+			mediaState.set({
+				...mediaState.timeline,
 				audioLanes: lanes.map((l) => (l.id === lane.id ? next : l)),
 			});
 			selectedAudioClipId = clip.id;
@@ -3000,16 +2981,18 @@
 		await audioBank.load(sourceId);
 		const end = Math.min(mixer.duration, start + length);
 		if (end - start < MIN_CLIP_LENGTH) return;
-		const lane = (mediaTimeline.audioLanes ?? []).find((l) => l.id === laneId);
+		const lane = (mediaState.timeline.audioLanes ?? []).find(
+			(l) => l.id === laneId,
+		);
 		if (!lane) {
 			placeAudio(sourceId, length, start, false);
 			return;
 		}
 		const clip = createAudioClip(start, end, sourceId);
-		pushMediaHistory();
-		setMediaTimeline({
-			...mediaTimeline,
-			audioLanes: (mediaTimeline.audioLanes ?? []).map((l) =>
+		mediaState.pushHistory();
+		mediaState.set({
+			...mediaState.timeline,
+			audioLanes: (mediaState.timeline.audioLanes ?? []).map((l) =>
 				l.id === laneId
 					? punchInAudioClip(l, clip, sourceRegistry.edits, videoLengths)
 					: l,
@@ -3023,13 +3006,13 @@
 	/** A lane with no sound yet, for clips pasted or dragged in from another. Goes
 	 * under the audio lane last pressed, or last. */
 	function addEmptyAudioLane() {
-		const lanes = mediaTimeline.audioLanes ?? [];
+		const lanes = mediaState.timeline.audioLanes ?? [];
 		if (lanes.length >= MAX_AUDIO_LANES) return;
 		const active = lanes.findIndex((l) => l.id === timelineAxis?.activeLaneId);
 		const at = active === -1 ? lanes.length : active + 1;
-		pushMediaHistory();
-		setMediaTimeline({
-			...mediaTimeline,
+		mediaState.pushHistory();
+		mediaState.set({
+			...mediaState.timeline,
 			audioLanes: [
 				...lanes.slice(0, at),
 				createAudioLane(nextAudioLaneName(lanes)),
@@ -3047,11 +3030,11 @@
 		sequenceBeatOffset = 0;
 		bpmPoolSource = null;
 		setSong(songFile, trackId);
-		const lanes = mediaTimeline.audioLanes ?? [];
+		const lanes = mediaState.timeline.audioLanes ?? [];
 		if (from && lanes.some((l) => l.clips.some((c) => c.sourceId === from))) {
-			pushMediaHistory();
-			setMediaTimeline({
-				...mediaTimeline,
+			mediaState.pushHistory();
+			mediaState.set({
+				...mediaState.timeline,
 				audioLanes: retargetAudioSource(lanes, from, to),
 			});
 			return;
@@ -3106,12 +3089,12 @@
 	}
 
 	function removeAudioClipsOf(sourceId: string) {
-		const lanes = mediaTimeline.audioLanes ?? [];
+		const lanes = mediaState.timeline.audioLanes ?? [];
 		if (!lanes.some((l) => l.clips.some((c) => c.sourceId === sourceId)))
 			return;
-		pushMediaHistory();
-		setMediaTimeline({
-			...mediaTimeline,
+		mediaState.pushHistory();
+		mediaState.set({
+			...mediaState.timeline,
 			audioLanes: removeAudioSource(lanes, sourceId),
 		});
 	}
@@ -3129,19 +3112,19 @@
 			if (next < mixer.duration) {
 				const trim = <L extends ClipLane<TimelineClip>>(lanes: L[]) =>
 					lanes.map((l) => trimClipsAt<TimelineClip, L>(l, next));
-				const media = trim(mediaTimeline.lanes);
-				const audioLanes = trim(mediaTimeline.audioLanes ?? []);
+				const media = trim(mediaState.timeline.lanes);
+				const audioLanes = trim(mediaState.timeline.audioLanes ?? []);
 				if (
-					media.some((l, i) => l !== mediaTimeline.lanes[i]) ||
-					audioLanes.some((l, i) => l !== mediaTimeline.audioLanes?.[i])
+					media.some((l, i) => l !== mediaState.timeline.lanes[i]) ||
+					audioLanes.some((l, i) => l !== mediaState.timeline.audioLanes?.[i])
 				) {
-					if (mediaHistory.undoSeq !== seq) pushMediaHistory();
-					setMediaTimeline({ ...mediaTimeline, lanes: media, audioLanes });
+					if (mediaState.history.undoSeq !== seq) mediaState.pushHistory();
+					mediaState.set({ ...mediaState.timeline, lanes: media, audioLanes });
 				}
-				const text = trim(textTimeline.lanes);
-				if (text.some((l, i) => l !== textTimeline.lanes[i])) {
-					if (textHistory.undoSeq !== seq) pushTextHistory();
-					setTextTimeline({ ...textTimeline, lanes: text });
+				const text = trim(textState.timeline.lanes);
+				if (text.some((l, i) => l !== textState.timeline.lanes[i])) {
+					if (textState.history.undoSeq !== seq) textState.pushHistory();
+					textState.set({ ...textState.timeline, lanes: text });
 				}
 				const fx = trim(fxState.lanes);
 				if (fx.some((l, i) => l !== fxState.lanes[i])) {
@@ -3172,8 +3155,8 @@
 	 * it's called under: a drag's (see growFrontTo) or Fit's. */
 	function growProjectFront(by: number) {
 		const seq = sharedEditSeq();
-		if (mediaHistory.undoSeq !== seq) pushMediaHistory();
-		if (textHistory.undoSeq !== seq) pushTextHistory();
+		if (mediaState.history.undoSeq !== seq) mediaState.pushHistory();
+		if (textState.history.undoSeq !== seq) textState.pushHistory();
 		if (fxState.history.undoSeq !== seq) fxState.pushHistory();
 		if (lengthHistory.undoSeq !== seq) lengthHistory.push(mixer.duration);
 		pauseTrack();
@@ -3188,12 +3171,15 @@
 					end: c.end + by,
 				})),
 			}));
-		setMediaTimeline({
-			...mediaTimeline,
-			lanes: later(mediaTimeline.lanes),
-			audioLanes: later(mediaTimeline.audioLanes ?? []),
+		mediaState.set({
+			...mediaState.timeline,
+			lanes: later(mediaState.timeline.lanes),
+			audioLanes: later(mediaState.timeline.audioLanes ?? []),
 		});
-		setTextTimeline({ ...textTimeline, lanes: later(textTimeline.lanes) });
+		textState.set({
+			...textState.timeline,
+			lanes: later(textState.timeline.lanes),
+		});
 		fxState.set(later(fxState.lanes));
 		const whole =
 			mixer.spanStart <= 1e-6 && mixer.spanEnd >= mixer.duration - 1e-6;
@@ -3212,7 +3198,7 @@
 
 	/** Detach each video clip's sound onto an audio lane of its own. */
 	function detachClipsAudio(clipIds: string[]) {
-		let timeline = mediaTimeline;
+		let timeline = mediaState.timeline;
 		let lanes = timeline.audioLanes ?? [];
 		for (const clipId of clipIds) {
 			const lane = findMediaClipLane(timeline, clipId);
@@ -3259,14 +3245,14 @@
 				),
 			}));
 		}
-		if (timeline === mediaTimeline) return;
-		pushMediaHistory();
-		setMediaTimeline({ ...timeline, audioLanes: lanes });
+		if (timeline === mediaState.timeline) return;
+		mediaState.pushHistory();
+		mediaState.set({ ...timeline, audioLanes: lanes });
 	}
 
 	/** Give video clips their sound back: the audio clips playing it under each go. */
 	function reattachClipsAudio(clipIds: string[]) {
-		let timeline = mediaTimeline;
+		let timeline = mediaState.timeline;
 		let lanes = timeline.audioLanes ?? [];
 		for (const clipId of clipIds) {
 			const lane = findMediaClipLane(timeline, clipId);
@@ -3281,9 +3267,9 @@
 				),
 			}));
 		}
-		if (timeline === mediaTimeline) return;
-		pushMediaHistory();
-		setMediaTimeline({ ...timeline, audioLanes: lanes });
+		if (timeline === mediaState.timeline) return;
+		mediaState.pushHistory();
+		mediaState.set({ ...timeline, audioLanes: lanes });
 	}
 
 	/** What is on screen now: the main chain, then each fx lane's in lane order. */
@@ -3292,8 +3278,8 @@
 	);
 	// A preset overwritten in the panel; overwriting never re-assigns it, so this isn't an edit.
 	function seqSyncPreset(preset: Preset) {
-		mediaTimeline = syncMediaClipsToPreset(mediaTimeline, preset);
-		textTimeline = syncTextClipsToPreset(textTimeline, preset);
+		mediaState.timeline = syncMediaClipsToPreset(mediaState.timeline, preset);
+		textState.timeline = syncTextClipsToPreset(textState.timeline, preset);
 		fxState.lanes = syncFxClipsToPreset(fxState.lanes, preset);
 	}
 
@@ -3457,15 +3443,15 @@
 			fxState.pushHistory();
 			fxState.lanes = retimedFx;
 		}
-		const retimedMedia = applyBpmToMediaClips(mediaTimeline, bpm);
-		if (retimedMedia !== mediaTimeline) {
-			pushMediaHistory();
-			mediaTimeline = retimedMedia;
+		const retimedMedia = applyBpmToMediaClips(mediaState.timeline, bpm);
+		if (retimedMedia !== mediaState.timeline) {
+			mediaState.pushHistory();
+			mediaState.timeline = retimedMedia;
 		}
-		const retimedText = applyBpmToTextClips(textTimeline, bpm);
-		if (retimedText !== textTimeline) {
-			pushTextHistory();
-			textTimeline = retimedText;
+		const retimedText = applyBpmToTextClips(textState.timeline, bpm);
+		if (retimedText !== textState.timeline) {
+			textState.pushHistory();
+			textState.timeline = retimedText;
 		}
 	}
 
@@ -3496,9 +3482,9 @@
 		let start = Infinity;
 		let end = -Infinity;
 		const lanes: { clips: TimelineClip[] }[] = [
-			...mediaTimeline.lanes,
-			...(mediaTimeline.audioLanes ?? []),
-			...textTimeline.lanes,
+			...mediaState.timeline.lanes,
+			...(mediaState.timeline.audioLanes ?? []),
+			...textState.timeline.lanes,
 			...fxState.lanes,
 		];
 		for (const lane of lanes) {
@@ -3559,10 +3545,10 @@
 	/** R: the selection, whichever lane it's on. */
 	function toggleSelectionRepeat() {
 		const ids =
-			selectedMediaClipIds.length > 0
-				? selectedMediaClipIds
-				: selectedTextClipIds.length > 0
-					? selectedTextClipIds
+			mediaState.selectedClipIds.length > 0
+				? mediaState.selectedClipIds
+				: textState.selectedClipIds.length > 0
+					? textState.selectedClipIds
 					: fxState.selectedClipIds.length > 0
 						? fxState.selectedClipIds
 						: selectedAudioClipIds;
@@ -3634,14 +3620,14 @@
 	function mosh() {
 		glCanvasRef?.dismissHighlight();
 		// A layer's panel has taken the sidebar over, so the arrows belong to its chain.
-		const mediaClip = selectedMediaClip;
+		const mediaClip = mediaState.selectedClip;
 		if (mediaClip) {
-			mediaMoshes.forward(mediaClip.id);
+			mediaState.moshes.forward(mediaClip.id);
 			return;
 		}
-		const textClip = selectedTextClip;
+		const textClip = textState.selectedClip;
 		if (textClip) {
-			textMoshes.forward(textClip.id);
+			textState.moshes.forward(textClip.id);
 			return;
 		}
 		// A selected fx clip is what every panel action aims at, so a mosh means it.
@@ -3658,14 +3644,14 @@
 	/** ← : back through the mosh history. Never touches the edit history. */
 	function undoMosh() {
 		glCanvasRef?.dismissHighlight();
-		const mediaClip = selectedMediaClip;
+		const mediaClip = mediaState.selectedClip;
 		if (mediaClip) {
-			mediaMoshes.back(mediaClip.id);
+			mediaState.moshes.back(mediaClip.id);
 			return;
 		}
-		const textClip = selectedTextClip;
+		const textClip = textState.selectedClip;
 		if (textClip) {
-			textMoshes.back(textClip.id);
+			textState.moshes.back(textClip.id);
 			return;
 		}
 		const clip = fxState.selectedClip;
@@ -3695,16 +3681,15 @@
 		),
 		isSequenceMode ? mixSpanHistory.undoSource : spanHistory.undoSource,
 		snapshotUndoSource(
-			textHistory,
-			() => $state.snapshot(textTimeline) as TextTimeline,
-			(t) =>
-				setTextTimeline({ ...t, lanes: lanesWithoutHiddenEffects(t.lanes) }),
+			textState.history,
+			() => $state.snapshot(textState.timeline) as TextTimeline,
+			(t) => textState.set({ ...t, lanes: lanesWithoutHiddenEffects(t.lanes) }),
 		),
 		snapshotUndoSource(
-			mediaHistory,
-			() => $state.snapshot(mediaTimeline) as MediaTimeline,
+			mediaState.history,
+			() => $state.snapshot(mediaState.timeline) as MediaTimeline,
 			(t) =>
-				setMediaTimeline({ ...t, lanes: lanesWithoutHiddenEffects(t.lanes) }),
+				mediaState.set({ ...t, lanes: lanesWithoutHiddenEffects(t.lanes) }),
 		),
 		snapshotUndoSource(
 			poolHistory,
@@ -3978,24 +3963,27 @@
 	}
 
 	// Seed only: a later change to the prop shouldn't overwrite live edits.
-	let textTimeline = $state<TextTimeline>(
+	const textState = new ChainTimelineState<TextTimeline, TextLane, TextClip>(
 		untrack(() =>
 			initialSession?.text
 				? layersOffOnMobile(normalizeTextTimeline(initialSession.text), "text")
 				: { ...EMPTY_TEXT_TIMELINE },
 		),
+		textTimelineOps,
+		{ moshOptions: getMoshOptions, rollAlive, onSet: retainLaneMoshes },
 	);
-	let selectedTextClipId = $state<string | null>(null);
-	let selectedTextClipIds = $state<string[]>([]);
 	let lyricsOpen = $state(false);
 
 	// Lanes of media over the master clock, each clip with its own chain; sequence mode only.
-	let mediaTimeline = $state<MediaTimeline>(
+	const mediaState = new ChainTimelineState<
+		MediaTimeline,
+		MediaLane,
+		MediaClip
+	>(
 		untrack(() => ({ ...EMPTY_MEDIA_TIMELINE, enabled: isSequenceMode })),
+		mediaTimelineOps((id) => isModelSource(id)),
+		{ moshOptions: getMoshOptions, rollAlive, onSet: retainLaneMoshes },
 	);
-	let selectedMediaClipId = $state<string | null>(null);
-	/** The layer-clip selection, so the media rail can assign to all of it. */
-	let selectedMediaClipIds = $state<string[]>([]);
 
 	/** Lane shown by itself on the canvas; not timeline data, so it never persists or exports. */
 	let soloMediaLaneId = $state<string | null>(null);
@@ -4006,9 +3994,9 @@
 
 	/** Every lane on the stack, whatever kind: the fold-all control works on the lot. */
 	let laneIds = $derived([
-		...mediaTimeline.lanes.map((lane) => lane.id),
-		...(mediaTimeline.audioLanes ?? []).map((lane) => lane.id),
-		...textTimeline.lanes.map((lane) => lane.id),
+		...mediaState.timeline.lanes.map((lane) => lane.id),
+		...(mediaState.timeline.audioLanes ?? []).map((lane) => lane.id),
+		...textState.timeline.lanes.map((lane) => lane.id),
 		...fxState.lanes.map((lane) => lane.id),
 	]);
 
@@ -4016,7 +4004,7 @@
 
 	// Solo only counts while its lane is on the stack; the id is kept so undo brings it back.
 	let soloLaneId = $derived(
-		mediaTimeline.lanes.some((l) => l.id === soloMediaLaneId)
+		mediaState.timeline.lanes.some((l) => l.id === soloMediaLaneId)
 			? soloMediaLaneId
 			: null,
 	);
@@ -4033,11 +4021,13 @@
 	let singleSessionKept = $derived(
 		!isSequenceMode &&
 			!isLive &&
-			(sessionStored || moshSession.worked || textTimeline.lanes.length > 0),
+			(sessionStored ||
+				moshSession.worked ||
+				textState.timeline.lanes.length > 0),
 	);
 
 	function singleStateNow(): SingleSessionState {
-		const hasText = textTimeline.lanes.length > 0;
+		const hasText = textState.timeline.lanes.length > 0;
 		const trimmed =
 			currentTrackId &&
 			audio.pendingSpan === null &&
@@ -4045,7 +4035,10 @@
 		return {
 			effects: $state.snapshot(effects) as EffectInstance[],
 			text: hasText
-				? layersAsLoaded($state.snapshot(textTimeline) as TextTimeline, "text")
+				? layersAsLoaded(
+						$state.snapshot(textState.timeline) as TextTimeline,
+						"text",
+					)
 				: null,
 			...(trimmed
 				? { span: { start: audio.spanStart, end: audio.spanEnd } }
@@ -4095,7 +4088,7 @@
 		}
 		// Deep-read, discarded: naming `effects` alone subscribes to the reference, not its contents.
 		$state.snapshot(effects);
-		$state.snapshot(textTimeline);
+		$state.snapshot(textState.timeline);
 		file;
 		audio.spanStart;
 		audio.spanEnd;
@@ -4145,8 +4138,8 @@
 	const shortcutGroups = $derived(
 		editorShortcutGroups({
 			sequence: isSequenceMode,
-			text: textTimeline.enabled,
-			media: mediaTimeline.enabled,
+			text: textState.timeline.enabled,
+			media: mediaState.timeline.enabled,
 		}),
 	);
 
@@ -4200,8 +4193,8 @@
 		isSequenceMode
 			? seqMasterDuration > 0
 			: textDuration > 0 &&
-					(textTimeline.enabled ||
-						mediaTimeline.enabled ||
+					(textState.timeline.enabled ||
+						mediaState.timeline.enabled ||
 						videoIsMaster ||
 						audioIsMaster),
 	);
@@ -4242,8 +4235,8 @@
 	let sourceInput = $state<HTMLInputElement | undefined>(undefined);
 
 	function addTextLane() {
-		pushTextHistory();
-		setTextTimeline(appendTextLane(textTimeline, newLaneZ()));
+		textState.pushHistory();
+		textState.set(appendTextLane(textState.timeline, newLaneZ()));
 	}
 
 	$effect(() => {
@@ -4261,7 +4254,11 @@
 
 	/** Every layer in both timelines, front first; one order spans the two kinds. */
 	let layerOrder = $derived(
-		combinedLayerOrder(mediaTimeline.lanes, textTimeline.lanes, fxState.lanes),
+		combinedLayerOrder(
+			mediaState.timeline.lanes,
+			textState.timeline.lanes,
+			fxState.lanes,
+		),
 	);
 
 	/** Drop a layer at `toIndex` in the shared stack, whichever timeline holds it. */
@@ -4270,11 +4267,11 @@
 		if (!moves) return;
 		// Only the stacks whose lanes moved record it, under one stamp: one Ctrl+Z.
 		asOneEdit(() => {
-			if (movesAny(moves, mediaTimeline.lanes)) {
-				pushMediaHistory(coalesceKey);
-				setMediaTimeline({
-					...mediaTimeline,
-					lanes: applyLayerMoves(mediaTimeline.lanes, moves),
+			if (movesAny(moves, mediaState.timeline.lanes)) {
+				mediaState.pushHistory(coalesceKey);
+				mediaState.set({
+					...mediaState.timeline,
+					lanes: applyLayerMoves(mediaState.timeline.lanes, moves),
 				});
 			}
 			restackFxAndText(moves, coalesceKey);
@@ -4293,11 +4290,11 @@
 			fxState.pushHistory(coalesceKey);
 			fxState.set(applyLayerMoves(fxState.lanes, moves));
 		}
-		if (movesAny(moves, textTimeline.lanes)) {
-			pushTextHistory(coalesceKey);
-			setTextTimeline({
-				...textTimeline,
-				lanes: applyLayerMoves(textTimeline.lanes, moves),
+		if (movesAny(moves, textState.timeline.lanes)) {
+			textState.pushHistory(coalesceKey);
+			textState.set({
+				...textState.timeline,
+				lanes: applyLayerMoves(textState.timeline.lanes, moves),
 			});
 		}
 	}
@@ -4317,17 +4314,21 @@
 
 	/** A copy of the media lane, stacked right above it, in one undo step. */
 	function copyMediaLane(laneId: string) {
-		const lane = mediaTimeline.lanes.find((l) => l.id === laneId);
-		if (!lane || mediaTimeline.lanes.length >= MAX_MEDIA_LANES) return;
+		const lane = mediaState.timeline.lanes.find((l) => l.id === laneId);
+		if (!lane || mediaState.timeline.lanes.length >= MAX_MEDIA_LANES) return;
 		const copy = duplicateMediaLane(lane, nextLayerZ(layerOrder));
-		const lanes = [...mediaTimeline.lanes, copy];
-		const order = combinedLayerOrder(lanes, textTimeline.lanes, fxState.lanes);
+		const lanes = [...mediaState.timeline.lanes, copy];
+		const order = combinedLayerOrder(
+			lanes,
+			textState.timeline.lanes,
+			fxState.lanes,
+		);
 		const moves =
 			moveLayerTo(order, copy.id, stackIndex(layerOrder, laneId)) ?? [];
 		asOneEdit(() => {
-			pushMediaHistory();
-			setMediaTimeline({
-				...mediaTimeline,
+			mediaState.pushHistory();
+			mediaState.set({
+				...mediaState.timeline,
 				lanes: applyLayerMoves(lanes, moves),
 			});
 			restackFxAndText(moves);
@@ -4346,212 +4347,24 @@
 		});
 	}
 
-	let selectedTextClip = $derived(
-		findTextClip(textTimeline, selectedTextClipId),
-	);
-	let textChainNote = $derived(
-		fanOutNote(
-			selectedTextClip,
-			textClipsById(new Set(selectedTextClipIds)).filter(
-				(c) => c.id !== selectedTextClipId,
-			),
-		),
-	);
-	/** The lane holding the selected clip; the panel edits its style. */
-	let selectedTextLane = $derived(
-		findTextClipLane(textTimeline, selectedTextClipId),
-	);
-
-	// Its own undo stack: the chain stacks are typed to effect arrays.
-	const textHistory = createTextHistory();
-
 	// A restored timeline is the baseline, so the stack starts seeded with EMPTY.
 	if (untrack(() => initialSession?.text)) {
-		textHistory.reset();
+		textState.history.reset();
 	}
-
-	function pushTextHistory(coalesceKey?: string) {
-		textHistory.push(
-			$state.snapshot(textTimeline) as TextTimeline,
-			coalesceKey,
-		);
-	}
-
-	function setTextTimeline(next: TextTimeline) {
-		textTimeline = next;
-		retainLaneMoshes();
-	}
-
-	/** The clip before the panel's edit: its chain panel edits the effects in place. */
-	let textEditBase: TextClip | null = null;
-
-	function beforeTextClipEdit(coalesceKey?: string) {
-		textEditBase = selectedTextClip
-			? ($state.snapshot(selectedTextClip) as TextClip)
-			: null;
-		pushTextHistory(coalesceKey);
-	}
-
-	/** A chain edit also reaches the other selected clips, when they run the same
-	 * effects; position and fades always do. */
-	function updateTextClip(next: TextClip) {
-		const base = textEditBase;
-		textEditBase = null;
-		const before =
-			base?.id === next.id ? base : findTextClip(textTimeline, next.id);
-		const others = $state.snapshot(
-			textClipsById(new Set(selectedTextClipIds)).filter(
-				(c) => c.id !== next.id,
-			),
-		) as TextClip[];
-		const chained = fanOutEdit(before, next, others);
-		const fanned = before
-			? (chained.length > 0 ? chained : others).map((c) =>
-					fanOutTextClipFields(before, next, c),
-				)
-			: chained;
-		textTimeline = [next, ...fanned].reduce(replaceTextClip, textTimeline);
-	}
-
-	/** "All links" reaches every selected text clip, whatever effects it runs. */
-	function setTextClipsBand(band: FreqBand) {
-		if (selectedTextClipIds.length < 2) return;
-		textTimeline = updateTextClips(
-			textTimeline,
-			new Set(selectedTextClipIds),
-			(c) => withAllLinkBands(c, band),
-		);
-	}
-
-	/** The lanes behind the selected text clips, each once. */
-	let selectedTextLaneIds = $derived(
-		selectedTextClipId
-			? textTimeline.lanes
-					.filter((l) =>
-						l.clips.some((c) => selectedTextClipIds.includes(c.id)),
-					)
-					.map((l) => l.id)
-			: [],
-	);
-
-	/** A style edit reaches every lane in the selection. */
-	function updateTextLane(next: TextLane) {
-		const before = textTimeline.lanes.find((l) => l.id === next.id);
-		const snapshot = before && ($state.snapshot(before) as TextLane);
-		textTimeline = {
-			...textTimeline,
-			lanes: textTimeline.lanes.map((l) => {
-				if (l.id === next.id) return next;
-				if (!snapshot || !selectedTextLaneIds.includes(l.id)) return l;
-				return fanOutTextLaneEdit(snapshot, next, l);
-			}),
-		};
-	}
-
-	let textSelectionNote = $derived.by(() => {
-		const count = textClipsById(new Set(selectedTextClipIds)).length;
-		return selectedTextClip && count > 1
-			? `Edits here change all ${count} selected clips. Each keeps its own text.`
-			: null;
-	});
 
 	/** Adopt a saved timeline, or clear back to empty when a track has none. */
 	function restoreTextTimeline(saved: TextTimeline | null) {
-		textTimeline = saved
-			? layersOffOnMobile(saved, "text")
-			: { ...EMPTY_TEXT_TIMELINE };
-		selectedTextClipId = null;
-		textHistory.reset();
-	}
-
-	/** Its own stack, for the same reason the text timeline has one. */
-	const mediaHistory = createMediaHistory();
-
-	function pushMediaHistory(coalesceKey?: string) {
-		mediaHistory.push(
-			$state.snapshot(mediaTimeline) as MediaTimeline,
-			coalesceKey,
+		textState.adopt(
+			saved ? layersOffOnMobile(saved, "text") : { ...EMPTY_TEXT_TIMELINE },
 		);
-	}
-
-	function setMediaTimeline(next: MediaTimeline) {
-		mediaTimeline = next;
-		retainLaneMoshes();
-	}
-
-	/** See textEditBase. */
-	let mediaEditBase: MediaClip | null = null;
-
-	function beforeMediaClipEdit(coalesceKey?: string) {
-		mediaEditBase = selectedMediaClip
-			? ($state.snapshot(selectedMediaClip) as MediaClip)
-			: null;
-		pushMediaHistory(coalesceKey);
-	}
-
-	/** See updateTextClip. Fades, transitions and the like reach the whole selection. */
-	function updateMediaClip(next: MediaClip) {
-		const base = mediaEditBase;
-		mediaEditBase = null;
-		const before =
-			base?.id === next.id ? base : findMediaClip(mediaTimeline, next.id);
-		const others = $state.snapshot(
-			mediaClipsById(new Set(selectedMediaClipIds)).filter(
-				(c) => c.id !== next.id,
-			),
-		) as MediaClip[];
-		const chained = fanOutEdit(before, next, others);
-		const fanned = before
-			? (chained.length > 0 ? chained : others).map((c) =>
-					fanOutMediaClipFields(before, next, c),
-				)
-			: chained;
-		mediaTimeline = [next, ...fanned].reduce(replaceMediaClip, mediaTimeline);
-	}
-
-	/** "All links" reaches every selected layer clip, whatever effects it runs. */
-	function setMediaClipsBand(band: FreqBand) {
-		if (selectedMediaClipIds.length < 2) return;
-		mediaTimeline = updateMediaClips(
-			mediaTimeline,
-			new Set(selectedMediaClipIds),
-			(c) => withAllLinkBands(c, band),
-		);
-	}
-
-	/** The lanes behind the selected layer clips, each once. */
-	let selectedMediaLaneIds = $derived(
-		selectedMediaClipId
-			? mediaTimeline.lanes
-					.filter((l) =>
-						l.clips.some((c) => selectedMediaClipIds.includes(c.id)),
-					)
-					.map((l) => l.id)
-			: [],
-	);
-
-	/** A placement or sound edit reaches every lane in the selection. */
-	function updateMediaLane(next: MediaLane) {
-		const before = mediaTimeline.lanes.find((l) => l.id === next.id);
-		const snapshot = before && ($state.snapshot(before) as MediaLane);
-		mediaTimeline = {
-			...mediaTimeline,
-			lanes: mediaTimeline.lanes.map((l) => {
-				if (l.id === next.id) return next;
-				if (!snapshot || !selectedMediaLaneIds.includes(l.id)) return l;
-				return fanOutMediaLaneEdit(snapshot, next, l);
-			}),
-		};
 	}
 
 	/** Adopt a saved timeline, or clear back to empty. Always on in sequence mode. */
 	function restoreMediaTimeline(saved: MediaTimeline | null) {
-		mediaTimeline = {
+		mediaState.adopt({
 			...(saved ?? EMPTY_MEDIA_TIMELINE),
 			enabled: isSequenceMode,
-		};
-		selectedMediaClipId = null;
-		mediaHistory.reset();
+		});
 		poolHistory.reset();
 		lengthHistory.reset();
 		bpmHistory.reset();
@@ -4563,11 +4376,11 @@
 	}
 
 	function addMediaLane() {
-		if (mediaTimeline.lanes.length >= MAX_MEDIA_LANES) return;
+		if (mediaState.timeline.lanes.length >= MAX_MEDIA_LANES) return;
 		const sourceId = defaultLayerSourceId();
-		pushMediaHistory();
-		const next = appendMediaLane(mediaTimeline, sourceId, newLaneZ());
-		setMediaTimeline(next);
+		mediaState.pushHistory();
+		const next = appendMediaLane(mediaState.timeline, sourceId, newLaneZ());
+		mediaState.set(next);
 		revealLaneRow(next.lanes[next.lanes.length - 1].id);
 		// Nothing in the pool to draw, so ask for the file.
 		if (!sourceId) sourceInput?.click();
@@ -4592,8 +4405,8 @@
 				// A lane picked by name aims the settings panel at it.
 				fxState.selectedLaneId = null;
 			}
-			if (keep !== "media") selectedMediaClipId = null;
-			if (keep !== "text") selectedTextClipId = null;
+			if (keep !== "media") mediaState.selectedClipId = null;
+			if (keep !== "text") textState.selectedClipId = null;
 			if (keep !== "audio") selectedAudioClipId = null;
 		});
 	}
@@ -4603,10 +4416,10 @@
 			keepOnlySelection("fx");
 	});
 	$effect(() => {
-		if (selectedMediaClipId) keepOnlySelection("media");
+		if (mediaState.selectedClipId) keepOnlySelection("media");
 	});
 	$effect(() => {
-		if (selectedTextClipId) keepOnlySelection("text");
+		if (textState.selectedClipId) keepOnlySelection("text");
 	});
 	$effect(() => {
 		if (selectedAudioClipId) keepOnlySelection("audio");
@@ -4615,84 +4428,31 @@
 	/** Select what the preview was clicked on; clicking past every layer lands on the base. */
 	function pickLayer(pick: LayerPick | null) {
 		if (pick?.kind === "media") {
-			const lane = mediaTimeline.lanes.find((l) => l.id === pick.laneId);
+			const lane = mediaState.timeline.lanes.find((l) => l.id === pick.laneId);
 			const clip = lane ? clipAt(lane, textTime) : null;
 			if (!clip) return;
-			selectedMediaClipId = clip.id;
-			selectedMediaClipIds = [clip.id];
+			mediaState.selectedClipId = clip.id;
+			mediaState.selectedClipIds = [clip.id];
 			return;
 		}
 		if (pick?.kind === "text") {
-			const lane = textTimeline.lanes.find((l) => l.id === pick.laneId);
+			const lane = textState.timeline.lanes.find((l) => l.id === pick.laneId);
 			const clip = lane ? clipAt(lane, textTime) : null;
-			if (clip) selectedTextClipId = clip.id;
+			if (clip) textState.selectedClipId = clip.id;
 			return;
 		}
-		selectedMediaClipId = null;
-		selectedMediaClipIds = [];
-		selectedTextClipId = null;
+		mediaState.selectedClipId = null;
+		mediaState.selectedClipIds = [];
+		textState.selectedClipId = null;
 	}
 
 	// Fill, mosh, clear and static/auto on a text clip: the same gestures a media clip takes.
 	const previewTextChains = createTextChainSource(getMoshOptions);
 
-	const textMoshes = new ClipMoshes<TextClip>({
-		clips: textClipsById,
-		snapshot: chainClipMoshSnapshot,
-		roll: (ids) =>
-			rollAlive(
-				() =>
-					(textTimeline = rollTextClips(textTimeline, ids, getMoshOptions())),
-			),
-		restore: (id, snap) =>
-			(textTimeline = restoreTextClipMosh(textTimeline, id, snap)),
-		beforeChange: () => pushTextHistory(),
-	});
-
 	/** Deleting a clip retires its id, so drop the stack. */
 	function retainLaneMoshes() {
-		textMoshes.retain(
-			textTimeline.lanes.flatMap((l) => l.clips.map((c) => c.id)),
-		);
-		mediaMoshes.retain(
-			mediaTimeline.lanes.flatMap((l) => l.clips.map((c) => c.id)),
-		);
-	}
-
-	function textClipsById(ids: Set<string>): TextClip[] {
-		return textTimeline.lanes.flatMap((l) =>
-			l.clips.filter((c) => ids.has(c.id)),
-		);
-	}
-
-	function textClear(clipIds: string[]) {
-		pushTextHistory();
-		textTimeline = clearTextClips(textTimeline, new Set(clipIds));
-	}
-
-	function textApplyPreset(clipIds: string[], preset: Preset) {
-		pushTextHistory();
-		textTimeline = fillTextClipsFromPreset(
-			textTimeline,
-			new Set(clipIds),
-			preset,
-		);
-	}
-
-	function textModeChange(
-		clipIds: string[],
-		mode: ChainMode,
-		intervalSec?: number,
-		intervalBeats?: number | null,
-	) {
-		pushTextHistory();
-		textTimeline = setTextClipsMode(
-			textTimeline,
-			new Set(clipIds),
-			mode,
-			intervalSec,
-			intervalBeats,
-		);
+		textState.retainMoshes();
+		mediaState.retainMoshes();
 	}
 
 	// Fill, mosh, clear and static/auto on a media clip: the same gestures an fx clip takes.
@@ -4705,93 +4465,19 @@
 		cutList: (id) => sourceRegistry.get(id)?.cutList,
 	});
 
-	const mediaMoshes = new ClipMoshes<MediaClip>({
-		clips: mediaClipsById,
-		snapshot: chainClipMoshSnapshot,
-		roll: (ids) =>
-			rollAlive(
-				() =>
-					(mediaTimeline = rollMediaClips(
-						mediaTimeline,
-						ids,
-						getMoshOptions(),
-						isModelSource,
-					)),
-			),
-		restore: (id, snap) =>
-			(mediaTimeline = restoreMediaClipMosh(mediaTimeline, id, snap)),
-		beforeChange: () => pushMediaHistory(),
-	});
-
-	function mediaClipsById(ids: Set<string>): MediaClip[] {
-		return mediaTimeline.lanes.flatMap((l) =>
-			l.clips.filter((c) => ids.has(c.id)),
-		);
-	}
-
-	function mediaClear(clipIds: string[]) {
-		pushMediaHistory();
-		mediaTimeline = clearMediaClips(mediaTimeline, new Set(clipIds));
-	}
-
-	function mediaApplyPreset(clipIds: string[], preset: Preset) {
-		pushMediaHistory();
-		mediaTimeline = fillMediaClipsFromPreset(
-			mediaTimeline,
-			new Set(clipIds),
-			preset,
-		);
-	}
-
-	function mediaModeChange(
-		clipIds: string[],
-		mode: ChainMode,
-		intervalSec?: number,
-		intervalBeats?: number | null,
-	) {
-		pushMediaHistory();
-		mediaTimeline = setMediaClipsMode(
-			mediaTimeline,
-			new Set(clipIds),
-			mode,
-			intervalSec,
-			intervalBeats,
-		);
-	}
-
-	let selectedMediaClip = $derived(
-		findMediaClip(mediaTimeline, selectedMediaClipId),
-	);
-	let selectedMediaLane = $derived(
-		findMediaClipLane(mediaTimeline, selectedMediaClipId),
-	);
-	let mediaChainNote = $derived(
-		fanOutNote(
-			selectedMediaClip,
-			mediaClipsById(new Set(selectedMediaClipIds)).filter(
-				(c) => c.id !== selectedMediaClipId,
-			),
-		),
-	);
-	let mediaSelectionNote = $derived.by(() => {
-		const count = mediaClipsById(new Set(selectedMediaClipIds)).length;
-		return selectedMediaClip && count > 1
-			? `Edits here change all ${count} selected clips. Media, start and speed stay per clip.`
-			: null;
-	});
 	/** What the selected layer clip draws, and plays. */
 	let selectedMediaSourceId = $derived(
-		selectedMediaLane && selectedMediaClip
-			? clipSourceId(selectedMediaLane, selectedMediaClip)
+		mediaState.selectedLane && mediaState.selectedClip
+			? clipSourceId(mediaState.selectedLane, mediaState.selectedClip)
 			: null,
 	);
 
 	/** The source the selected layer clips draw; null when they disagree. */
 	let mediaSelectedSourceId = $derived.by(() => {
-		if (selectedMediaClipIds.length === 0) return null;
-		const picked = new Set(selectedMediaClipIds);
+		if (mediaState.selectedClipIds.length === 0) return null;
+		const picked = new Set(mediaState.selectedClipIds);
 		const drawn: (string | null)[] = [];
-		for (const lane of mediaTimeline.lanes) {
+		for (const lane of mediaState.timeline.lanes) {
 			for (const clip of lane.clips) {
 				if (picked.has(clip.id)) drawn.push(clipSourceId(lane, clip));
 			}
@@ -4803,7 +4489,7 @@
 	/** A pasted image stays lit in the rail until the clip selection moves. */
 	let pastedSourceId = $state<string | null>(null);
 	$effect(() => {
-		void selectedMediaClipIds;
+		void mediaState.selectedClipIds;
 		pastedSourceId = null;
 	});
 
@@ -4813,21 +4499,25 @@
 			? pastedSourceId
 			: null) ??
 			mediaSelectedSourceId ??
-			selectedMediaLane?.sourceId ??
+			mediaState.selectedLane?.sourceId ??
 			null,
 	);
 
 	/** How many clips a rail click assigns to. */
-	let railTargetCount = $derived(selectedMediaClipIds.length);
+	let railTargetCount = $derived(mediaState.selectedClipIds.length);
 
 	/** Point the selected layer clips at this source, fanned out over the selection. */
 	function assignMediaClipSource(sourceId: string) {
-		if (selectedMediaClipIds.length === 0) return;
-		pushMediaHistory();
-		setMediaTimeline(
+		if (mediaState.selectedClipIds.length === 0) return;
+		mediaState.pushHistory();
+		mediaState.set(
 			autoOnSlideshows(
-				setMediaClipSources(mediaTimeline, selectedMediaClipIds, sourceId),
-				selectedMediaClipIds,
+				setMediaClipSources(
+					mediaState.timeline,
+					mediaState.selectedClipIds,
+					sourceId,
+				),
+				mediaState.selectedClipIds,
 				isSlideshowSource,
 			),
 		);
@@ -4838,14 +4528,14 @@
 		const pool = poolSources.map((s) => s.id);
 		if (pool.length < 2) return;
 		const ids =
-			selectedMediaClipIds.length > 0
-				? selectedMediaClipIds
-				: mediaTimeline.lanes.flatMap((l) => l.clips.map((c) => c.id));
+			mediaState.selectedClipIds.length > 0
+				? mediaState.selectedClipIds
+				: mediaState.timeline.lanes.flatMap((l) => l.clips.map((c) => c.id));
 		if (ids.length === 0) return;
-		pushMediaHistory();
-		setMediaTimeline(
+		mediaState.pushHistory();
+		mediaState.set(
 			autoOnSlideshows(
-				dealMediaClipSources(mediaTimeline, new Set(ids), pool),
+				dealMediaClipSources(mediaState.timeline, new Set(ids), pool),
 				ids,
 				isSlideshowSource,
 			),
@@ -4853,17 +4543,20 @@
 	}
 
 	function toggleTextTimeline() {
-		pushTextHistory();
-		textTimeline = toggledTextTimeline(textTimeline, nextLayerZ(layerOrder));
-		if (!textTimeline.enabled) {
-			selectedTextClipId = null;
+		textState.pushHistory();
+		textState.timeline = toggledTextTimeline(
+			textState.timeline,
+			nextLayerZ(layerOrder),
+		);
+		if (!textState.timeline.enabled) {
+			textState.selectedClipId = null;
 			lyricsOpen = false;
 		}
 	}
 
 	/** Transport for the lyrics-sync modal, on whichever clock owns the master timeline. */
 	let lyricsSync = $derived<LyricsSyncProps | null>(
-		textTimeline.enabled && isSequenceMode
+		textState.timeline.enabled && isSequenceMode
 			? {
 					isPlaying: mixer.playing,
 					spanStart: mixer.spanStart,
@@ -4874,7 +4567,7 @@
 					onSeek: (t) => mixer.seek(t),
 					onApply: applyLyrics,
 				}
-			: textTimeline.enabled
+			: textState.timeline.enabled
 				? {
 						isPlaying: textNeedsTransport
 							? stillPlaying
@@ -4918,13 +4611,13 @@
 	/** Drop the synced lines into the lyrics lane and select the first one. */
 	function applyLyrics(clips: TextClip[]) {
 		if (clips.length === 0) return;
-		pushTextHistory();
-		textTimeline = applyLyricsToTimeline(
-			textTimeline,
+		textState.pushHistory();
+		textState.timeline = applyLyricsToTimeline(
+			textState.timeline,
 			clips,
 			nextLayerZ(layerOrder),
 		);
-		selectedTextClipId = clips[0].id;
+		textState.selectedClipId = clips[0].id;
 	}
 	let effectiveDuration = $derived(
 		isSequenceMode
@@ -5009,11 +4702,11 @@
 					},
 					normalizeGain: audio.normalizeGain,
 					audioResponse,
-					textTimeline: textTimeline.enabled
-						? ($state.snapshot(textTimeline) as TextTimeline)
+					textTimeline: textState.timeline.enabled
+						? ($state.snapshot(textState.timeline) as TextTimeline)
 						: null,
-					mediaTimeline: mediaTimeline.enabled
-						? ($state.snapshot(mediaTimeline) as MediaTimeline)
+					mediaTimeline: mediaState.timeline.enabled
+						? ($state.snapshot(mediaState.timeline) as MediaTimeline)
 						: null,
 					moshOptions: getMoshOptions(),
 					layerSources: sourceRegistry.sources,
@@ -5189,8 +4882,8 @@
 				<!-- Scoped by the selection: with layer clips picked it deals across those. -->
 				<MediaPoolActions
 					count={poolSources.length}
-					shuffleScope={selectedMediaClipIds.length}
-					shuffleTitle={selectedMediaClipIds.length > 0
+					shuffleScope={mediaState.selectedClipIds.length}
+					shuffleTitle={mediaState.selectedClipIds.length > 0
 						? "Deal the pool at random across the selected media clips"
 						: "Deal the pool at random across every media clip"}
 					recordTitle="Record a webcam take to the song, from the playhead"
@@ -5331,7 +5024,7 @@
 			<SequenceGridView
 				sources={poolSources}
 				onProjects={() => (projectPickerOpen = true)}
-				selectedCount={selectedMediaClipIds.length}
+				selectedCount={mediaState.selectedClipIds.length}
 				selectedSourceId={railSourceId}
 				pendingCount={sourceRegistry.loadingTotal - sourceRegistry.loadingDone}
 				onAddFiles={(files) => void addSequenceSources(files)}
@@ -5403,11 +5096,15 @@
 					sourceEditOpen}
 				{warmCanvas}
 				{warmRenderer}
-				textTimeline={textTimeline.enabled ? textTimeline : null}
-				mediaTimeline={mediaTimeline.enabled ? mediaTimeline : null}
-				selectedMediaLane={mediaTimeline.enabled ? selectedMediaLane : null}
-				selectedTextClipId={textTimeline.enabled ? selectedTextClipId : null}
-				soloMediaLaneId={mediaTimeline.enabled ? soloLaneId : null}
+				textTimeline={textState.timeline.enabled ? textState.timeline : null}
+				mediaTimeline={mediaState.timeline.enabled ? mediaState.timeline : null}
+				selectedMediaLane={mediaState.timeline.enabled
+					? mediaState.selectedLane
+					: null}
+				selectedTextClipId={textState.timeline.enabled
+					? textState.selectedClipId
+					: null}
+				soloMediaLaneId={mediaState.timeline.enabled ? soloLaneId : null}
 				mediaDriver={(layers) => mediaLayers.advance(layers)}
 				mediaChains={previewMediaChains}
 				textChains={previewTextChains}
@@ -5416,7 +5113,8 @@
 				bpm={sequenceBpm}
 				beatOffset={sequenceBeatOffset}
 				forceAnimation={isLive ||
-					((textTimeline.enabled || mediaTimeline.enabled) && textClockRunning)}
+					((textState.timeline.enabled || mediaState.timeline.enabled) &&
+						textClockRunning)}
 				overlay={mediaLoading
 					? loadingOverlay
 					: noSequenceMedia
@@ -5431,22 +5129,31 @@
 				{sourceDurations}
 				onPickLayer={pickLayer}
 				onDropSource={isSequenceMode ? dropSourceOnCanvas : null}
-				onLayerDragStart={() => pushMediaHistory()}
-				onTextDragStart={() => pushTextHistory()}
+				onLayerDragStart={() => mediaState.pushHistory()}
+				onTextDragStart={() => textState.pushHistory()}
 				onTextMove={(clipId, x, y) => {
-					const clip = findTextClip(textTimeline, clipId);
+					const clip = findTextClip(textState.timeline, clipId);
 					if (clip)
-						textTimeline = replaceTextClip(textTimeline, { ...clip, x, y });
+						textState.timeline = replaceTextClip(textState.timeline, {
+							...clip,
+							x,
+							y,
+						});
 				}}
 				onTextResize={(clipId, size) => {
-					const lane = findTextClipLane(textTimeline, clipId);
-					if (lane) updateTextLane({ ...lane, style: { ...lane.style, size } });
+					const lane = findTextClipLane(textState.timeline, clipId);
+					if (lane)
+						textState.updateLane({ ...lane, style: { ...lane.style, size } });
 				}}
 				onLayerStyleChange={(id, style) =>
-					(mediaTimeline = updateMediaLaneIn(mediaTimeline, id, (l) => ({
-						...l,
-						style,
-					})))}
+					(mediaState.timeline = updateMediaLaneIn(
+						mediaState.timeline,
+						id,
+						(l) => ({
+							...l,
+							style,
+						}),
+					))}
 			/>
 		</div>
 
@@ -5489,7 +5196,7 @@
 					{#if !isMobile}
 						<button
 							class="bar-icon"
-							class:on={textTimeline.enabled}
+							class:on={textState.timeline.enabled}
 							onclick={toggleTextTimeline}
 							title="Text timeline: timed text layers with their own effects"
 							aria-label="Text timeline"
@@ -5766,7 +5473,7 @@
 			>
 				{#snippet toolbar()}
 					<!-- Each button names the lane it adds: "+ Lane" read as the same button three times. -->
-					{#if textTimeline.enabled}
+					{#if textState.timeline.enabled}
 						<div class="tl-tool-sep"></div>
 						<button
 							class="tl-tool-btn"
@@ -5787,12 +5494,12 @@
 						{/if}
 					{/if}
 					<!-- Read bottom to top, the way the frame is built. -->
-					{#if mediaTimeline.enabled}
+					{#if mediaState.timeline.enabled}
 						<div class="tl-tool-sep"></div>
 						<button
 							class="tl-tool-btn"
-							disabled={mediaTimeline.lanes.length >= MAX_MEDIA_LANES}
-							title={mediaTimeline.lanes.length >= MAX_MEDIA_LANES
+							disabled={mediaState.timeline.lanes.length >= MAX_MEDIA_LANES}
+							title={mediaState.timeline.lanes.length >= MAX_MEDIA_LANES
 								? `${MAX_MEDIA_LANES} media lanes is the limit`
 								: "Add a lane of images, videos or 3D models from the pool, each clip with its own effects"}
 							onclick={addMediaLane}
@@ -5804,7 +5511,7 @@
 						<div class="tl-tool-sep"></div>
 						<button
 							class="tl-tool-btn"
-							disabled={(mediaTimeline.audioLanes?.length ?? 0) >=
+							disabled={(mediaState.timeline.audioLanes?.length ?? 0) >=
 								MAX_AUDIO_LANES}
 							title="Add music, a voice-over or any sound, on a lane of its own from the start marker"
 							onclick={openTrackPicker}
@@ -5813,7 +5520,7 @@
 						</button>
 						<button
 							class="tl-tool-btn"
-							disabled={(mediaTimeline.audioLanes?.length ?? 0) >=
+							disabled={(mediaState.timeline.audioLanes?.length ?? 0) >=
 								MAX_AUDIO_LANES}
 							title="Add an empty audio lane to record your microphone onto, or to paste or drag clips onto"
 							onclick={addEmptyAudioLane}
@@ -5887,9 +5594,9 @@
 				{/snippet}
 				<!-- Read bottom to top: the transports at the foot are the inputs. -->
 				<div class="tl-layers" bind:this={timelineSplit.laneListEl}>
-					{#if mediaTimeline.enabled}
+					{#if mediaState.timeline.enabled}
 						<MediaTimelineLane
-							timeline={mediaTimeline}
+							timeline={mediaState.timeline}
 							foldedLaneIds={laneFolds.ids}
 							onToggleFold={laneFolds.toggle}
 							{layerOrder}
@@ -5897,43 +5604,43 @@
 							onLaneDragStart={startLayerDrag}
 							sources={sequenceSources}
 							edits={sourceRegistry.edits}
-							bind:selectedClipId={selectedMediaClipId}
-							bind:selectedClipIds={selectedMediaClipIds}
+							bind:selectedClipId={mediaState.selectedClipId}
+							bind:selectedClipIds={mediaState.selectedClipIds}
 							{soloLaneId}
 							onToggleSolo={toggleMediaSolo}
 							isSilent={(id) => audioBank.isSilent(id)}
-							onCopyLane={mediaTimeline.lanes.length < MAX_MEDIA_LANES
+							onCopyLane={mediaState.timeline.lanes.length < MAX_MEDIA_LANES
 								? copyMediaLane
 								: undefined}
-							onChange={setMediaTimeline}
-							onBeforeEdit={pushMediaHistory}
+							onChange={mediaState.set}
+							onBeforeEdit={mediaState.pushHistory}
 							bpm={sequenceBpm}
-							onApplyPreset={mediaApplyPreset}
-							onRoll={mediaMoshes.roll}
-							onClear={mediaClear}
-							onModeChange={mediaModeChange}
+							onApplyPreset={mediaState.applyPreset}
+							onRoll={mediaState.moshes.roll}
+							onClear={mediaState.clear}
+							onModeChange={mediaState.modeChange}
 							plan={isSequenceMode ? mixPlan : undefined}
 							{peaksOf}
 							audioVersion={audioBank.version}
 						/>
 					{/if}
-					{#if textTimeline.enabled}
+					{#if textState.timeline.enabled}
 						<TextTimelineLane
-							timeline={textTimeline}
+							timeline={textState.timeline}
 							foldedLaneIds={laneFolds.ids}
 							onToggleFold={laneFolds.toggle}
 							{layerOrder}
 							{draggingLaneId}
 							onLaneDragStart={startLayerDrag}
-							bind:selectedClipId={selectedTextClipId}
-							bind:selectedClipIds={selectedTextClipIds}
-							onChange={setTextTimeline}
-							onBeforeEdit={pushTextHistory}
+							bind:selectedClipId={textState.selectedClipId}
+							bind:selectedClipIds={textState.selectedClipIds}
+							onChange={textState.set}
+							onBeforeEdit={textState.pushHistory}
 							bpm={sequenceBpm}
-							onApplyPreset={textApplyPreset}
-							onRoll={textMoshes.roll}
-							onClear={textClear}
-							onModeChange={textModeChange}
+							onApplyPreset={textState.applyPreset}
+							onRoll={textState.moshes.roll}
+							onClear={textState.clear}
+							onModeChange={textState.modeChange}
 							{lyricsSync}
 							bind:lyricsOpen
 						/>
@@ -5957,14 +5664,14 @@
 							onClear={fxState.clear}
 						/>
 					{/if}
-					{#if isSequenceMode && (mediaTimeline.audioLanes?.length ?? 0) > 0}
+					{#if isSequenceMode && (mediaState.timeline.audioLanes?.length ?? 0) > 0}
 						<AudioLanes
-							lanes={mediaTimeline.audioLanes ?? []}
+							lanes={mediaState.timeline.audioLanes ?? []}
 							bind:selectedClipId={selectedAudioClipId}
 							bind:selectedClipIds={selectedAudioClipIds}
 							onChange={(audioLanes) =>
-								setMediaTimeline({ ...mediaTimeline, audioLanes })}
-							onBeforeEdit={pushMediaHistory}
+								mediaState.set({ ...mediaState.timeline, audioLanes })}
+							onBeforeEdit={mediaState.pushHistory}
 							plan={mixPlan}
 							{peaksOf}
 							version={audioBank.version}
@@ -6053,7 +5760,7 @@
 				{/if}
 			</TimelineStack>
 		{/if}
-		{#if isSequenceMode ? !audio.trackFile && !mediaTimeline.audioLanes?.length : !audio.trackFile}
+		{#if isSequenceMode ? !audio.trackFile && !mediaState.timeline.audioLanes?.length : !audio.trackFile}
 			<TrackAddBar
 				onOpenPicker={openTrackPicker}
 				hintText="Add music to make effects react to the beat"
@@ -6156,71 +5863,73 @@
 
 	<!-- Passed only while a clip is selected. -->
 	{#snippet layerPanel(section: "clip" | "chain")}
-		{#if selectedMediaClip}
+		{#if mediaState.selectedClip}
 			<MediaClipPanel
-				lane={selectedMediaLane}
-				clip={selectedMediaClip}
+				lane={mediaState.selectedLane}
+				clip={mediaState.selectedClip}
 				sources={poolSources}
-				onLaneChange={updateMediaLane}
-				onClipChange={updateMediaClip}
-				onBeforeEdit={beforeMediaClipEdit}
-				onClose={() => (selectedMediaClipId = null)}
+				onLaneChange={mediaState.updateLane}
+				onClipChange={mediaState.updateClip}
+				onBeforeEdit={mediaState.beforeClipEdit}
+				onClose={() => (mediaState.selectedClipId = null)}
 				hasTrack={linksHaveAudio}
 				beatSync={sequenceBpm > 0}
 				spectrumData={liveSpectrum}
-				response={selectedMediaLane
-					? laneAudioResponse(selectedMediaLane, audioResponse)
+				response={mediaState.selectedLane
+					? laneAudioResponse(mediaState.selectedLane, audioResponse)
 					: audioResponse}
 				edits={sourceRegistry.edits}
 				onEditChange={editSource}
 				onEditingChange={(open) => onSourceEditingChange("clip", open)}
 				{section}
-				chainNote={mediaChainNote}
-				selectionNote={mediaSelectionNote}
-				onAllBands={setMediaClipsBand}
+				chainNote={mediaState.chainNote}
+				selectionNote={mediaState.selectionNote}
+				onAllBands={mediaState.setClipsBand}
 				sourceHasAudio={!selectedMediaSourceId ||
 					!audioBank.isSilent(selectedMediaSourceId)}
-				onDetachAudio={isSequenceMode && selectedMediaClip
-					? () => detachClipsAudio(selectedMediaClipIds)
+				onDetachAudio={isSequenceMode && mediaState.selectedClip
+					? () => detachClipsAudio(mediaState.selectedClipIds)
 					: undefined}
-				onAttachAudio={isSequenceMode && selectedMediaClip
-					? () => reattachClipsAudio(selectedMediaClipIds)
+				onAttachAudio={isSequenceMode && mediaState.selectedClip
+					? () => reattachClipsAudio(mediaState.selectedClipIds)
 					: undefined}
 				onRefreshSlideshow={(id) => void refreshSlideshow(id)}
 				onRefreshSingle={(key) => void refreshSingleEdit(key)}
 			/>
-		{:else if selectedTextClip}
+		{:else if textState.selectedClip}
 			<TextClipPanel
-				lane={selectedTextLane}
-				clip={selectedTextClip}
-				onLaneChange={updateTextLane}
-				onClipChange={updateTextClip}
-				onBeforeEdit={beforeTextClipEdit}
-				onClose={() => (selectedTextClipId = null)}
+				lane={textState.selectedLane}
+				clip={textState.selectedClip}
+				onLaneChange={textState.updateLane}
+				onClipChange={textState.updateClip}
+				onBeforeEdit={textState.beforeClipEdit}
+				onClose={() => (textState.selectedClipId = null)}
 				hasTrack={linksHaveAudio}
 				beatSync={sequenceBpm > 0}
 				spectrumData={liveSpectrum}
 				response={audioResponse}
 				{section}
-				chainNote={textChainNote}
-				selectionNote={textSelectionNote}
-				onAllBands={setTextClipsBand}
+				chainNote={textState.chainNote}
+				selectionNote={textState.selectionNote}
+				onAllBands={textState.setClipsBand}
 				bpm={sequenceBpm}
 			/>
 		{/if}
 	{/snippet}
 
 	<MobileSheet
-		topPanel={selectedMediaClip || selectedTextClip ? layerPanel : undefined}
+		topPanel={mediaState.selectedClip || textState.selectedClip
+			? layerPanel
+			: undefined}
 		settingsLabel="Mosh"
-		topPanelLabel={selectedMediaClip ? "Media clip" : "Text clip"}
+		topPanelLabel={mediaState.selectedClip ? "Media clip" : "Text clip"}
 	>
 		{#snippet settings()}
 			{@render moshSettings()}
 		{/snippet}
 		{#snippet effectsPanel()}
 			<!-- A selected layer is edited by the top panel instead; the main chain would be a second list. -->
-			{#if !selectedMediaClip && !selectedTextClip}
+			{#if !mediaState.selectedClip && !textState.selectedClip}
 				<EffectsPanel
 					headless
 					note={panelNote}
