@@ -8,6 +8,7 @@ import type { FxLaneState } from "./fx-lane-state.svelte";
 import type { PoolPersistence } from "./pool-persistence.svelte";
 import type { ProjectTempo } from "./project-tempo.svelte";
 import type { SequenceSourceRegistry } from "./sequence-sources.svelte";
+import type { SongHandler } from "./song-handler";
 import type { TimelinePersistence } from "./timeline-persistence.svelte";
 
 type Span = { start: number; end: number };
@@ -33,7 +34,7 @@ export interface SingleSongHost {
 	initialSpan: Span | null;
 }
 
-export class SingleSong {
+export class SingleSong implements SongHandler {
 	readonly #host: SingleSongHost;
 	#sessionSpan: Span | null;
 	/** A dropped or picked song replaced another, so it starts without that one's text. */
@@ -44,8 +45,11 @@ export class SingleSong {
 		this.#sessionSpan = host.initialSpan;
 	}
 
-	/** A new song file in place of the current one; it gets its id on registering. */
-	replaceFile(file: File) {
+	/** The first file becomes the song in place of the current one; it gets its id on
+	 * registering. */
+	addFiles(files: File[]) {
+		const file = files[0];
+		if (!file) return;
 		const left = !!this.#host.trackId();
 		this.clear();
 		this.#songLeft = left;
@@ -64,7 +68,7 @@ export class SingleSong {
 	}
 
 	/** A library song picked to play. The pool is deliberately left alone. */
-	load(file: File, trackId: string, autoplay: boolean) {
+	pick(file: File, trackId: string, autoplay: boolean) {
 		const host = this.#host;
 		const previous = host.trackId();
 		const switchingSongs = !!previous && previous !== trackId;
