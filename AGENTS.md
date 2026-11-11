@@ -152,6 +152,10 @@ Outside CI a run reuses whatever already serves its port, so when my dev server 
   layer's box.
 - Code-split only what sits behind an `{#if}` that starts false, via `lib/lazy.ts`. Inline
   controls stay eager.
+- `Editor.svelte` wires; editor logic lives in `lib/editor/` as a class or factory taking a
+  host object (`FxLaneState`, `ChainTimelineState` for text and media lanes, `LayerStack`,
+  `createAudioLaneEdits`, …). New editor behavior goes into one of those or a new one, not
+  into the component.
 - The site is `openmosh.com`; `www` redirects to it. Never switch those around: each address
   keeps its own saves. `open-mosh.vercel.app` keeps serving the app with a moved notice
   (`lib/site.ts`) and is never redirected, since early users' projects are stored there.
