@@ -21,10 +21,6 @@
 	} from "lucide-svelte";
 	import { fileDrop } from "../../actions/file-drop";
 	import { pastedFiles } from "../../media/paste";
-	import {
-		createAudioGraph,
-		createOutputAudioGraph,
-	} from "../../audio/audio-controller";
 	import { AudioManager } from "../../audio/audio-manager.svelte";
 	import type { AudioLinkGroup } from "../../audio/audio-utils";
 	import { downloadBlob } from "../../recorder";
@@ -208,6 +204,7 @@
 	} from "../../editor/legacy-segments";
 	import { FxLaneState } from "../../editor/fx-lane-state.svelte";
 	import { createProjectImports } from "../../editor/project-imports";
+	import { SingleVideo } from "../../editor/single-video.svelte";
 	import { createAudioLaneEdits } from "../../editor/audio-lane-edits";
 	import { createProjectLength } from "../../editor/project-length";
 	import { createPoolEdits, type PoolEntry } from "../../editor/pool-edits";
@@ -225,7 +222,6 @@
 		type SeqEntry,
 	} from "../../editor/seq-entry";
 	import type { GlRenderer, SourceFit } from "../../gl/renderer";
-	import { VideoPreviewPlayer } from "../../video-preview/preview-player.svelte";
 	import AudioTimeline from "../ui/AudioTimeline.svelte";
 	import TimelineStack from "../ui/TimelineStack.svelte";
 	import type { TimelineStackState } from "../../editor/timeline-stack.svelte";
@@ -363,169 +359,24 @@
 		if (liveVideoEl) liveVideoEl.srcObject = liveStream;
 	});
 	const isMobile = window.matchMedia("(pointer: coarse)").matches;
-	let videoEl = $state<HTMLVideoElement | null>(null);
-	let videoDuration = $state(0);
-	let videoCurrentTime = $state(0);
-	let videoSpanStart = $state(0);
-	let videoSpanEnd = $state(0);
-	let videoPlaying = $state(false);
-	let videoSpeed = $state(1);
-	// Positions this close to the span end count as "at the end".
-	const VIDEO_END_EPSILON = 0.1;
-	/** Video clock sits past its span end. */
-	let videoPastSpan = $state(false);
-	// Starts false: Firefox ignores playbackRate on element-captured audio (moz bug 1517199).
-	let videoHasAudio = $state(false);
-
-	// WebCodecs preview playback; replaces the <video> element as frame source.
-	let previewPlayer = $state<VideoPreviewPlayer | null>(null);
-
-	// Read-only view of the active video source; writes stay in the transport functions.
-	let videoClock = $derived(
-		previewPlayer ? previewPlayer.currentTime : videoCurrentTime,
-	);
-	let videoIsPlaying = $derived(
-		previewPlayer ? previewPlayer.playing : videoPlaying,
-	);
-
-	// The file the current player was built for; plain, so the proxy swap can compare identity.
-	let playerFile: File | null = null;
-	/** The last player as its effect tore down; the teardown runs before the next body. */
-	let lastPlayer: {
-		time: number;
-		playing: boolean;
-		width: number;
-		height: number;
-	} | null = null;
-
-	$effect(() => {
-		const current = file;
-		if (!isVideo || !current) return;
-		const proxy = singleProxy.forFile(current);
-		const previewFile = proxy ?? current;
-		// Same file means only the decoder changed: the proxy landed, or was turned off.
-		const swap = playerFile === current;
-		const last = swap ? lastPlayer : null;
-		// Read untracked: tracking would rebuild the player.
-		const media = proxy
-			? untrack(() => ({
-					width: last?.width ?? naturalWidth ?? 0,
-					height: last?.height ?? naturalHeight ?? 0,
-					duration: videoDuration,
-				}))
-			: undefined;
-		const resume = untrack(() => ({
-			time: last?.time ?? 0,
-			playing: last?.playing ?? false,
-			spanStart: videoSpanStart,
-			spanEnd: videoSpanEnd,
-			recordDuration: recordDuration,
-		}));
-		let cancelled = false;
-		let player: VideoPreviewPlayer | null = null;
-		if (!swap)
-			untrack(() => (videoUnplayable = { player: false, element: false }));
-		VideoPreviewPlayer.create(previewFile, media).then((p) => {
-			if (cancelled || !p) {
-				p?.dispose();
-				if (!cancelled && !swap) videoUnplayable.player = true;
-				return;
-			}
-			player = p;
-			playerFile = current;
-			previewPlayer = p;
-			videoEl?.pause();
-			if (videoEl) videoEl.muted = true;
-			videoDuration = p.duration;
-			if (swap) {
-				// Same media, other decoder: keep the span and the playhead.
-				videoSpanStart = resume.spanStart;
-				videoSpanEnd = resume.spanEnd;
-				recordDuration = resume.recordDuration;
-				if (resume.time > 0.05) p.seek(resume.time);
-			} else {
-				videoSpanStart = 0;
-				videoSpanEnd = p.duration;
-				recordDuration = Math.round(p.duration * 10) / 10;
-			}
-			// The probe may have built an element-sourced graph first; rebuild it sourceless.
-			if (audio.audioContext && !audio.trackFile) audio.disposeAudioGraph();
-			ensureVideoAudioGraph();
-			// Starts paused on purpose, see videoAudioUnlocked, unless a swap cut playback short.
-			if (swap && resume.playing) p.play();
-		});
-		return () => {
-			cancelled = true;
-			// Still building: the one before it is the latest state there is.
-			if (player)
-				lastPlayer = {
-					time: player.currentTime,
-					playing: player.playing,
-					width: player.width,
-					height: player.height,
-				};
-			player?.dispose();
-			previewPlayer = null;
-		};
-	});
-
-	/** Which of the two ways to play the single video gave up on it. */
-	let videoUnplayable = $state({ player: false, element: false });
-	$effect(() => {
-		if (!videoUnplayable.player || !videoUnplayable.element) return;
-		const name = untrack(() => file?.name);
-		showToast(
-			`Can't play "${name}". This browser can't decode its video`,
-			"error",
-			8000,
-		);
+	const singleVideo = new SingleVideo({
+		audio: () => audio,
+		file: () => file,
+		isVideo: () => isVideo,
+		proxyFor: (f): File | null => singleProxy.forFile(f),
+		naturalSize: () => ({ width: naturalWidth, height: naturalHeight }),
+		recordDuration: () => recordDuration,
+		setRecordDuration: (seconds) => (recordDuration = seconds),
+		recording: () => recordingState.recording,
+		loop: () => videoLoop,
+		markerTime: (): number | null =>
+			timelineAxis && videoIsMaster ? timelineAxis.staticTime : null,
 	});
 
 	const singleProxy = new SingleProxy({
 		active: () => !isSequenceMode && isVideo,
 		file: () => file,
-		player: () => previewPlayer,
-	});
-
-	$effect(() => {
-		previewPlayer?.setSpeed(videoSpeed);
-	});
-	$effect(() => {
-		if (previewPlayer) previewPlayer.loop = videoLoop;
-	});
-	$effect(() => {
-		previewPlayer?.setSpan(videoSpanStart, videoSpanEnd);
-	});
-	$effect(() => {
-		previewPlayer?.setMuted(!!audio.trackFile);
-	});
-
-	$effect(() => {
-		if (videoEl) videoEl.playbackRate = videoSpeed;
-	});
-
-	// Probe for an audio track; gates the volume slider and Web Audio capture.
-	$effect(() => {
-		const probed = file;
-		if (!isVideo || !probed) return;
-		videoHasAudio = false;
-		(async () => {
-			try {
-				const mb = await import("mediabunny");
-				const input = new mb.Input({
-					source: new mb.BlobSource(probed),
-					formats: mb.ALL_FORMATS,
-				});
-				try {
-					const track = await input.getPrimaryAudioTrack();
-					if (file === probed) videoHasAudio = !!track;
-				} finally {
-					input.dispose();
-				}
-			} catch {
-				if (file === probed) videoHasAudio = true;
-			}
-		})();
+		player: () => singleVideo.player,
 	});
 
 	// The editor's still is the frame under the playhead; it starts on video.
@@ -830,7 +681,8 @@
 			);
 			return () => clearTimeout(timer);
 		}
-		const song = audio.trackFile ?? (isVideo && videoHasAudio ? file : null);
+		const song =
+			audio.trackFile ?? (isVideo && singleVideo.hasAudio ? file : null);
 		const gain = audio.normalizeGain;
 		publishSongProfile(
 			song
@@ -870,11 +722,11 @@
 
 	// Mute video when an explicit audio track is active; re-hook video audio when cleared.
 	$effect(() => {
-		if (!isVideo || !videoEl) return;
+		if (!isVideo || !singleVideo.el) return;
 		if (audio.trackFile) {
-			videoEl.muted = true;
+			singleVideo.el.muted = true;
 		} else {
-			ensureVideoAudioGraph();
+			singleVideo.ensureAudioGraph();
 		}
 	});
 
@@ -1130,77 +982,12 @@
 	}
 
 	// An AudioContext created before a user gesture starts suspended and can't be resumed.
-	let videoAudioUnlocked = $state(false);
-
-	function ensureVideoAudioGraph() {
-		if (!videoAudioUnlocked) return;
-		// Skip silent videos: capturing them breaks the speed control in Firefox.
-		if (audio.audioContext || audio.trackFile || !videoHasAudio) return;
-		if (previewPlayer) {
-			// WebCodecs preview: sourceless graph; the player connects its own source node.
-			const state = createOutputAudioGraph();
-			audio.applyAudioGraphState(state);
-			previewPlayer.attachAudioOutput(state.context, state.normalizeGain);
-			state.context.resume().catch(() => {});
-			return;
-		}
-		if (!videoEl) return;
-		videoEl.muted = false;
-		const state = createAudioGraph(videoEl);
-		audio.applyAudioGraphState(state);
-		audio.audioContext!.resume().catch(() => {});
-	}
-
-	function playVideo() {
-		// First play is a user gesture, so the graph can be created unblocked.
-		videoAudioUnlocked = true;
-		ensureVideoAudioGraph();
-		audio.audioContext?.resume();
-		// Start from the static marker when the video owns the clock.
-		const fromMarker = !!timelineAxis && videoIsMaster;
-		if (fromMarker && !videoIsPlaying) seekVideoTo(timelineAxis!.staticTime);
-		// Past the span end is where the user put the marker, so it plays from there.
-		const outOfSpan = (t: number) =>
-			t < videoSpanStart ||
-			(!fromMarker && t >= videoSpanEnd - VIDEO_END_EPSILON);
-		if (previewPlayer) {
-			if (outOfSpan(previewPlayer.currentTime))
-				previewPlayer.seek(videoSpanStart);
-			previewPlayer.play();
-			return;
-		}
-		if (!videoEl) return;
-		if (outOfSpan(videoEl.currentTime)) videoEl.currentTime = videoSpanStart;
-		videoPastSpan = videoEl.currentTime >= videoSpanEnd - VIDEO_END_EPSILON;
-		videoEl.play().catch(() => {});
-	}
-
-	function pauseVideo() {
-		if (previewPlayer) {
-			previewPlayer.pause();
-			return;
-		}
-		videoEl?.pause();
-	}
-
-	function seekVideoTo(t: number) {
-		if (!videoDuration) return;
-		const tClamp = Math.max(0, Math.min(videoDuration, t));
-		videoPastSpan = tClamp >= videoSpanEnd - VIDEO_END_EPSILON;
-		if (previewPlayer) {
-			previewPlayer.seek(tClamp);
-			return;
-		}
-		if (!videoEl) return;
-		videoEl.currentTime = tClamp;
-		videoCurrentTime = tClamp;
-	}
 
 	// Not gated on audioContext: the graph is only built on first play.
 	const hasAudio = $derived(
 		isSequenceMode
 			? mixer.hasDrive
-			: !!audio.trackFile || (isVideo && videoHasAudio),
+			: !!audio.trackFile || (isVideo && singleVideo.hasAudio),
 	);
 	/** Whether the audio links have something to follow, for the panels' spectra. */
 	let linksHaveAudio = $derived(
@@ -1245,7 +1032,7 @@
 			? mixer.duration
 			: seqMasterIsAudio
 				? audio.trackDuration
-				: videoDuration,
+				: singleVideo.duration,
 	);
 
 	// Beats per minute, feeding the auto clips' re-roll spacing; 0 = not detected yet.
@@ -1426,7 +1213,8 @@
 	/** Every autosave below reports here, for the top bar's saved/saving/failed word. */
 	const saves = new SaveTracker();
 	$effect(() => {
-		saves.playing = audio.audioPlaying || videoIsPlaying || mixer.playing;
+		saves.playing =
+			audio.audioPlaying || singleVideo.isPlaying || mixer.playing;
 	});
 
 	// Persist the sequence timeline per library track (deep snapshot read).
@@ -1437,7 +1225,8 @@
 	 * another tab's newer work. */
 	let seqSavePending = false;
 	$effect(() => {
-		const playing = audio.audioPlaying || videoIsPlaying || mixer.playing;
+		const playing =
+			audio.audioPlaying || singleVideo.isPlaying || mixer.playing;
 		if (playing) {
 			seqSavePending = true;
 			return;
@@ -1599,7 +1388,7 @@
 	function seqMasterTime(): number {
 		if (isSequenceMode) return mixer.currentTime;
 		if (seqMasterIsAudio) return audio.trackCurrentTime;
-		return videoClock;
+		return singleVideo.clock;
 	}
 
 	/** The project's length, beside the lanes a change to it trims or shifts. */
@@ -1916,7 +1705,7 @@
 
 	function seqPlaying(): boolean {
 		if (isSequenceMode) return mixer.playing;
-		return seqMasterIsAudio ? audio.audioPlaying : videoIsPlaying;
+		return seqMasterIsAudio ? audio.audioPlaying : singleVideo.isPlaying;
 	}
 
 	const mediaLayers = new MediaLayerDriver({
@@ -2619,7 +2408,7 @@
 		if (timelineAxis && !audio.audioPlaying)
 			audio.seekTo(timelineAxis.staticTime);
 		audio.playAudio();
-		if (isVideo) playVideo();
+		if (isVideo) singleVideo.play();
 	}
 
 	/** Clips of any lane kind the preview goes round, spanning first start to last end. */
@@ -2674,7 +2463,7 @@
 	function masterPlaying(): boolean {
 		if (isSequenceMode) return mixer.playing;
 		if (textNeedsTransport) return stillPlaying;
-		return seqMasterIsAudio ? audio.audioPlaying : videoIsPlaying;
+		return seqMasterIsAudio ? audio.audioPlaying : singleVideo.isPlaying;
 	}
 
 	/** Repeat these clips, or stop if they're the ones repeating. Starts playback there. */
@@ -2716,7 +2505,7 @@
 			return;
 		}
 		audio.pauseAudio();
-		if (isVideo) pauseVideo();
+		if (isVideo) singleVideo.pause();
 	}
 
 	/** True while the media edit modal is up. */
@@ -3232,7 +3021,7 @@
 	$effect(() => {
 		if (isSequenceMode) return;
 		// Skipped while playing, like the sequence save: the volume-link tick mutates `effects`.
-		if (audio.audioPlaying || videoIsPlaying) {
+		if (audio.audioPlaying || singleVideo.isPlaying) {
 			sessionSavePending = true;
 			return;
 		}
@@ -3318,24 +3107,28 @@
 			? mixer.spanStart
 			: audio.trackFile && audio.trackDuration > 0
 				? audio.spanStart
-				: isVideo && videoDuration > 0
-					? videoSpanStart
+				: isVideo && singleVideo.duration > 0
+					? singleVideo.spanStart
 					: 0,
 	);
 	let textTimeScale = $derived(
-		!audio.trackFile && isVideo && videoDuration > 0 ? videoSpeed : 1,
+		!audio.trackFile && isVideo && singleVideo.duration > 0
+			? singleVideo.speed
+			: 1,
 	);
 	let textClockRunning = $derived(
 		isSequenceMode
 			? mixer.playing
 			: textNeedsTransport
 				? stillPlaying
-				: audio.audioPlaying || videoIsPlaying,
+				: audio.audioPlaying || singleVideo.isPlaying,
 	);
 
 	// Every lane shares the master clock's axis; a video under its own span is a second clock.
 	let showVideoBar = $derived(
-		isVideo && videoDuration > 0 && !(isSequenceMode && seqMasterIsAudio),
+		isVideo &&
+			singleVideo.duration > 0 &&
+			!(isSequenceMode && seqMasterIsAudio),
 	);
 	let videoIsMaster = $derived(showVideoBar && !seqMasterIsAudio);
 	let audioIsMaster = $derived(audio.trackFile && audio.trackDuration > 0);
@@ -3358,10 +3151,10 @@
 		} else if (seqMasterIsAudio) {
 			if (audio.audioPlaying) pauseTrack();
 			else playSpan();
-		} else if (videoIsPlaying) {
-			pauseVideo();
+		} else if (singleVideo.isPlaying) {
+			singleVideo.pause();
 		} else {
-			playVideo();
+			singleVideo.play();
 		}
 	}
 
@@ -3372,7 +3165,7 @@
 			stillClock = t;
 			stillSeekTick++;
 		} else if (seqMasterIsAudio) seekTo(t);
-		else seekVideoTo(t);
+		else singleVideo.seekTo(t);
 	}
 
 	function toggleMasterLoop() {
@@ -3738,38 +3531,38 @@
 				? {
 						isPlaying: textNeedsTransport
 							? stillPlaying
-							: audio.audioPlaying || videoIsPlaying,
+							: audio.audioPlaying || singleVideo.isPlaying,
 						spanStart: textNeedsTransport
 							? 0
 							: seqMasterIsAudio
 								? audio.spanStart
-								: videoSpanStart,
+								: singleVideo.spanStart,
 						spanEnd: textNeedsTransport
 							? textDuration
 							: seqMasterIsAudio
 								? audio.spanEnd
-								: videoSpanEnd,
+								: singleVideo.spanEnd,
 						getCurrentTime: () =>
 							textNeedsTransport
 								? stillClock
 								: seqMasterIsAudio
 									? audio.trackCurrentTime
-									: videoClock,
+									: singleVideo.clock,
 						onPlay: textNeedsTransport
 							? () => (stillPlaying = true)
 							: seqMasterIsAudio
 								? playSpan
-								: playVideo,
+								: singleVideo.play,
 						onPause: textNeedsTransport
 							? () => (stillPlaying = false)
 							: seqMasterIsAudio
 								? pauseTrack
-								: pauseVideo,
+								: singleVideo.pause,
 						onSeek: textNeedsTransport
 							? (t) => (stillClock = t)
 							: seqMasterIsAudio
 								? seekTo
-								: seekVideoTo,
+								: singleVideo.seekTo,
 						onApply: applyLyrics,
 					}
 				: null,
@@ -3793,8 +3586,8 @@
 				  audio.trackDuration > 0 &&
 				  audio.spanEnd - audio.spanStart > 0
 				? audio.spanEnd - audio.spanStart
-				: isVideo && videoDuration > 0
-					? (videoSpanEnd - videoSpanStart) / videoSpeed
+				: isVideo && singleVideo.duration > 0
+					? (singleVideo.spanEnd - singleVideo.spanStart) / singleVideo.speed
 					: recordDuration,
 	);
 	const recordingState = createRecordingState();
@@ -3811,8 +3604,8 @@
 
 		audio.pauseAudio();
 		mixer.pause();
-		previewPlayer?.pause();
-		if (isVideo && videoEl) videoEl.pause();
+		singleVideo.player?.pause();
+		if (isVideo && singleVideo.el) singleVideo.el.pause();
 		if (isLive && !liveVideoEl?.srcObject) {
 			showToast("The camera isn't open", "error");
 			return;
@@ -3853,12 +3646,12 @@
 					spanStart: audio.spanStart,
 					spanEnd: audio.spanEnd,
 					isVideo,
-					videoHasAudio,
-					videoEl,
-					videoDuration,
-					videoSpanStart,
-					videoSpanEnd,
-					videoSpeed,
+					videoHasAudio: singleVideo.hasAudio,
+					videoEl: singleVideo.el,
+					videoDuration: singleVideo.duration,
+					videoSpanStart: singleVideo.spanStart,
+					videoSpanEnd: singleVideo.spanEnd,
+					videoSpeed: singleVideo.speed,
 					file,
 					live: isLive ? liveVideoEl : null,
 					// A live export is a performance: the song must be heard from the span it exports.
@@ -4131,55 +3924,17 @@
 
 		{#if isVideo}
 			<video
-				bind:this={videoEl}
+				bind:this={singleVideo.el}
 				src={imageSrc}
 				muted
-				autoplay={!previewPlayer}
+				autoplay={!singleVideo.player}
 				playsinline
-				onloadedmetadata={() => {
-					// Player owns duration/span/audio when active; the element is only the recording fallback then
-					if (previewPlayer) return;
-					// A recorder's WebM reports Infinity until played through: no length, not an endless one.
-					const dur = Number.isFinite(videoEl!.duration)
-						? videoEl!.duration
-						: 0;
-					videoDuration = dur;
-					videoSpanStart = 0;
-					videoSpanEnd = dur;
-					videoPastSpan = false;
-					if (dur > 0) recordDuration = Math.round(dur * 10) / 10;
-					ensureVideoAudioGraph();
-				}}
-				ontimeupdate={() => {
-					if (previewPlayer) return;
-					videoCurrentTime = videoEl?.currentTime ?? 0;
-					// Span-loop: skip during recording (export seeks the video directly)
-					if (
-						!recordingState.recording &&
-						!videoPastSpan &&
-						videoEl &&
-						videoCurrentTime >= videoSpanEnd
-					) {
-						videoEl.currentTime = videoSpanStart;
-						if (!videoLoop) videoEl.pause();
-					}
-				}}
-				onended={() => {
-					// Natural end can fire before timeupdate reaches spanEnd
-					if (
-						!previewPlayer &&
-						!recordingState.recording &&
-						!videoPastSpan &&
-						videoEl &&
-						videoLoop
-					) {
-						videoEl.currentTime = videoSpanStart;
-						videoEl.play().catch(() => {});
-					}
-				}}
-				onerror={() => (videoUnplayable.element = true)}
-				onplay={() => (videoPlaying = true)}
-				onpause={() => (videoPlaying = false)}
+				onloadedmetadata={singleVideo.onLoadedMetadata}
+				ontimeupdate={singleVideo.onTimeUpdate}
+				onended={singleVideo.onEnded}
+				onerror={() => (singleVideo.unplayable.element = true)}
+				onplay={() => (singleVideo.elementPlaying = true)}
+				onpause={() => (singleVideo.elementPlaying = false)}
 				onseeking={() => {
 					audio.audioContext?.resume();
 				}}
@@ -4251,10 +4006,10 @@
 				showFps={showFps && !isImageFormat}
 				videoEl={isLive
 					? liveVideoEl
-					: isVideo && !previewPlayer
-						? videoEl
+					: isVideo && !singleVideo.player
+						? singleVideo.el
 						: null}
-				frameSource={previewPlayer}
+				frameSource={singleVideo.player}
 				sourceKey={String(sourceTick)}
 				freezeAnimation={isImageFormat}
 				suspended={recordingState.recording ||
@@ -4482,23 +4237,25 @@
 			<!-- A second clock: the video runs its own span while the track drives the timeline. -->
 			<AudioTimeline
 				label="VID"
-				trackDuration={videoDuration}
-				trackCurrentTime={videoClock}
-				spanStart={videoSpanStart}
-				spanEnd={videoSpanEnd}
-				isPlaying={videoIsPlaying}
+				trackDuration={singleVideo.duration}
+				trackCurrentTime={singleVideo.clock}
+				spanStart={singleVideo.spanStart}
+				spanEnd={singleVideo.spanEnd}
+				isPlaying={singleVideo.isPlaying}
 				loopEnabled={videoLoop}
 				onToggleLoop={() => (videoLoop = !videoLoop)}
-				onPlay={playVideo}
-				onPause={pauseVideo}
-				onSeek={seekVideoTo}
-				onSpanStartChange={(t) => (videoSpanStart = t)}
-				onSpanEndChange={(t) => (videoSpanEnd = t)}
-				speed={videoSpeed}
-				onSpeedChange={(s) => (videoSpeed = s)}
+				onPlay={singleVideo.play}
+				onPause={singleVideo.pause}
+				onSeek={singleVideo.seekTo}
+				onSpanStartChange={(t) => (singleVideo.spanStart = t)}
+				onSpanEndChange={(t) => (singleVideo.spanEnd = t)}
+				speed={singleVideo.speed}
+				onSpeedChange={(s) => (singleVideo.speed = s)}
 				ariaLabel="Video timeline"
 				outputVolume={audio.outputVolume}
-				onVolumeChange={videoHasAudio && audio.analyserNode && !audio.trackFile
+				onVolumeChange={singleVideo.hasAudio &&
+				audio.analyserNode &&
+				!audio.trackFile
 					? (v) => audio.setOutputVolume(v)
 					: undefined}
 			/>
@@ -4581,8 +4338,8 @@
 						laneCount={laneIds.length}
 						allFolded={allLanesFolded}
 						onToggleFolds={() => laneFolds.toggleAll(laneIds)}
-						videoSpeed={videoIsMaster ? videoSpeed : null}
-						onSpeedChange={(s) => (videoSpeed = s)}
+						videoSpeed={videoIsMaster ? singleVideo.speed : null}
+						onSpeedChange={(s) => (singleVideo.speed = s)}
 					/>
 				{/snippet}
 				<!-- Read bottom to top: the transports at the foot are the inputs. -->
@@ -4693,19 +4450,19 @@
 					<AudioTimeline
 						layout="lane"
 						label="VID"
-						trackDuration={videoDuration}
-						trackCurrentTime={videoClock}
-						spanStart={videoSpanStart}
-						spanEnd={videoSpanEnd}
-						isPlaying={videoIsPlaying}
-						onPlay={playVideo}
-						onPause={pauseVideo}
-						onSeek={seekVideoTo}
-						onSpanStartChange={(t) => (videoSpanStart = t)}
-						onSpanEndChange={(t) => (videoSpanEnd = t)}
+						trackDuration={singleVideo.duration}
+						trackCurrentTime={singleVideo.clock}
+						spanStart={singleVideo.spanStart}
+						spanEnd={singleVideo.spanEnd}
+						isPlaying={singleVideo.isPlaying}
+						onPlay={singleVideo.play}
+						onPause={singleVideo.pause}
+						onSeek={singleVideo.seekTo}
+						onSpanStartChange={(t) => (singleVideo.spanStart = t)}
+						onSpanEndChange={(t) => (singleVideo.spanEnd = t)}
 						ariaLabel="Video timeline"
 						outputVolume={audio.outputVolume}
-						onVolumeChange={videoHasAudio &&
+						onVolumeChange={singleVideo.hasAudio &&
 						audio.analyserNode &&
 						!audio.trackFile
 							? (v) => audio.setOutputVolume(v)
