@@ -57,15 +57,6 @@
 		trackSourceId,
 		type AudioClip,
 	} from "../../mix/types";
-	import {
-		readProjectNames,
-		setProjectName,
-		uniqueName,
-	} from "../../editor/project-names";
-	import {
-		listSavedSequences,
-		readCachedSavedSequences,
-	} from "../../editor/saved-sequences";
 	import { draggedTrackId } from "../../editor/source-drag.svelte";
 	import { generateId } from "../../effects/types";
 	import AudioLanes from "../timeline/AudioLanes.svelte";
@@ -191,11 +182,10 @@
 	import { ProjectTempo } from "../../editor/project-tempo.svelte";
 	import { TimelinePersistence } from "../../editor/timeline-persistence.svelte";
 	import { PoolPersistence } from "../../editor/pool-persistence.svelte";
+	import { ProjectOpener } from "../../editor/project-opener.svelte";
 	import {
 		contentEnd,
 		contentStart,
-		seedLength,
-		seedTimeline,
 	} from "../../editor/project-seed";
 	import {
 		SequenceClock,
@@ -1168,7 +1158,7 @@
 
 	/** What gets saved, read deep; null while a project is still working out its length. */
 	function seqEntryNow(): SeqEntry | null {
-		if (isSequenceMode && !projectReady) return null;
+		if (isSequenceMode && !opener.ready) return null;
 		const entry: SeqEntry = {
 			v: SEQ_ENTRY_VERSION,
 			bpm: tempo.bpm,
@@ -1505,135 +1495,6 @@
 			seqBaseSize = { width: first.width, height: first.height };
 		}
 	});
-	/** Sequence mode: set once the project knows its length; nothing saves before. */
-	let projectReady = $state(false);
-	/** A project still working out its length, from its song and its opened media. */
-	let pendingInit = $state<{ key: string; seed: boolean } | null>(null);
-
-	// Ready means it saves from here on, so a reload can come back to it.
-	$effect(() => {
-		if (isSequenceMode && projectReady && projectKey) {
-			rememberLastOpened({ mode: "sequence", key: projectKey });
-			onProjectReady?.(projectKey);
-		}
-	});
-
-	// Opening a project: its saved timeline, or a fresh one seeded from the opened file.
-	let projectLoadedFor: string | null = null;
-	$effect(() => {
-		if (!isSequenceMode) return;
-		const key = projectKey;
-		if (!key || key === projectLoadedFor) return;
-		projectLoadedFor = key;
-		void loadProject(key);
-	});
-
-	/** A second project from the same song or file reads "name (2)", not as the first. */
-	async function nameNewProject(key: string, name: string) {
-		const saved = await listSavedSequences().catch(readCachedSavedSequences);
-		const names = readProjectNames();
-		const taken = saved
-			.filter((p) => p.trackId !== key)
-			.map((p) => names[p.trackId] ?? p.trackName);
-		setProjectName(key, uniqueName(name, taken));
-	}
-
-	async function loadProject(key: string) {
-		const storeKey = seqKeyPrefix + key;
-		timelines.loadedKey = null;
-		projectReady = false;
-		// Pending from the start, so the bar can't say Saved before the name is stored.
-		const unnamed = key.startsWith("proj-") && !readProjectNames()[key];
-		if (unnamed) saves.schedule("name");
-		let saved: Awaited<ReturnType<TimelinePersistence["load"]>>;
-		try {
-			saved = await timelines.load(key);
-		} catch (e) {
-			if (unnamed) saves.drop("name");
-			throw e;
-		}
-		const naming =
-			unnamed &&
-			saved === null &&
-			seqStoreKey === storeKey &&
-			!timelines.isHeld(storeKey);
-		if (unnamed && !naming) saves.drop("name");
-		if (seqStoreKey !== storeKey) return;
-		timelines.loadedKey = storeKey;
-		// Not ready, so nothing of it is seeded or saved over.
-		if (timelines.isHeld(storeKey)) return;
-		if (saved === null) {
-			// Named after its song, else what it was opened with, until the user names it.
-			if (naming) {
-				await saves.track(
-					"name",
-					nameNewProject(
-						key,
-						initialAudioFile?.name ?? file?.name ?? "Untitled project",
-					).then(() => true),
-				);
-				if (seqStoreKey !== storeKey) return;
-			}
-			tempo.poolSource = null;
-			pendingInit = { key: storeKey, seed: true };
-			return;
-		}
-		tempo.poolSource = saved.bpmSource ?? null;
-		tempo.restore(saved.bpm, saved.beatOffset);
-		fxState.restore(saved.fx);
-		restoreTextTimeline(saved.text);
-		restoreMediaTimeline(saved.media);
-		sourceRegistry.restoreEdits(saved.sourceEdits);
-		legacySegments = saved.segments.length
-			? { key: storeKey, segments: saved.segments }
-			: null;
-		// Before v3 the song was the clock, so it has to be in before the project is sized.
-		if (saved.length === null && saved.song && saved.song !== currentTrackId) {
-			await loadSong(saved.song);
-			if (seqStoreKey !== storeKey) return;
-		}
-		if (saved.length === null) {
-			// Saved while the song was the clock: it becomes a lane once its length is known.
-			pendingInit = { key: storeKey, seed: false };
-			return;
-		}
-		mixer.setDuration(saved.length);
-		if (saved.span) {
-			mixer.spanStart = saved.span.start;
-			mixer.spanEnd = saved.span.end;
-		}
-		if (saved.song !== undefined && saved.song !== currentTrackId) {
-			await loadSong(saved.song);
-		}
-		mixSpanHistory.reset();
-		projectReady = true;
-	}
-
-	// The song's length and the opened file are what a project without one is sized by.
-	$effect(() => {
-		const pending = pendingInit;
-		if (!pending || pending.key !== seqStoreKey) return;
-		audioBank.version;
-		// A song handed in without a library id gets one first; it's keyed by that.
-		if (audio.trackFile && !currentTrackId) return;
-		const songId = songSourceId;
-		let songLength = 0;
-		if (songId) {
-			const buffer = audioBank.buffer(songId);
-			if (!buffer && !audioBank.isSilent(songId)) return;
-			songLength = buffer?.duration ?? 0;
-		}
-		const first = file
-			? (sourceRegistry.get(stableSourceId(file)) ?? null)
-			: null;
-		// An opened file that never decoded won't seed anything; don't wait on it forever.
-		if (pending.seed && !first && !pool.openDone) return;
-		pendingInit = null;
-		untrack(() =>
-			finishProjectInit(pending.seed ? first : null, songId, songLength),
-		);
-	});
-
 	/** The latest clip end on any lane. */
 	function timelineContentEnd(): number {
 		return contentEnd(
@@ -1660,39 +1521,6 @@
 			if (start > 0) growProjectFront(-start);
 			setProjectLength(end - start);
 		});
-	}
-
-	function finishProjectInit(
-		seedFrom: SequenceSource | null,
-		songId: string | null,
-		songLength: number,
-	) {
-		const length = seedLength({
-			songLength,
-			contentEnd: timelineContentEnd(),
-			mediaLength: seedFrom?.duration ?? 0,
-		});
-		mixer.setDuration(length);
-		// Before v3 the span was kept per song.
-		const savedSpan = currentTrackId ? spanStore.load(currentTrackId) : null;
-		if (savedSpan && savedSpan.spanEnd > savedSpan.spanStart) {
-			mixer.spanStart = Math.min(savedSpan.spanStart, length);
-			mixer.spanEnd = Math.min(savedSpan.spanEnd, length);
-		} else {
-			mixer.spanStart = 0;
-			mixer.spanEnd = length;
-		}
-		mediaState.timeline = seedTimeline(mediaState.timeline, {
-			length,
-			song: songId ? { sourceId: songId, length: songLength } : null,
-			mediaSourceId: seedFrom?.id ?? null,
-		});
-		mediaState.history.reset();
-		poolHistory.reset();
-		lengthHistory.reset();
-		tempo.history.reset();
-		mixSpanHistory.reset();
-		projectReady = true;
 	}
 
 	// Every lane's sound, planned once for the mixer, the waveforms and the export.
@@ -2808,6 +2636,53 @@
 		setEditorResponse: (key, value) => {
 			if (key === "smoothing") audioSmoothing = value;
 			else audioPunch = value;
+		},
+	});
+
+	const opener = new ProjectOpener({
+		active: untrack(() => isSequenceMode),
+		projectKey: () => projectKey,
+		storeKey: () => seqStoreKey,
+		prefix: untrack(() => seqKeyPrefix),
+		timelines,
+		saves,
+		tempo,
+		fx: fxState,
+		media: mediaState,
+		registry: sourceRegistry,
+		mixer,
+		spanHistory: mixSpanHistory,
+		restoreText: restoreTextTimeline,
+		restoreMedia: restoreMediaTimeline,
+		setLegacySegments: (pending) => (legacySegments = pending),
+		currentTrackId: () => currentTrackId,
+		loadSong,
+		openedName: () =>
+			initialAudioFile?.name ?? file?.name ?? "Untitled project",
+		song: () => {
+			audioBank.version;
+			// A song handed in without a library id gets one first; it's keyed by that.
+			if (audio.trackFile && !currentTrackId) return undefined;
+			const songId = songSourceId;
+			if (!songId) return { id: null, length: 0 };
+			const buffer = audioBank.buffer(songId);
+			if (!buffer && !audioBank.isSilent(songId)) return undefined;
+			return { id: songId, length: buffer?.duration ?? 0 };
+		},
+		openedSource: () =>
+			file ? (sourceRegistry.get(stableSourceId(file)) ?? null) : null,
+		openDone: () => pool.openDone,
+		contentEnd: timelineContentEnd,
+		legacySpan: (trackId) => spanStore.load(trackId),
+		resetHistories: () => {
+			mediaState.history.reset();
+			poolHistory.reset();
+			lengthHistory.reset();
+			tempo.history.reset();
+		},
+		onReady: (key) => {
+			rememberLastOpened({ mode: "sequence", key });
+			onProjectReady?.(key);
 		},
 	});
 
