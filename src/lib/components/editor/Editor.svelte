@@ -3,8 +3,6 @@
 	import { onMount, tick, untrack } from "svelte";
 	import { hasKeyboard, modKey } from "../../input-device";
 	import {
-		ChevronsDownUp,
-		ChevronsUpDown,
 		Download,
 		FolderDown,
 		Camera,
@@ -12,7 +10,6 @@
 		Library,
 		Stamp,
 		Maximize,
-		MicVocal,
 		Pause,
 		Play,
 		Plus,
@@ -63,7 +60,6 @@
 		audioLanesEnd,
 		createAudioClip,
 		createAudioLane,
-		MAX_AUDIO_LANES,
 		nextAudioLaneName,
 		retargetAudioSource,
 		trackIdOf,
@@ -132,7 +128,6 @@
 		fitFxLanes,
 		flattenFxLayers,
 		laneAudioResponse,
-		MAX_FX_LANES,
 		syncFxClipsToPreset,
 		type FxClip,
 		type FxLane,
@@ -232,7 +227,6 @@
 	import type { GlRenderer, SourceFit } from "../../gl/renderer";
 	import { VideoPreviewPlayer } from "../../video-preview/preview-player.svelte";
 	import AudioTimeline from "../ui/AudioTimeline.svelte";
-	import SpeedControl from "../ui/SpeedControl.svelte";
 	import TimelineStack from "../ui/TimelineStack.svelte";
 	import type { TimelineStackState } from "../../editor/timeline-stack.svelte";
 	import {
@@ -243,9 +237,9 @@
 	import { setFeedbackChain } from "../ui/feedback.svelte";
 	import ButtonGroup from "../ui/ButtonGroup.svelte";
 	import MobileSheet from "../ui/MobileSheet.svelte";
-	import NumberField from "../ui/NumberField.svelte";
 	import OutputSettings from "./OutputSettings.svelte";
 	import RecordSettings from "./RecordSettings.svelte";
+	import LaneToolbar from "./LaneToolbar.svelte";
 	import { uiPrefs } from "../../ui-prefs.svelte";
 	import TrackAddBar from "../ui/TrackAddBar.svelte";
 	import TrackLibrary from "../ui/TrackLibrary.svelte";
@@ -4542,125 +4536,36 @@
 				maxLength={MAX_PROJECT_LENGTH}
 			>
 				{#snippet toolbar()}
-					<!-- Each button names the lane it adds: "+ Lane" read as the same button three times. -->
-					{#if textState.timeline.enabled}
-						<div class="tl-tool-sep"></div>
-						<button
-							class="tl-tool-btn"
-							title="Add a lane of timed text over the frame"
-							onclick={addTextLane}
-						>
-							<Plus size={12} /> Text lane
-						</button>
-						{#if lyricsSync}
-							<button
-								class="tl-tool-btn"
-								class:active={lyricsOpen}
-								title="Sync lyrics to the song: paste them, then press Space as it plays"
-								onclick={() => (lyricsOpen = true)}
-							>
-								<MicVocal size={12} /> Lyrics
-							</button>
-						{/if}
-					{/if}
-					<!-- Read bottom to top, the way the frame is built. -->
-					{#if mediaState.timeline.enabled}
-						<div class="tl-tool-sep"></div>
-						<button
-							class="tl-tool-btn"
-							disabled={mediaState.timeline.lanes.length >= MAX_MEDIA_LANES}
-							title={mediaState.timeline.lanes.length >= MAX_MEDIA_LANES
-								? `${MAX_MEDIA_LANES} media lanes is the limit`
-								: "Add a lane of images, videos or 3D models from the pool, each clip with its own effects"}
-							onclick={addMediaLane}
-						>
-							<Plus size={12} /> Media lane
-						</button>
-					{/if}
-					{#if isSequenceMode && seqMasterDuration > 0}
-						<div class="tl-tool-sep"></div>
-						<button
-							class="tl-tool-btn"
-							disabled={(mediaState.timeline.audioLanes?.length ?? 0) >=
-								MAX_AUDIO_LANES}
-							title="Add music, a voice-over or any sound, on a lane of its own from the start marker"
-							onclick={openTrackPicker}
-						>
-							<Plus size={12} /> Audio file
-						</button>
-						<button
-							class="tl-tool-btn"
-							disabled={(mediaState.timeline.audioLanes?.length ?? 0) >=
-								MAX_AUDIO_LANES}
-							title="Add an empty audio lane to record your microphone onto, or to paste or drag clips onto"
-							onclick={addEmptyAudioLane}
-						>
-							<Plus size={12} /> Audio lane
-						</button>
-						<div class="tl-tool-sep"></div>
-						<button
-							class="tl-tool-btn"
-							disabled={fxState.lanes.length >= MAX_FX_LANES}
-							title={fxState.lanes.length >= MAX_FX_LANES
-								? `${MAX_FX_LANES} lanes is the limit`
-								: "Add a lane of extra effects that run over the whole frame, media lanes included"}
-							onclick={fxState.add}
-						>
-							<Plus size={12} /> FX lane
-						</button>
-					{/if}
-					{#if laneIds.length > 0}
-						<div class="tl-tool-sep"></div>
-						<button
-							class="tl-tool-btn"
-							title={allLanesFolded
-								? "Unfold every lane"
-								: "Fold every lane to a strip"}
-							onclick={() => laneFolds.toggleAll(laneIds)}
-						>
-							{#if allLanesFolded}
-								<ChevronsUpDown size={12} /> Unfold all
-							{:else}
-								<ChevronsDownUp size={12} /> Fold all
-							{/if}
-						</button>
-					{/if}
-					{#if isSequenceMode && seqMasterDuration > 0}
-						<div class="tl-tool-sep"></div>
-						<span
-							class="tl-tool-label"
-							title="How long the project runs. Shorter cuts clips crossing the new end back to it; clips wholly past it are kept for when it grows."
-							>Length</span
-						>
-						<NumberField
-							value={Math.round(mixer.duration * 10) / 10}
-							min={1}
-							max={MAX_PROJECT_LENGTH}
-							step={1}
-							fineStep={0.1}
-							allowEmpty={false}
-							unit="duration"
-							upTitle="Longer (shift for a tenth of a second)"
-							downTitle="Shorter (shift for a tenth of a second)"
-							commitOnBlur
-							onChange={setProjectLength}
-						/>
-						<button
-							class="tl-tool-btn"
-							title="Fit the project to its clips: start where the first one does and end where the last one does"
-							disabled={timelineContentEnd() <= 0}
-							onclick={fitProjectToClips}
-						>
-							Fit
-						</button>
-					{/if}
-					{#if videoIsMaster}
-						<div class="tl-tool-sep"></div>
-						<SpeedControl
-							speed={videoSpeed}
-							onSpeedChange={(s) => (videoSpeed = s)}
-						/>
-					{/if}
+					<LaneToolbar
+						text={textState.timeline.enabled
+							? { lyrics: !!lyricsSync, lyricsOpen }
+							: null}
+						onAddTextLane={addTextLane}
+						onOpenLyrics={() => (lyricsOpen = true)}
+						mediaLaneCount={mediaState.timeline.enabled
+							? mediaState.timeline.lanes.length
+							: null}
+						onAddMediaLane={addMediaLane}
+						project={isSequenceMode && seqMasterDuration > 0
+							? {
+									audioLaneCount: mediaState.timeline.audioLanes?.length ?? 0,
+									fxLaneCount: fxState.lanes.length,
+									length: mixer.duration,
+									maxLength: MAX_PROJECT_LENGTH,
+									canFit: timelineContentEnd() > 0,
+								}
+							: null}
+						onAddAudioFile={openTrackPicker}
+						onAddAudioLane={addEmptyAudioLane}
+						onAddFxLane={fxState.add}
+						onLengthChange={setProjectLength}
+						onFit={fitProjectToClips}
+						laneCount={laneIds.length}
+						allFolded={allLanesFolded}
+						onToggleFolds={() => laneFolds.toggleAll(laneIds)}
+						videoSpeed={videoIsMaster ? videoSpeed : null}
+						onSpeedChange={(s) => (videoSpeed = s)}
+					/>
 				{/snippet}
 				<!-- Read bottom to top: the transports at the foot are the inputs. -->
 				<div class="tl-layers" bind:this={timelineSplit.laneListEl}>
