@@ -161,7 +161,6 @@
 		MAX_MEDIA_LANES,
 		MIN_CLIP_LENGTH,
 		clipSourceId,
-		mediaTimelineSourceIds,
 		newClipSpan,
 		resolveMediaLayersAt,
 		setMediaClipSources,
@@ -174,11 +173,7 @@
 	} from "../../media";
 	import { hiddenSlides } from "../../editor/slideshow-source";
 	import {
-		loadMediaPool,
-		loadMediaPoolSlides,
-		pruneSequenceMediaThrottled,
 		isOwnSessionKey,
-		saveMediaPool,
 		stableSourceId,
 	} from "../../editor/sequence-media-store";
 	import {
@@ -195,6 +190,7 @@
 	import { SingleVideo } from "../../editor/single-video.svelte";
 	import { ProjectTempo } from "../../editor/project-tempo.svelte";
 	import { TimelinePersistence } from "../../editor/timeline-persistence.svelte";
+	import { PoolPersistence } from "../../editor/pool-persistence.svelte";
 	import {
 		contentEnd,
 		contentStart,
@@ -861,7 +857,7 @@
 		}
 		// Before the key changes out from under them; see TimelinePersistence.flush.
 		timelines.flush();
-		flushMediaPoolSave();
+		pool.flush();
 		audio.clearTrack();
 		currentTrackId = null;
 		// Belongs to the song that just left; the next one restores or detects its own.
@@ -1228,7 +1224,7 @@
 		const key = isSequenceMode ? projectKey : singleSessionKey;
 		if (!key) return;
 		timelines.flush();
-		flushMediaPoolSave();
+		pool.flush();
 		await downloadProjectFile(key, {
 			mode: isSequenceMode ? "sequence" : "single",
 			live: liveProject() ?? undefined,
@@ -1240,7 +1236,7 @@
 	onMount(() => {
 		const onHide = () => {
 			timelines.flush();
-			flushMediaPoolSave();
+			pool.flush();
 			sessionSave.flush();
 		};
 		const onVisibility = () => {
@@ -1396,33 +1392,20 @@
 			? sequenceSources
 			: sequenceSources.filter((s) => !hidden.has(s.id));
 	});
-	/** The pool is empty until the opening file lands, so the placeholder waits for that. */
-	let poolFilled = $state(false);
-	let noSequenceMedia = $derived(
-		isSequenceMode && poolFilled && sequenceSources.length === 0,
-	);
-	/** Held from mount until the opening files are in the pool; proxies are not waited on. */
-	let openingMedia = $state(true);
-	/** The mount-time adds (the opened file and its extras) have finished. */
-	let mountMediaDone = $state(false);
-	$effect(() => {
-		if (!openingMedia) return;
-		// A song being registered has no key yet, so the key is settled once there is one.
-		const keySettled = !!seqBaseKey || !audio.trackFile;
-		const settled =
-			mountMediaDone &&
-			keySettled &&
-			(poolReady || !seqBaseKey) &&
-			sourceRegistry.loadingTotal === 0 &&
-			!sequenceSources.some((s) => s.thumbPending);
-		if (settled) openingMedia = false;
+	const pool = new PoolPersistence({
+		active: untrack(() => isSequenceMode),
+		registry: sourceRegistry,
+		baseKey: () => seqBaseKey,
+		prefix: untrack(() => seqKeyPrefix),
+		timelines,
+		saves,
+		slideOnlyIds: () => slideOnlyIds,
+		setSlideOnlyIds: (ids) => (slideOnlyIds = ids),
+		mediaTimeline: () => mediaState.timeline,
+		hasSong: () => !!audio.trackFile,
 	});
-	/** Media is being probed and nothing has landed, so the canvas is black. */
-	let mediaLoading = $derived(
-		isSequenceMode &&
-			(openingMedia ||
-				(sourceRegistry.loadingTotal > 0 && sequenceSources.length === 0)),
-	);
+	let noSequenceMedia = $derived(pool.empty);
+	let mediaLoading = $derived(pool.loading);
 
 	/** Playback waits for the project to open; media added while it plays joins in. */
 	let mediaBusy = $derived(mediaLoading);
@@ -1430,117 +1413,14 @@
 		if (mediaBusy && untrack(() => mixer.playing)) clock.pause();
 	});
 
+	// Opened from a saved project: these blobs came from storage, so don't write them back.
 	onMount(() => {
-		void (async () => {
-			// Single mode has no pool: its one file is the frame.
-			if (!isSequenceMode) return;
-			try {
-				// Opened from a saved project: these blobs came from storage, so don't write them back.
-				const persist = !initialTrackId && !initialProjectKey;
-				// A project whose pool was emptied opens with no file at all.
-				const opened = file ? [file] : [];
-				if (opened.length > 0) await sourceRegistry.add(opened, { persist });
-				poolFilled = true;
-				const extras = extraFiles.filter((f) => f !== file);
-				if (extras.length > 0) {
-					await sourceRegistry.add(extras, { persist });
-				}
-				void explainRejectedModels([...opened, ...extras]);
-			} finally {
-				mountMediaDone = true;
-			}
-		})();
-	});
-
-	// Keyed like the sequence timeline (seqBaseKey), so a track brings back both.
-	let poolKey: string | null = null;
-	let poolReady = $state(false);
-	/** Clip source ids already looked for in storage; see the effect below. */
-	const restoreAttempted = new Set<string>();
-
-	$effect(() => {
-		if (!isSequenceMode) return;
-		const key = seqBaseKey;
-		if (!key || key === poolKey) return;
-		poolKey = key;
-		poolReady = false;
-		// A different song may reference media this session hasn't tried yet.
-		restoreAttempted.clear();
-		void (async () => {
-			try {
-				const ids = await loadMediaPool(key);
-				const slides = ids ? await loadMediaPoolSlides(key) : [];
-				if (poolKey !== key) return;
-				if (ids) slideOnlyIds = new Set(slides);
-				// A song with a saved pool swaps to it; one with none keeps what's loaded.
-				if (ids) await sourceRegistry.setPool(ids);
-			} catch {
-				// Saving what did load would drop the rest from the project.
-				if (poolKey === key) timelines.hold(seqKeyPrefix + key, "unreadable");
-			}
-			if (poolKey === key) poolReady = true;
-		})();
-	});
-
-	// Persist the pool for the current song. Debounced: a multi-file add appends in batches.
-	let poolSaveTimer: ReturnType<typeof setTimeout> | undefined;
-	let poolSavePending = false;
-	$effect(() => {
-		if (!isSequenceMode || !poolReady) return;
-		const key = poolKey;
-		const ids = sourceRegistry.sources.map((s) => s.id);
-		slideOnlyIds;
-		if (!key) return;
-		clearTimeout(poolSaveTimer);
-		untrack(() => saves.schedule("pool"));
-		poolSavePending = true;
-		poolSaveTimer = setTimeout(() => savePool(key, ids), 400);
-	});
-
-	function savePool(key: string, ids: string[]) {
-		poolSavePending = false;
-		// Held (newer or unreadable): nothing of it is written, as the toast promised.
-		if (timelines.isHeld(seqKeyPrefix + key)) {
-			saves.drop("pool");
-			return;
-		}
-		void saves
-			.track(
-				"pool",
-				timelines.holdIfStale(
-					seqKeyPrefix + key,
-					saveMediaPool(key, ids, [...slideOnlyIds]).then(() => true),
-				),
-			)
-			.then((ok) => {
-				if (ok) void pruneSequenceMediaThrottled().catch(() => {});
-			});
-	}
-
-	/** Pool counterpart to the timeline's flush; same track-switch race. */
-	function flushMediaPoolSave() {
-		clearTimeout(poolSaveTimer);
-		if (!poolSavePending) return;
-		if (!isSequenceMode || !poolReady || !poolKey) {
-			saves.drop("pool");
-			return;
-		}
-		savePool(
-			poolKey,
-			sourceRegistry.sources.map((s) => s.id),
+		void pool.open(
+			file,
+			extraFiles,
+			!initialTrackId && !initialProjectKey,
+			explainRejectedModels,
 		);
-	}
-
-	// A restored timeline references sources by id; pull missing ones back out of IndexedDB.
-	$effect(() => {
-		if (!isSequenceMode) return;
-		const missing = [
-			...mediaTimelineSourceIds(mediaState.timeline),
-			...sequenceSources.flatMap((s) => s.cutList?.slides ?? []),
-		].filter((id) => !sourceRegistry.get(id) && !restoreAttempted.has(id));
-		if (missing.length === 0) return;
-		for (const id of missing) restoreAttempted.add(id);
-		void sourceRegistry.restore(missing).catch(() => {});
 	});
 
 	const { addSequenceSources, addLayerSources, explainRejectedModels } =
@@ -1565,7 +1445,7 @@
 	/** Empty the pool; clips that drew from it lose their media, deleted from storage too. */
 	function clearSequenceSources() {
 		showClearSourcesConfirm = false;
-		if (clearPool()) restoreAttempted.clear();
+		if (clearPool()) pool.forgetRestoreAttempts();
 	}
 
 	/** Clips pointing at a removed source draw nothing; an empty pool shows the placeholder. */
@@ -1747,7 +1627,7 @@
 			? (sourceRegistry.get(stableSourceId(file)) ?? null)
 			: null;
 		// An opened file that never decoded won't seed anything; don't wait on it forever.
-		if (pending.seed && !first && !mountMediaDone) return;
+		if (pending.seed && !first && !pool.openDone) return;
 		pendingInit = null;
 		untrack(() =>
 			finishProjectInit(pending.seed ? first : null, songId, songLength),
