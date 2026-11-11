@@ -1,7 +1,8 @@
 # The e2e specs CI runs on its second runner; see ci-part-1.txt.
-media-drop.spec.ts
-links.spec.ts
-rotated-video.spec.ts
-effect-groups.spec.ts
-upload-screen.spec.ts
-chains.spec.ts
+editor-persistence.spec.ts
+single-song.spec.ts
+source-editor.spec.ts
+project-drawer.spec.ts
+rendering.spec.ts
+editor-export.spec.ts
+storage-blocked.spec.ts
