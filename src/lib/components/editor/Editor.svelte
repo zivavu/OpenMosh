@@ -183,10 +183,8 @@
 	import { TimelinePersistence } from "../../editor/timeline-persistence.svelte";
 	import { PoolPersistence } from "../../editor/pool-persistence.svelte";
 	import { ProjectOpener } from "../../editor/project-opener.svelte";
-	import {
-		contentEnd,
-		contentStart,
-	} from "../../editor/project-seed";
+	import { SingleSong } from "../../editor/single-song.svelte";
+	import { contentEnd, contentStart } from "../../editor/project-seed";
 	import {
 		SequenceClock,
 		SingleClock,
@@ -772,14 +770,6 @@
 		"openmosh-single-size",
 	);
 
-	/** The opened edit's saved trim, used up by the first song it loads. */
-	let sessionSpan = untrack(() => {
-		const span = initialSession?.span;
-		return span && Number.isFinite(span.start) && span.end > span.start
-			? span
-			: null;
-	});
-
 	// Persist span changes for library tracks; the span sits at 0/0 until duration is known.
 	$effect(() => {
 		const start = audio.spanStart;
@@ -829,106 +819,20 @@
 			void addAudioFiles(files);
 			return;
 		}
-		replaceTrackFile(files[0]);
-	}
-
-	/** Single mode: a new song file in place of the current one; it gets its id on registering. */
-	function replaceTrackFile(f: File) {
-		const left = !!currentTrackId;
-		clearTrack();
-		songLeft = left;
-		audio.trackFile = f;
+		singleSong.replaceFile(files[0]);
 	}
 
 	function clearTrack() {
-		if (isSequenceMode) {
-			removeSong();
-			return;
-		}
-		// Before the key changes out from under them; see TimelinePersistence.flush.
-		timelines.flush();
-		pool.flush();
-		audio.clearTrack();
-		currentTrackId = null;
-		// Belongs to the song that just left; the next one restores or detects its own.
-		tempo.bpm = 0;
-		tempo.beatOffset = 0;
+		if (isSequenceMode) removeSong();
+		else singleSong.clear();
 	}
-
-	/** Pull back whatever was stored against a song; every track-id path runs this. */
-	async function applySavedTrackState(
-		trackId: string,
-		/** Moving between songs starts the new one clean when it has nothing saved. */
-		clearOnMissing = false,
-	): Promise<void> {
-		// The edit's own trim wins for its first song: a project file brings only that.
-		const own = sessionSpan;
-		sessionSpan = null;
-		const savedSpan = own
-			? { spanStart: own.start, spanEnd: own.end }
-			: spanStore.load(trackId);
-		// An empty span is left by the overwrite above, never a user choice.
-		if (savedSpan !== null && savedSpan.spanEnd > savedSpan.spanStart) {
-			audio.pendingSpan = {
-				start: savedSpan.spanStart,
-				end: savedSpan.spanEnd,
-			};
-		}
-		if (singleProjectBase) {
-			await restoreProjectSongBpm(trackId);
-			return;
-		}
-		const key = seqKeyPrefix + trackId;
-		timelines.loadedKey = null;
-		const savedSeq = await timelines.load(trackId);
-		// A later switch overtook this load; that one owns the state now.
-		if (seqStoreKey !== key) return;
-		timelines.loadedKey = key;
-		if (savedSeq === null) {
-			// The last song's text stays saved under its own key.
-			if (clearOnMissing) {
-				fxState.restore([]);
-				restoreTextTimeline(null);
-			}
-			return;
-		}
-		// BPM comes back in both modes; beat-synced effects read it in single mode too.
-		tempo.restore(savedSeq.bpm, savedSeq.beatOffset);
-		if (isSequenceMode) fxState.restore(savedSeq.fx);
-		restoreTextTimeline(savedSeq.text);
-		restoreMediaTimeline(savedSeq.media);
-		sourceRegistry.restoreEdits(savedSeq.sourceEdits);
-		// Segments fold into the lanes once the song's length is known.
-		legacySegments =
-			isSequenceMode && savedSeq.segments.length
-				? { key, segments: savedSeq.segments }
-				: null;
-	}
-
-	/** The tempo for a song in an edit with its own key: what the edit found for it, else
-	 * what the song's older single-mode timeline kept. Neither leaves detection to run. */
-	async function restoreProjectSongBpm(trackId: string) {
-		const [own, song] = await Promise.all([
-			timelines.load(singleProjectBase!),
-			timelines.load(trackId),
-		]);
-		if (currentTrackId !== trackId) return;
-		const found = own?.song === trackId && own.bpm > 0 ? own : song;
-		if (found && found.bpm > 0) tempo.restore(found.bpm, found.beatOffset);
-	}
-
-	/** A dropped or picked song replaced another, so it starts without that one's text. */
-	let songLeft = false;
 
 	/** The editor learned a track's library id without being asked to load it. */
 	function adoptLibraryTrack(trackId: string) {
 		if (currentTrackId === trackId) return;
 		currentTrackId = trackId;
 		// The project, not its song, owns what's saved in sequence mode.
-		if (isSequenceMode) return;
-		const switchingSongs = songLeft;
-		songLeft = false;
-		void applySavedTrackState(trackId, switchingSongs);
+		if (!isSequenceMode) singleSong.adopted(trackId);
 	}
 
 	/** Give a song that arrived without a library id one; the id keys everything per-song. */
@@ -954,18 +858,8 @@
 	});
 
 	function onLibraryLoadTrack(file: File, trackId: string, autoplay = false) {
-		if (isSequenceMode) {
-			replaceSong(file, trackId);
-			return;
-		}
-		const switchingSongs = !!currentTrackId && currentTrackId !== trackId;
-		clearTrack();
-		songLeft = false;
-		currentTrackId = trackId;
-		audio.trackFile = file;
-		// The media pool is deliberately left alone on a switch.
-		void applySavedTrackState(trackId, switchingSongs);
-		if (autoplay) audio.autoplayOnLoad = true;
+		if (isSequenceMode) replaceSong(file, trackId);
+		else singleSong.load(file, trackId, autoplay);
 	}
 
 	// An AudioContext created before a user gesture starts suspended and can't be resumed.
@@ -2686,6 +2580,29 @@
 		},
 	});
 
+	const singleSong = new SingleSong({
+		audio,
+		timelines,
+		pool,
+		tempo,
+		fx: fxState,
+		registry: sourceRegistry,
+		restoreText: restoreTextTimeline,
+		restoreMedia: restoreMediaTimeline,
+		trackId: () => currentTrackId,
+		setTrackId: (id) => (currentTrackId = id),
+		storeKey: () => seqStoreKey,
+		prefix: untrack(() => seqKeyPrefix),
+		projectBase: singleProjectBase,
+		savedSpan: (trackId) => spanStore.load(trackId),
+		initialSpan: untrack(() => {
+			const span = initialSession?.span;
+			return span && Number.isFinite(span.start) && span.end > span.start
+				? span
+				: null;
+		}),
+	});
+
 	/** What a new lane starts on: the first thing in the pool. */
 	function defaultLayerSourceId(): string | null {
 		return poolSources[0]?.id ?? null;
@@ -3030,7 +2947,7 @@
 		if (isSequenceMode && audioFiles.length > 0) {
 			void addAudioFiles(audioFiles);
 		} else if (audioFiles[0]) {
-			replaceTrackFile(audioFiles[0]);
+			singleSong.replaceFile(audioFiles[0]);
 		}
 		if (!isSequenceMode && all.some(isMeshFile)) {
 			showToast("3D models work in the Editor", "error");
