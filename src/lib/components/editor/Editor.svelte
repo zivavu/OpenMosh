@@ -194,7 +194,6 @@
 	} from "../../editor/sequence-media-store";
 	import {
 		newSessionKey,
-		saveSession,
 		type SingleSessionState,
 	} from "../../editor/sessions";
 	import { rememberLastOpened } from "../../editor/last-opened";
@@ -205,6 +204,7 @@
 	import { FxLaneState } from "../../editor/fx-lane-state.svelte";
 	import { createProjectImports } from "../../editor/project-imports";
 	import { SingleVideo } from "../../editor/single-video.svelte";
+	import { SingleSessionSave } from "../../editor/single-session-save.svelte";
 	import { createAudioLaneEdits } from "../../editor/audio-lane-edits";
 	import { createProjectLength } from "../../editor/project-length";
 	import { createPoolEdits, type PoolEntry } from "../../editor/pool-edits";
@@ -1353,7 +1353,7 @@
 		const onHide = () => {
 			flushSequenceSave();
 			flushMediaPoolSave();
-			flushSingleSessionSave();
+			sessionSave.flush();
 		};
 		const onVisibility = () => {
 			if (document.visibilityState === "hidden") onHide();
@@ -2715,7 +2715,7 @@
 			return;
 		}
 		// No confirm: the work survives the exit either way.
-		flushSingleSessionSave();
+		sessionSave.flush();
 		onExit();
 	}
 
@@ -2948,23 +2948,6 @@
 			: null,
 	);
 
-	// Sequence mode resumes from its song's pool; single mode saves file and work together.
-	let sessionSaveTimer: ReturnType<typeof setTimeout> | undefined;
-	/** As `seqSavePending`, for the single edit's session. */
-	let sessionSavePending = false;
-
-	/** Once stored, an edit keeps saving, or removing its last text would leave that text saved. */
-	let sessionStored = $state(untrack(() => !!initialSession));
-	/** Single mode keeps an edit once there's something in it; a camera never. Lane
-	 * presence, not `enabled`: keying off the visibility toggle would discard hidden timelines. */
-	let singleSessionKept = $derived(
-		!isSequenceMode &&
-			!isLive &&
-			(sessionStored ||
-				moshSession.worked ||
-				textState.timeline.lanes.length > 0),
-	);
-
 	function singleStateNow(): SingleSessionState {
 		const hasText = textState.timeline.lanes.length > 0;
 		const trimmed =
@@ -2985,94 +2968,24 @@
 		};
 	}
 
-	function saveSingleSession() {
-		sessionSavePending = false;
-		const source = file;
-		const held = !!seqStoreKey && heldTimelineKeys.has(seqStoreKey);
-		if (!singleSessionKept || !source || held) {
-			saves.drop("session");
-			return;
-		}
-		const state = singleStateNow();
-		// Keyed by the song when there is one, alongside the text timeline and span.
-		const write = saveSession(
-			singleSessionKey!,
-			"single",
-			[source],
-			state,
-			currentTrackId,
-		).catch((e) => {
-			if (e instanceof StaleWriteError && seqStoreKey) {
-				holdTimeline(seqStoreKey, "elsewhere");
-				return false;
-			}
-			// Logged, not swallowed: a silent failure here is invisible.
-			if (import.meta.env.DEV) console.error("Session save failed:", e);
-			return false;
-		});
-		void saves.track("session", write).then((ok) => {
-			if (!ok) return;
-			sessionStored = true;
-			onProjectReady?.(singleSessionKey!);
-			void pruneSequenceMediaThrottled().catch(() => {});
-		});
-	}
-
-	$effect(() => {
-		if (isSequenceMode) return;
-		// Skipped while playing, like the sequence save: the volume-link tick mutates `effects`.
-		if (audio.audioPlaying || singleVideo.isPlaying) {
-			sessionSavePending = true;
-			return;
-		}
-		// Deep-read, discarded: naming `effects` alone subscribes to the reference, not its contents.
-		$state.snapshot(effects);
-		$state.snapshot(textState.timeline);
-		file;
-		audio.spanStart;
-		audio.spanEnd;
-		// Loading a different song re-keys the session, so it has to re-save.
-		currentTrackId;
-		if (!singleSessionKept) {
-			// An undo back to nothing kept: a save scheduled a moment ago has nothing to write.
-			if (sessionSavePending && !sessionStored) {
-				sessionSavePending = false;
-				untrack(() => saves.drop("session"));
-			}
-			return;
-		}
-		clearTimeout(sessionSaveTimer);
-		untrack(() => saves.schedule("session"));
-		sessionSavePending = true;
-		sessionSaveTimer = setTimeout(saveSingleSession, 600);
-		return () => clearTimeout(sessionSaveTimer);
+	const sessionSave = new SingleSessionSave({
+		active: () => !isSequenceMode,
+		live: () => isLive,
+		worked: () => moshSession.worked,
+		hasText: () => textState.timeline.lanes.length > 0,
+		state: singleStateNow,
+		file: () => file,
+		trackId: () => currentTrackId,
+		sessionKey: singleSessionKey,
+		held: () => !!seqStoreKey && heldTimelineKeys.has(seqStoreKey),
+		onStale: () => {
+			if (seqStoreKey) holdTimeline(seqStoreKey, "elsewhere");
+		},
+		playing: () => audio.audioPlaying || singleVideo.isPlaying,
+		saves,
+		onSaved: (key) => onProjectReady?.(key),
+		initiallyStored: untrack(() => !!initialSession),
 	});
-
-	/** Why the top bar says this edit isn't kept, when it isn't. */
-	let notSaved = $derived.by(() => {
-		if (isSequenceMode) return null;
-		if (isLive) {
-			return {
-				reason:
-					"A live camera feed isn't saved. Take a snapshot to keep working on a frame.",
-				warn: true,
-			};
-		}
-		if (!singleSessionKept) {
-			return {
-				reason:
-					"Nothing to keep yet. Change an effect or add text and this edit is saved in this browser.",
-				warn: false,
-			};
-		}
-		return null;
-	});
-
-	/** Backing out shouldn't race the debounce and lose the last edit. */
-	function flushSingleSessionSave() {
-		clearTimeout(sessionSaveTimer);
-		if (sessionSavePending) saveSingleSession();
-	}
 
 	const shortcutGroups = $derived(
 		editorShortcutGroups({
@@ -3814,7 +3727,7 @@
 				<SaveIndicator
 					state={saves.state}
 					lastSavedAt={saves.lastSavedAt}
-					{notSaved}
+					notSaved={sessionSave.notSaved}
 				>
 					{#snippet action()}
 						<button
