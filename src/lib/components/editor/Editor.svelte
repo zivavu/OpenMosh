@@ -146,11 +146,7 @@
 		snapshotUndoSource,
 	} from "../../timeline/snapshot-history.svelte";
 	import { createSpanHistory } from "../../audio/span-history.svelte";
-	import {
-		asOneEdit,
-		PENDING_EDIT,
-		sharedEditSeq,
-	} from "../../editor/edit-clock";
+	import { asOneEdit, PENDING_EDIT } from "../../editor/edit-clock";
 	import {
 		redoLatest,
 		undoLatest,
@@ -166,12 +162,7 @@
 		stackIndex,
 		startLayerRowDrag,
 	} from "../../timeline/layer-order";
-	import {
-		clipAt,
-		trimClipsAt,
-		type ClipLane,
-		type TimelineClip,
-	} from "../../timeline/clips";
+	import { clipAt, type TimelineClip } from "../../timeline/clips";
 	import type { LayerPick } from "../../editor/layer-pick";
 	import {
 		SequenceSourceRegistry,
@@ -242,6 +233,7 @@
 	import { FxLaneState } from "../../editor/fx-lane-state.svelte";
 	import { createProjectImports } from "../../editor/project-imports";
 	import { createAudioLaneEdits } from "../../editor/audio-lane-edits";
+	import { createProjectLength } from "../../editor/project-length";
 	import { ChainTimelineState } from "../../editor/chain-timeline-state.svelte";
 	import { mediaTimelineOps, textTimelineOps } from "../../editor/timeline-ops";
 	import {
@@ -2684,103 +2676,6 @@
 		removeAudioClipsOf(trackSourceId(trackId));
 	}
 
-	/** The project's length, set by hand. Shorter cuts clips straddling the new end
-	 * back to it, so their edge stays in reach; clips wholly past it are kept. One undo
-	 * step with the clips it trims, joining Fit's when called under it. */
-	function setProjectLength(length: number) {
-		pauseTrack();
-		const next = Math.max(1, length);
-		if (next === mixer.duration) return;
-		asOneEdit(() => {
-			const seq = sharedEditSeq();
-			if (lengthHistory.undoSeq !== seq) lengthHistory.push(mixer.duration);
-			if (next < mixer.duration) {
-				const trim = <L extends ClipLane<TimelineClip>>(lanes: L[]) =>
-					lanes.map((l) => trimClipsAt<TimelineClip, L>(l, next));
-				const media = trim(mediaState.timeline.lanes);
-				const audioLanes = trim(mediaState.timeline.audioLanes ?? []);
-				if (
-					media.some((l, i) => l !== mediaState.timeline.lanes[i]) ||
-					audioLanes.some((l, i) => l !== mediaState.timeline.audioLanes?.[i])
-				) {
-					if (mediaState.history.undoSeq !== seq) mediaState.pushHistory();
-					mediaState.set({ ...mediaState.timeline, lanes: media, audioLanes });
-				}
-				const text = trim(textState.timeline.lanes);
-				if (text.some((l, i) => l !== textState.timeline.lanes[i])) {
-					if (textState.history.undoSeq !== seq) textState.pushHistory();
-					textState.set({ ...textState.timeline, lanes: text });
-				}
-				const fx = trim(fxState.lanes);
-				if (fx.some((l, i) => l !== fxState.lanes[i])) {
-					if (fxState.history.undoSeq !== seq) fxState.pushHistory();
-					fxState.set(fx);
-				}
-			}
-			// Shortening clamps the span; its undo puts the span back as it was set.
-			const spanBefore = { start: mixer.spanStart, end: mixer.spanEnd };
-			mixer.setDuration(next);
-			mixSpanHistory.pushMoved(spanBefore);
-		});
-	}
-
-	/** A drag reaching past the end: joins the drag's undo entry, so Ctrl+Z gives the length back. */
-	function growProjectTo(length: number) {
-		const seq = sharedEditSeq();
-		if (lengthHistory.undoSeq !== seq) {
-			lengthHistory.push(mixer.duration, seq === null ? "grow" : undefined);
-		}
-		const spanBefore = { start: mixer.spanStart, end: mixer.spanEnd };
-		mixer.setDuration(length);
-		mixSpanHistory.pushMoved(spanBefore);
-	}
-
-	/** `by` seconds go in before everything (negative takes them back out), and the
-	 * playhead and playback span keep their place against it. Joins the undo entry
-	 * it's called under: a drag's (see growFrontTo) or Fit's. */
-	function growProjectFront(by: number) {
-		const seq = sharedEditSeq();
-		if (mediaState.history.undoSeq !== seq) mediaState.pushHistory();
-		if (textState.history.undoSeq !== seq) textState.pushHistory();
-		if (fxState.history.undoSeq !== seq) fxState.pushHistory();
-		if (lengthHistory.undoSeq !== seq) lengthHistory.push(mixer.duration);
-		pauseTrack();
-		const later = <C extends TimelineClip, L extends ClipLane<C>>(
-			lanes: L[],
-		): L[] =>
-			lanes.map((l) => ({
-				...l,
-				clips: l.clips.map((c) => ({
-					...c,
-					start: c.start + by,
-					end: c.end + by,
-				})),
-			}));
-		mediaState.set({
-			...mediaState.timeline,
-			lanes: later(mediaState.timeline.lanes),
-			audioLanes: later(mediaState.timeline.audioLanes ?? []),
-		});
-		textState.set({
-			...textState.timeline,
-			lanes: later(textState.timeline.lanes),
-		});
-		fxState.set(later(fxState.lanes));
-		const whole =
-			mixer.spanStart <= 1e-6 && mixer.spanEnd >= mixer.duration - 1e-6;
-		const span = { start: mixer.spanStart, end: mixer.spanEnd };
-		const playhead = mixer.currentTime;
-		mixer.setDuration(mixer.duration + by);
-		const at = (t: number) => Math.min(mixer.duration, Math.max(0, t + by));
-		mixer.spanStart = whole ? 0 : at(span.start);
-		mixer.spanEnd = whole ? mixer.duration : at(span.end);
-		mixSpanHistory.pushMoved(span);
-		if (repeatSpan) {
-			repeatSpan = { start: at(repeatSpan.start), end: at(repeatSpan.end) };
-		}
-		mixer.seek(at(playhead));
-	}
-
 	/** What is on screen now: the main chain, then each fx lane's in lane order. */
 	let renderedEffects = $derived.by(() =>
 		fxChain.length === 0 ? effects : [...effects, ...fxChain],
@@ -3889,7 +3784,7 @@
 			hasSong: () => !!audio.trackFile,
 			loadSong,
 			projectLength: () => mixer.duration,
-			growProjectTo,
+			growProjectTo: (length) => growProjectTo(length),
 			playhead: () => timelineAxis?.staticTime ?? 0,
 			nextLaneZ: () => nextLayerZ(layerOrder),
 			revealLane: (id) => void revealLaneRow(id),
@@ -3928,6 +3823,19 @@
 		hasSong: () => !!audio.trackFile,
 		loadSong,
 	});
+
+	const { setProjectLength, growProjectTo, growProjectFront } =
+		createProjectLength({
+			media: mediaState,
+			text: textState,
+			fx: fxState,
+			mixer,
+			lengthHistory,
+			spanHistory: mixSpanHistory,
+			pause: () => pauseTrack(),
+			repeatSpan: () => repeatSpan,
+			setRepeatSpan: (span) => (repeatSpan = span),
+		});
 
 	/** What a new lane starts on: the first thing in the pool. */
 	function defaultLayerSourceId(): string | null {
