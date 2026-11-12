@@ -68,6 +68,9 @@
 		keyAtTime,
 		paramValueAt,
 	} from "../../effects/param-keys";
+	import { groupColor } from "../../timeline/key-rows";
+	import { keyNear } from "../../keyframes";
+	import type { KeyLink } from "../../key-groups";
 	import { KEY_RANGE_MAX, KEY_SOFTNESS_MAX } from "../../color-key";
 	import {
 		parseKeys,
@@ -143,6 +146,14 @@
 		/** Key the param at the playhead, or remove the key there; `clear` stops animating it. */
 		onKeyToggle?: (paramKey: string, clear: boolean) => void;
 		onKeySeek?: (paramKey: string, direction: -1 | 1) => void;
+		/** The chain's groups, which a slider can join. */
+		groups?: string[];
+		/** null starts a new group; "leave" takes the slider out of its own. */
+		onGroup?: (paramKey: string, group: string | null | "leave") => void;
+		onGroupRange?: (
+			paramKey: string,
+			range: Partial<Pick<KeyLink, "min" | "max" | "inverted">>,
+		) => void;
 	}
 
 	let {
@@ -175,6 +186,9 @@
 		keyTime = null,
 		onKeyToggle,
 		onKeySeek,
+		groups = [],
+		onGroup,
+		onGroupRange,
 		effectIndex,
 	}: Props = $props();
 
@@ -270,6 +284,35 @@
 	}
 
 	const IMAGE_EMPTY_HINT = "A black-and-white image or a cutout";
+	const GROUP_UPRIGHT_HINT =
+		"When the group is high, this sits at the top of its range";
+	const GROUP_INVERTED_HINT =
+		"Inverted: when the group is high, this sits at the bottom of its range";
+	const GROUP_LEAVE_HINT =
+		"Leave the group and keep the motion as keys of its own";
+
+	/** The diamond's right-click choices: join a group, start one, or leave. */
+	function groupMenu(
+		paramKey: string,
+		current: string | undefined,
+	): { label: string; onSelect: () => void }[] {
+		if (!onGroup) return [];
+		if (current)
+			return [
+				{
+					label: `Leave group ${current}`,
+					onSelect: () => onGroup(paramKey, "leave"),
+				},
+			];
+		return [
+			{ label: "New group", onSelect: () => onGroup(paramKey, null) },
+			...groups.map((g) => ({
+				label: `Add to group ${g}`,
+				onSelect: () => onGroup(paramKey, g),
+			})),
+		];
+	}
+
 	const KEY_START_HINT =
 		"Animate this setting. A key goes here with its current value; move the playhead, then the slider, to add more. Once it's animated, holding the slider while the song plays records your moves.";
 	const LOAD_MASK_HINT =
@@ -558,7 +601,8 @@
 								>{param.label}</label
 							>
 							{#if param.type === "range"}
-								{@const keyed = isKeyed(effect, param.key)}
+								{@const keyLink = effect.keyLinks?.[param.key]}
+								{@const keyed = isKeyed(effect, param.key) || !!keyLink}
 								{@const linked = hasTrack && !!effect.volumeLinks?.[param.key]}
 								{@const shown = paramValueAt(effect, param.key, keyTime)}
 								<div class="param-range-wrap">
@@ -578,11 +622,13 @@
 										>{parseFloat(shown.toString()).toFixed(2)}</span
 									>
 									{#if keyTime !== null && onKeyToggle && !linked}
-										{@const keys = effect.keys?.[param.key]}
+										{@const keys = keyLink?.keys ?? effect.keys?.[param.key]}
 										<KeyDiamond
 											label={param.label}
 											{keyed}
-											here={keyed && !!keyAtTime(effect, param.key, keyTime)}
+											here={keyLink
+												? !!keyNear(keyLink.keys, keyTime)
+												: keyed && !!keyAtTime(effect, param.key, keyTime)}
 											startHint={KEY_START_HINT}
 											onToggle={(clear) => onKeyToggle(param.key, clear)}
 											prev={onKeySeek &&
@@ -593,7 +639,67 @@
 											adjacentKeyTime(keys, keyTime, 1) !== null
 												? () => onKeySeek(param.key, 1)
 												: null}
+											group={keyLink
+												? {
+														name: keyLink.group,
+														color: groupColor(keyLink.group),
+													}
+												: null}
+											menu={groupMenu(param.key, keyLink?.group)}
 										/>
+									{/if}
+									{#if keyLink && onGroupRange}
+										{@const range = getDefinition(effect.defId)?.params.find(
+											(p) => p.key === param.key,
+										)}
+										{#if range?.type === "range"}
+											<div class="volume-link-row group-link-row">
+												<span
+													class="volume-link-label group-label"
+													style="--group: {groupColor(keyLink.group)}"
+													>Group {keyLink.group} →</span
+												>
+												<div class="volume-link-slider">
+													<DualRangeSlider
+														min={range.min}
+														max={range.max}
+														step={range.step}
+														valueLow={keyLink.min}
+														valueHigh={keyLink.max}
+														onChangeLow={(v) =>
+															onGroupRange(param.key, { min: v })}
+														onChangeHigh={(v) =>
+															onGroupRange(param.key, { max: v })}
+														formatValue={(v) =>
+															parseFloat(v.toString()).toFixed(2)}
+													/>
+												</div>
+												<button
+													type="button"
+													class="volume-invert-btn"
+													class:active={keyLink.inverted}
+													title={keyLink.inverted
+														? GROUP_INVERTED_HINT
+														: GROUP_UPRIGHT_HINT}
+													onclick={() =>
+														onGroupRange(param.key, {
+															inverted: !keyLink.inverted,
+														})}
+												>
+													<ArrowUpDown size={12} />
+												</button>
+												{#if onGroup}
+													<button
+														type="button"
+														class="volume-unlink-btn"
+														title={GROUP_LEAVE_HINT}
+														onclick={() => onGroup(param.key, "leave")}
+													>
+														<X size={12} />
+													</button>
+												{/if}
+											</div>
+										{/if}
 									{/if}
 									{#if hasTrack && onVolumeLinkChange && !keyed}
 										{#if effect.volumeLinks?.[param.key]}
@@ -1492,6 +1598,12 @@
 
 	label.paint-setting > :global(:not(span)) {
 		flex: none;
+	}
+
+	.group-label {
+		-webkit-user-select: none;
+		user-select: none;
+		color: var(--group);
 	}
 
 	.volume-link-btn {

@@ -55,10 +55,20 @@
 	import EffectItem from "./EffectItem.svelte";
 	import { showToast } from "./toast.svelte";
 	import { ParamTakes } from "../../effects/param-take";
+	import {
+		chainGroupNames,
+		groupParam,
+		keyGroupedValue,
+		setParamGroupRange,
+		toggleGroupedKey,
+		ungroupParam,
+	} from "../../effects/param-groups";
+	import type { KeyLink } from "../../key-groups";
 	import { effectFocus } from "../../effects/effect-focus.svelte";
 	import {
 		adjacentKeyTime,
 		clearParamKeys,
+		isGrouped,
 		isKeyed,
 		keyAtTime,
 		paramValueAt,
@@ -141,6 +151,7 @@
 	const takes = new ParamTakes({
 		effects: () => effects,
 		replace: (i, effect) => (effects[i] = effect),
+		replaceAll: (next) => (effects = next),
 		beforeEdit: () => onBeforeUserEdit?.(),
 		afterEdit: () => {
 			appliedIndex = null;
@@ -529,6 +540,12 @@
 		if (
 			keyTime !== null &&
 			typeof value === "number" &&
+			isGrouped(effects[index], key)
+		)
+			effects = keyGroupedValue(effects, index, key, keyTime, value);
+		else if (
+			keyTime !== null &&
+			typeof value === "number" &&
 			isKeyed(effects[index], key)
 		)
 			effects[index] = setParamKey(effects[index], key, keyTime, value);
@@ -546,7 +563,9 @@
 		if (keyTime === null) return;
 		const effect = effects[index];
 		onBeforeUserEdit?.();
-		if (!isKeyed(effect, key)) {
+		if (isGrouped(effect, key)) {
+			effects = toggleGroupedKey(effects, index, key, keyTime, clear);
+		} else if (!isKeyed(effect, key)) {
 			const value = Number(effect.values[key]);
 			effects[index] = setParamKey(effect, key, keyTime, value);
 		} else if (clear) effects[index] = clearParamKeys(effect, key, keyTime);
@@ -562,9 +581,41 @@
 
 	function keySeek(index: number, key: string, direction: -1 | 1) {
 		if (keyTime === null) return;
-		const t = adjacentKeyTime(effects[index].keys?.[key], keyTime, direction);
+		const e = effects[index];
+		const keys = e.keyLinks?.[key]?.keys ?? e.keys?.[key];
+		const t = adjacentKeyTime(keys, keyTime, direction);
 		if (t !== null) onKeySeek?.(t);
 	}
+
+	/** Put a slider in a group (null starts a new one), or take it out with "leave". */
+	function groupChange(
+		index: number,
+		key: string,
+		group: string | null | "leave",
+	) {
+		if (keyTime === null) return;
+		onBeforeUserEdit?.();
+		effects =
+			group === "leave"
+				? ungroupParam(effects, index, key)
+				: groupParam(effects, index, key, group, keyTime);
+		appliedIndex = null;
+		onUserEdit?.();
+	}
+
+	function groupRange(
+		index: number,
+		key: string,
+		range: Partial<Pick<KeyLink, "min" | "max" | "inverted">>,
+	) {
+		onBeforeUserEdit?.(`group-range:${effects[index].instanceId}:${key}`);
+		effects = setParamGroupRange(effects, index, key, range);
+		appliedIndex = null;
+		onUserEdit?.();
+	}
+
+	/** The groups this chain has, for the diamonds' menus. */
+	let groups = $derived(chainGroupNames(effects));
 
 	function handleDragStart(index: number, e: DragEvent) {
 		dragFromIndex = index;
@@ -1098,6 +1149,11 @@
 					effectIndex={i}
 					{keyTime}
 					onKeyToggle={(key, clear) => keyToggle(i, key, clear)}
+					{groups}
+					onGroup={keyTime !== null
+						? (key, group) => groupChange(i, key, group)
+						: undefined}
+					onGroupRange={(key, range) => groupRange(i, key, range)}
 					onKeySeek={onKeySeek ? (key, dir) => keySeek(i, key, dir) : undefined}
 				/>
 			{/each}

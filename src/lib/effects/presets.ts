@@ -1,5 +1,11 @@
 import type { EffectInstance, ParamKeys, Preset, VolumeLink } from "./types";
-import { copyParamKeys, hydrateParamKeys } from "./param-keys";
+import {
+	copyKeyLinks,
+	copyParamKeys,
+	hydrateKeyLinks,
+	hydrateParamKeys,
+} from "./param-keys";
+import type { KeyLink } from "../key-groups";
 import { generateId } from "./types";
 import { getDefinition, hydrateLinks, hydrateValues } from "./hydrate";
 import { reportRemovedEffect } from "./load-report";
@@ -90,7 +96,8 @@ export function presetChainKey(effects: EffectInstance[]): string {
 				const values = { ...e.values };
 				for (const key of Object.keys(e.volumeLinks ?? {})) delete values[key];
 				for (const key of Object.keys(e.keys ?? {})) delete values[key];
-				return [e.defId, values, e.volumeLinks, e.keys];
+				for (const key of Object.keys(e.keyLinks ?? {})) delete values[key];
+				return [e.defId, values, e.volumeLinks, e.keys, e.keyLinks];
 			}),
 	);
 }
@@ -106,6 +113,7 @@ function serializeEffects(effects: EffectInstance[]): Preset["effects"] {
 				volumeLinks: copyLinks(e.volumeLinks),
 			}),
 		...(e.keys && { keys: copyParamKeys(e.keys) }),
+		...(e.keyLinks && { keyLinks: copyKeyLinks(e.keyLinks) }),
 	}));
 }
 
@@ -167,6 +175,7 @@ export function applyPreset(preset: Preset): EffectInstance[] {
 		.map((pe) => {
 			const links = pe.volumeLinks && hydrateLinks(pe.defId, pe.volumeLinks);
 			const keys = hydrateParamKeys(pe.defId, pe.keys);
+			const keyLinks = hydrateKeyLinks(pe.defId, pe.keyLinks);
 			return {
 				instanceId: generateId(),
 				defId: pe.defId,
@@ -178,6 +187,7 @@ export function applyPreset(preset: Preset): EffectInstance[] {
 				values: hydrateValues(pe.defId, pe.values),
 				...(links && { volumeLinks: links }),
 				...(keys && { keys }),
+				...(keyLinks && { keyLinks }),
 			};
 		});
 }
@@ -248,6 +258,9 @@ export function parsePresetFile(text: string): Preset[] {
 					volumeLinks: e.volumeLinks as Record<string, VolumeLink>,
 				}),
 				...(isRecord(e.keys) && { keys: e.keys as ParamKeys }),
+				...(isRecord(e.keyLinks) && {
+					keyLinks: e.keyLinks as Record<string, KeyLink>,
+				}),
 			});
 		}
 		const name = normalizePresetName(p.name);

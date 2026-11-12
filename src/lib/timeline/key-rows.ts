@@ -4,6 +4,8 @@
 import { keyframeAt, putKeyframe, type Keyframe } from "../keyframes";
 import { getDefinition } from "../effects/hydrate";
 import { setParamTrack } from "../effects/param-keys";
+import { setChainGroupCurve } from "../effects/param-groups";
+import type { KeyLink } from "../key-groups";
 import type { EffectInstance } from "../effects/types";
 import {
 	PLACEMENT_KEYS,
@@ -47,6 +49,15 @@ export function rowColor(index: number): string {
 	return PALETTE[index % PALETTE.length];
 }
 
+/** A group keeps one colour wherever it shows: its chip in the panel, its row. */
+export function groupColor(group: string): string {
+	let n = 0;
+	for (const c of group) n = n * 26 + (c.charCodeAt(0) - 64);
+	return PALETTE[(n + 2) % PALETTE.length];
+}
+
+const GROUP_ROW = "group:";
+
 const EFFECT_ROW = "fx:";
 const LANE_ROW = "lane:";
 
@@ -87,7 +98,36 @@ export function chainKeyRows(
 			});
 		}
 	}
+	for (const [group, members] of chainGroups(clip.effects)) {
+		rows.push({
+			id: `${GROUP_ROW}${group}`,
+			label: `Group ${group} · ${members.length} ${members.length === 1 ? "setting" : "settings"}`,
+			color: groupColor(group),
+			keys: members[0].link.keys,
+			min: 0,
+			max: 1,
+			step: 0,
+			offset: clip.start,
+			from: clip.start,
+			to: clip.end,
+			instanceId: members[0].instanceId,
+		});
+	}
 	return rows;
+}
+
+/** The chain's groups and the sliders in each, by group name. */
+function chainGroups(
+	effects: EffectInstance[],
+): Map<string, { instanceId: string; link: KeyLink }[]> {
+	const groups = new Map<string, { instanceId: string; link: KeyLink }[]>();
+	for (const e of effects)
+		for (const link of Object.values(e.keyLinks ?? {})) {
+			const list = groups.get(link.group) ?? [];
+			list.push({ instanceId: e.instanceId, link });
+			groups.set(link.group, list);
+		}
+	return new Map([...groups].sort(([a], [b]) => a.localeCompare(b)));
 }
 
 const PLACEMENT_ROWS: Record<
@@ -131,7 +171,11 @@ export function withChainTracks(
 	effects: EffectInstance[],
 	tracks: RowTracks,
 ): EffectInstance[] {
-	return effects.map((e) => {
+	let grouped = effects;
+	for (const [id, keys] of tracks)
+		if (id.startsWith(GROUP_ROW))
+			grouped = setChainGroupCurve(grouped, id.slice(GROUP_ROW.length), keys);
+	return grouped.map((e) => {
 		let next = e;
 		for (const [id, keys] of tracks) {
 			if (!id.startsWith(`${EFFECT_ROW}${e.instanceId}:`)) continue;

@@ -151,6 +151,10 @@ const CLIP_ROWS: ShortcutRow[] = [
 	},
 	{ keys: ["Dbl-click a lane name"], description: "Rename the lane" },
 	{
+		keys: ["Right-click a diamond in the panel"],
+		description: "Group the setting with others, so one curve moves them all",
+	},
+	{
 		keys: ["Hold a keyed slider while playing"],
 		description: "Records its moves as keys, thinned to a few when you let go",
 	},

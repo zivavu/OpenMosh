@@ -1,4 +1,5 @@
 import type { Keyframe } from "../keyframes";
+import type { KeyLink } from "../key-groups";
 
 export function generateId(): string {
 	if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -159,6 +160,8 @@ export interface EffectInstance {
 	volumeLinks?: Record<string, VolumeLink>;
 	/** Keyframed sliders, by param key; seconds from the start of the clip. */
 	keys?: ParamKeys;
+	/** Sliders that follow a group's curve, by param key. */
+	keyLinks?: Record<string, KeyLink>;
 }
 
 /** A param animated over its clip, keys sorted by time. */
@@ -172,5 +175,6 @@ export interface Preset {
 		values: Record<string, number | string>;
 		volumeLinks?: Record<string, VolumeLink>;
 		keys?: ParamKeys;
+		keyLinks?: Record<string, KeyLink>;
 	}[];
 }

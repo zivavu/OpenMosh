@@ -20,6 +20,12 @@ import {
 	type Keyframe,
 } from "../keyframes";
 import { getDefinition } from "./hydrate";
+import {
+	linkValue,
+	linkValueAt,
+	normalizeKeyLink,
+	type KeyLink,
+} from "../key-groups";
 import type { EffectInstance, ParamKeys, RangeParam } from "./types";
 
 /** More keys than any hand-built track; a save listing more is damaged. */
@@ -30,7 +36,14 @@ export function isKeyed(effect: EffectInstance, paramKey: string): boolean {
 }
 
 export function hasParamKeys(effect: EffectInstance): boolean {
-	return !!effect.keys && Object.keys(effect.keys).length > 0;
+	return (
+		(!!effect.keys && Object.keys(effect.keys).length > 0) ||
+		(!!effect.keyLinks && Object.keys(effect.keyLinks).length > 0)
+	);
+}
+
+export function isGrouped(effect: EffectInstance, paramKey: string): boolean {
+	return !!effect.keyLinks?.[paramKey];
 }
 
 export function chainHasKeys(effects: EffectInstance[]): boolean {
@@ -43,6 +56,12 @@ export function paramValueAt(
 	paramKey: string,
 	time: number | null | undefined,
 ): number | string {
+	const link = effect.keyLinks?.[paramKey];
+	if (link && time != null) {
+		const param = rangeParam(effect.defId, paramKey);
+		const v = param && linkValueAt(link, time, param);
+		if (v != null) return v;
+	}
 	const keys = effect.keys?.[paramKey];
 	if (time == null || !keys?.length) return effect.values[paramKey];
 	const v = sampleNumbers(keys, time);
@@ -58,6 +77,19 @@ function onStep(defId: string, paramKey: string, v: number): number {
 	const snapped =
 		Math.round((v - param.min) / param.step) * param.step + param.min;
 	return Math.max(param.min, Math.min(param.max, snapped));
+}
+
+/** The effect with `link` as the param's group link, or without one for null. */
+export function setKeyLink(
+	effect: EffectInstance,
+	paramKey: string,
+	link: KeyLink | null,
+): EffectInstance {
+	const next = { ...effect.keyLinks };
+	if (link) next[paramKey] = link;
+	else delete next[paramKey];
+	const { keyLinks: _, ...rest } = effect;
+	return Object.keys(next).length > 0 ? { ...rest, keyLinks: next } : rest;
 }
 
 /** The effect with `keys` as the param's whole track; empty stops it animating. */
@@ -143,7 +175,10 @@ export function adjacentKeyTime(
 }
 
 function tracksOf(effects: EffectInstance[]): Keyframe<number>[][] {
-	return effects.flatMap((e) => Object.values(e.keys ?? {}));
+	return effects.flatMap((e) => [
+		...Object.values(e.keys ?? {}),
+		...Object.values(e.keyLinks ?? {}).map((l) => l.keys),
+	]);
 }
 
 /** Every moment the chain has a key, sorted, with the keys that sit there merged. */
@@ -165,9 +200,27 @@ function mapKeys(
 	map: (keys: Keyframe<number>[]) => Keyframe<number>[],
 ): EffectInstance[] {
 	return effects.map((e) => {
-		if (!e.keys) return e;
+		if (!hasParamKeys(e)) return e;
 		let next: EffectInstance = e;
-		for (const [param, keys] of Object.entries(e.keys)) {
+		for (const [param, link] of Object.entries(e.keyLinks ?? {})) {
+			const mapped = map(link.keys);
+			const range = rangeParam(e.defId, param);
+			next = setKeyLink(
+				next,
+				param,
+				mapped.length > 0 ? { ...link, keys: mapped } : null,
+			);
+			// A curve emptied lets the setting go, at the value it started on.
+			if (mapped.length === 0 && link.keys.length > 0 && range)
+				next = {
+					...next,
+					values: {
+						...next.values,
+						[param]: linkValue(link, link.keys[0].v, range),
+					},
+				};
+		}
+		for (const [param, keys] of Object.entries(e.keys ?? {})) {
 			const mapped = map(keys);
 			next = setParamTrack(next, param, mapped);
 			// A track emptied holds the value it started on.
@@ -218,9 +271,14 @@ export function setChainEaseAt(
 /** Keys that add nothing to the motion, dropped: within 1% of each slider. */
 export function simplifyChainKeys(effects: EffectInstance[]): EffectInstance[] {
 	return effects.map((e) => {
-		if (!e.keys) return e;
+		if (!hasParamKeys(e)) return e;
 		let next = e;
-		for (const [param, keys] of Object.entries(e.keys))
+		for (const [param, link] of Object.entries(e.keyLinks ?? {}))
+			next = setKeyLink(next, param, {
+				...link,
+				keys: simplifyKeys(link.keys, 0.01),
+			});
+		for (const [param, keys] of Object.entries(e.keys ?? {}))
 			next = setParamTrack(
 				next,
 				param,
@@ -256,11 +314,16 @@ export function chainAtKeyTime(
 ): EffectInstance[] {
 	if (!chainHasKeys(effects)) return effects;
 	return effects.map((e) => {
-		if (!e.keys) return e;
+		if (!hasParamKeys(e)) return e;
 		const values = { ...e.values };
-		for (const [param, keys] of Object.entries(e.keys)) {
+		for (const [param, keys] of Object.entries(e.keys ?? {})) {
 			const v = sampleNumbers(keys, time);
 			if (v !== null) values[param] = onStep(e.defId, param, v);
+		}
+		for (const [param, link] of Object.entries(e.keyLinks ?? {})) {
+			const range = rangeParam(e.defId, param);
+			const v = range && linkValueAt(link, time, range);
+			if (v != null) values[param] = v;
 		}
 		return { ...e, values };
 	});
@@ -307,4 +370,30 @@ export function copyParamKeys(keys: ParamKeys): ParamKeys {
 export function paramTolerance(defId: string, paramKey: string): number {
 	const param = rangeParam(defId, paramKey);
 	return param ? (param.max - param.min) * 0.01 : 0.01;
+}
+
+/** Group links survive only on params that are still sliders. */
+export function hydrateKeyLinks(
+	defId: string,
+	raw: unknown,
+): Record<string, KeyLink> | undefined {
+	if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+	const kept: Record<string, KeyLink> = {};
+	for (const [key, link] of Object.entries(raw as Record<string, unknown>)) {
+		const param = rangeParam(defId, key);
+		const read = param && normalizeKeyLink(link, param);
+		if (read) kept[key] = read;
+	}
+	return Object.keys(kept).length > 0 ? kept : undefined;
+}
+
+export function copyKeyLinks(
+	links: Record<string, KeyLink>,
+): Record<string, KeyLink> {
+	return Object.fromEntries(
+		Object.entries(links).map(([k, l]) => [
+			k,
+			{ ...l, keys: l.keys.map((key) => ({ ...key })) },
+		]),
+	);
 }
