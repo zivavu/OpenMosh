@@ -250,5 +250,6 @@ describe("from v5", () => {
 		const lane = restored.media!.lanes[0];
 		expect(lane.keys?.x?.map((k) => k.v)).toEqual([0.2, 0.8]);
 		expect(lane.keys?.opacity?.[1]).toEqual({ t: 4, v: 0.5 });
+		expect(lane.keyLinks?.rotation).toMatchObject({ group: "A", min: -45 });
 	});
 });

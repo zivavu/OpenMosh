@@ -155,8 +155,10 @@ Outside CI a run reuses whatever already serves its port, so when my dev server 
   a trim doesn't, like the media under it. A media layer's placement keys (`MediaLane.keys`)
   belong to the lane, in timeline seconds, shared by every clip on it. Resolvers sample keys
   into copies and never write state, since they run inside `$derived`. A roll drops the keys
-  of what it rolls (Lock keeps them), presets keep them, and a param is keyed or
-  audio-linked, never both.
+  of what it rolls (Lock keeps them), presets keep them, and a param is keyed,
+  grouped or audio-linked, never two at once. Grouped settings (`lib/key-groups.ts`)
+  follow one 0..1 curve, each in its own range. Every member carries the curve, so a
+  chain or lane stays whole when copied; edits write it to all of them.
 - Code-split only what sits behind an `{#if}` that starts false, via `lib/lazy.ts`. Inline
   controls stay eager.
 - `Editor.svelte` wires; editor logic lives in `lib/editor/` as a class or factory taking a
