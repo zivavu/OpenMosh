@@ -1,4 +1,8 @@
 <script lang="ts">
+	import ChainClipKeys from "../timeline/ChainClipKeys.svelte";
+	import type { EffectInstance } from "../../effects/types";
+	import type { ChainClip } from "../../editor/chain-clip";
+	import { updateClipsIn } from "../../timeline/clips";
 	import LoadFailed from "../ui/LoadFailed.svelte";
 	import { getTimelineStack } from "../../editor/timeline-stack.svelte";
 	import { latestCopy, markCopied } from "../../editor/copy-stamp";
@@ -53,6 +57,9 @@
 		onBeforeEdit?: (coalesceKey?: string) => void;
 		/** Song tempo, for interval clips spaced in beats. 0 = unknown. */
 		bpm?: number;
+		/** Seconds to the first beat, which dragged keys snap to. */
+		beatOffset?: number;
+		onSeek?: (time: number) => void;
 		/** The clip toolbar's actions, fanned out over the selection. */
 		onApplyPreset?: (clipIds: string[], preset: Preset) => void;
 		onRoll?: (clipIds: string[]) => void;
@@ -80,6 +87,8 @@
 		onChange,
 		onBeforeEdit,
 		bpm = 0,
+		beatOffset = 0,
+		onSeek,
 		onApplyPreset,
 		onRoll,
 		onClear,
@@ -87,6 +96,26 @@
 		lyricsSync = null,
 		lyricsOpen = $bindable(false),
 	}: Props = $props();
+
+	/** A keyframe edit made on a clip's bar. */
+	function editClipKeys(
+		clipId: string,
+		edit: (effects: EffectInstance[]) => EffectInstance[],
+		coalesceKey?: string,
+	) {
+		onBeforeEdit?.(coalesceKey);
+		onChange({
+			...timeline,
+			lanes: updateClipsIn(
+				timeline.lanes,
+				new Set([clipId]),
+				(c: ChainClip) => ({
+					...c,
+					effects: edit(c.effects),
+				}),
+			),
+		});
+	}
 
 	/** What the sync modal opens onto: the lyrics lane as the timeline holds it. */
 	let lyricsDraft = $derived(lyricsDraftFromTimeline(timeline));
@@ -272,6 +301,14 @@
 									{/if}
 								</span>
 							{/if}
+							<ChainClipKeys
+								{clip}
+								selected={selectedClipIds.includes(clip.id)}
+								{bpm}
+								{beatOffset}
+								{onSeek}
+								onEdit={(edit, key) => editClipKeys(clip.id, edit, key)}
+							/>
 							<span
 								class="clip-edge end"
 								style="width: {edge}px"

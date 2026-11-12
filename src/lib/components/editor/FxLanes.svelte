@@ -1,4 +1,8 @@
 <script lang="ts">
+	import ChainClipKeys from "../timeline/ChainClipKeys.svelte";
+	import type { EffectInstance } from "../../effects/types";
+	import type { ChainClip } from "../../editor/chain-clip";
+	import { updateClipsIn } from "../../timeline/clips";
 	import { stackIndex, type LayerRef } from "../../timeline/layer-order";
 	import {
 		createFxClip,
@@ -42,6 +46,9 @@
 		onBeforeEdit?: (coalesceKey?: string) => void;
 		/** Beats per minute, when known: unlocks the beat-spaced re-roll options. */
 		bpm?: number;
+		/** Seconds to the first beat, which dragged keys snap to. */
+		beatOffset?: number;
+		onSeek?: (time: number) => void;
 		onModeChange?: (
 			clipIds: string[],
 			mode: ChainMode,
@@ -70,6 +77,8 @@
 		onChange,
 		onBeforeEdit,
 		bpm = 0,
+		beatOffset = 0,
+		onSeek,
 		onModeChange,
 		onRoll,
 		onClear,
@@ -79,6 +88,21 @@
 		foldedLaneIds = NO_FOLDS,
 		onToggleFold,
 	}: Props = $props();
+
+	/** A keyframe edit made on a clip's bar. */
+	function editClipKeys(
+		clipId: string,
+		edit: (effects: EffectInstance[]) => EffectInstance[],
+		coalesceKey?: string,
+	) {
+		onBeforeEdit?.(coalesceKey);
+		onChange(
+			updateClipsIn(lanes, new Set([clipId]), (c: ChainClip) => ({
+				...c,
+				effects: edit(c.effects),
+			})),
+		);
+	}
 
 	// One axis for the whole stack: zoom, pan and playhead-following live in TimelineStack.
 	const stack = getTimelineStack();
@@ -317,6 +341,14 @@
 							{#if ctrl.clipPx(clip) >= MIN_LABEL_PX}
 								<span class="clip-label">{label}</span>
 							{/if}
+							<ChainClipKeys
+								{clip}
+								selected={selectedClipIds.includes(clip.id)}
+								{bpm}
+								{beatOffset}
+								{onSeek}
+								onEdit={(edit, key) => editClipKeys(clip.id, edit, key)}
+							/>
 							<span
 								class="clip-edge end"
 								style="width: {edge}px"

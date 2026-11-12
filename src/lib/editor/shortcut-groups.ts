@@ -150,6 +150,15 @@ const CLIP_ROWS: ShortcutRow[] = [
 			"Repeat the selected clips in the preview, or stop; the export isn't affected",
 	},
 	{ keys: ["Dbl-click a lane name"], description: "Rename the lane" },
+	{
+		keys: ["Drag a key on a selected clip"],
+		description:
+			"Move the keys at that moment; they snap to beats unless Alt is held",
+	},
+	{
+		keys: ["Right-click a key"],
+		description: "Ease it, delete it, or repeat the keys to the clip's end",
+	},
 ];
 
 const CLIPS: ShortcutGroup = { title: "Clips", shortcuts: CLIP_ROWS };

@@ -1,4 +1,8 @@
 <script lang="ts">
+	import ChainClipKeys from "../timeline/ChainClipKeys.svelte";
+	import type { EffectInstance } from "../../effects/types";
+	import type { ChainClip } from "../../editor/chain-clip";
+	import { updateClipsIn } from "../../timeline/clips";
 	import { Copy, Focus, Volume2, VolumeX } from "lucide-svelte";
 	import type { MixSegment } from "../../mix/plan";
 	import { DEFAULT_LANE_AUDIO } from "../../mix/types";
@@ -84,6 +88,9 @@
 		onBeforeEdit?: (coalesceKey?: string) => void;
 		/** Beats per minute, when known: unlocks the beat-spaced re-roll options. */
 		bpm?: number;
+		/** Seconds to the first beat, which dragged keys snap to. */
+		beatOffset?: number;
+		onSeek?: (time: number) => void;
 		onApplyPreset?: (clipIds: string[], preset: Preset) => void;
 		onRoll?: (clipIds: string[]) => void;
 		onClear?: (clipIds: string[]) => void;
@@ -117,6 +124,8 @@
 		onChange,
 		onBeforeEdit,
 		bpm = 0,
+		beatOffset = 0,
+		onSeek,
 		onApplyPreset,
 		onRoll,
 		onClear,
@@ -125,6 +134,22 @@
 		peaksOf,
 		audioVersion = 0,
 	}: Props = $props();
+
+	/** A keyframe edit made on a clip's bar. */
+	function editClipKeys(
+		clipId: string,
+		edit: (effects: EffectInstance[]) => EffectInstance[],
+		coalesceKey?: string,
+	) {
+		onBeforeEdit?.(coalesceKey);
+		onChange({
+			...timeline,
+			lanes: updateClipsIn(timeline.lanes, new Set([clipId]), (c: ChainClip) => ({
+				...c,
+				effects: edit(c.effects),
+			})),
+		});
+	}
 
 	// One axis for the whole stack: zoom, pan and playhead-following live in
 	// TimelineStack.
@@ -741,6 +766,14 @@
 									{/if}
 								</span>
 							{/if}
+							<ChainClipKeys
+								{clip}
+								selected={selectedClipIds.includes(clip.id)}
+								{bpm}
+								{beatOffset}
+								{onSeek}
+								onEdit={(edit, key) => editClipKeys(clip.id, edit, key)}
+							/>
 							<span
 								class="clip-edge end"
 								style="width: {edge}px"
