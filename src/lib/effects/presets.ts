@@ -65,14 +65,18 @@ function copyLinks(
 	);
 }
 
-/** A painting or a loaded mask belongs to one picture, so presets leave it out. */
-function withoutPaint(e: EffectInstance): Record<string, number | string> {
-	const values = { ...e.values };
-	for (const param of getDefinition(e.defId)?.params ?? []) {
-		const scrub = param.type === "paint" || param.type === "image";
-		if (scrub && param.key in values) values[param.key] = param.defaultValue;
+/** Thrown when the browser's storage has no room for the preset list. */
+export class PresetStorageFull extends Error {
+	constructor() {
+		super(PRESET_STORAGE_FULL);
 	}
-	return values;
+}
+
+const PRESET_STORAGE_FULL =
+	"The browser's storage is full, so this preset wasn't saved. A smaller mask image might fit.";
+
+function writePresets(presets: Preset[]): void {
+	if (!writeJson(PRESETS_KEY, presets)) throw new PresetStorageFull();
 }
 
 /** Equal while a chain still runs what a preset set. Skips what the audio tick
@@ -82,7 +86,7 @@ export function presetChainKey(effects: EffectInstance[]): string {
 		effects
 			.filter((e) => e.enabled)
 			.map((e) => {
-				const values = withoutPaint(e);
+				const values = { ...e.values };
 				for (const key of Object.keys(e.volumeLinks ?? {})) delete values[key];
 				return [e.defId, values, e.volumeLinks];
 			}),
@@ -94,7 +98,7 @@ function serializeEffects(effects: EffectInstance[]): Preset["effects"] {
 	return effects.map((e) => ({
 		defId: e.defId,
 		enabled: e.enabled,
-		values: withoutPaint(e),
+		values: { ...e.values },
 		...(e.volumeLinks &&
 			Object.keys(e.volumeLinks).length > 0 && {
 				volumeLinks: copyLinks(e.volumeLinks),
@@ -111,7 +115,7 @@ export function savePreset(name: string, effects: EffectInstance[]): Preset[] {
 		),
 		effects: serializeEffects(effects),
 	});
-	writeJson(PRESETS_KEY, presets);
+	writePresets(presets);
 	return presets;
 }
 
@@ -136,7 +140,7 @@ export function updatePreset(
 	const at = storedIndex(presets, index, seen);
 	if (at === -1) return presets;
 	presets[at].effects = serializeEffects(effects);
-	writeJson(PRESETS_KEY, presets);
+	writePresets(presets);
 	return presets;
 }
 
@@ -267,6 +271,6 @@ export function importPresets(incoming: Preset[]): Preset[] {
 		taken.add(name);
 		presets.push({ ...p, name });
 	}
-	writeJson(PRESETS_KEY, presets);
+	writePresets(presets);
 	return presets;
 }
