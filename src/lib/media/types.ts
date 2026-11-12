@@ -29,6 +29,7 @@ import {
 	type SourceEdit,
 } from "./source-edit";
 import { normalizeClipTransition, type ClipTransition } from "./transition";
+import { normalizeLaneKeys, type LaneKeys } from "./lane-keys";
 
 export { MIN_CLIP_LENGTH } from "../timeline/clips";
 
@@ -133,6 +134,8 @@ export interface MediaLane {
 	settings?: LaneSettings;
 	/** How the lane's videos sound. */
 	audio?: LaneAudio;
+	/** Placement keyed over the timeline, in its seconds, shared by every clip. */
+	keys?: LaneKeys;
 }
 
 export interface MediaTimeline {
@@ -282,12 +285,18 @@ export function duplicateMediaLane(lane: MediaLane, z: number): MediaLane {
 		name: `${lane.name} copy`,
 		z,
 		style: { ...lane.style },
+		...(lane.keys && { keys: normalizeLaneKeys(lane.keys) }),
 		clips: lane.clips.map((clip) => ({
 			...clip,
 			id: nextId("mclip"),
 			effects: cloneChainEffects(clip.effects),
 		})),
 	};
+}
+
+function withLaneKeys(raw: unknown): { keys?: LaneKeys } {
+	const keys = normalizeLaneKeys(raw);
+	return keys ? { keys } : {};
 }
 
 /** A clip saved with no chain at all is backfilled, not left switch-less. */
@@ -311,6 +320,7 @@ export function normalizeMediaTimeline(raw: unknown): MediaTimeline {
 			z: finiteOr(lane.z, i),
 			sourceId: lane.sourceId ?? null,
 			style: { ...DEFAULT_MEDIA_STYLE, ...(lane.style ?? {}) },
+			...withLaneKeys(lane.keys),
 			settings: normalizeLaneSettings(lane.settings),
 			audio: normalizeLaneAudio(lane.audio),
 			clips: records<MediaClip>(lane.clips).map((raw) => {

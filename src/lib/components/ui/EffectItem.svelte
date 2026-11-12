@@ -7,9 +7,7 @@
 		Move,
 		Pipette,
 		ChevronDown,
-		ChevronLeft,
 		ChevronRight,
-		Diamond,
 		ChevronUp,
 		Copy,
 		Eye,
@@ -40,6 +38,7 @@
 	import FontSelect from "./FontSelect.svelte";
 	import DualRangeSlider from "./DualRangeSlider.svelte";
 	import RangeSlider from "./RangeSlider.svelte";
+	import KeyDiamond from "./KeyDiamond.svelte";
 	import type { FieldDisplay } from "../../value-field";
 	import SpectrumDisplay from "./SpectrumDisplay.svelte";
 	import {
@@ -273,10 +272,6 @@
 	const IMAGE_EMPTY_HINT = "A black-and-white image or a cutout";
 	const KEY_START_HINT =
 		"Animate this setting. A key goes here with its current value; move the playhead, then the slider, to add more.";
-	const KEY_REMOVE_HINT =
-		"Remove the key here. Shift-click stops the animation and keeps the value on screen.";
-	const KEY_ADD_HINT =
-		"Key the value shown here. Shift-click stops the animation and keeps the value on screen.";
 	const LOAD_MASK_HINT =
 		"White areas get the effects and black areas don't. A cutout with a transparent background works too: the effects go on the part that's left.";
 
@@ -583,61 +578,22 @@
 										>{parseFloat(shown.toString()).toFixed(2)}</span
 									>
 									{#if keyTime !== null && onKeyToggle && !linked}
-										{@const here =
-											keyed && !!keyAtTime(effect, param.key, keyTime)}
-										<div class="param-keys" class:keyed>
-											{#if keyed && onKeySeek}
-												<button
-													type="button"
-													class="key-step"
-													title="Previous key"
-													aria-label="Previous key of {param.label}"
-													disabled={adjacentKeyTime(
-														effect.keys?.[param.key],
-														keyTime,
-														-1,
-													) === null}
-													onclick={() => onKeySeek(param.key, -1)}
-												>
-													<ChevronLeft size={11} />
-												</button>
-											{/if}
-											<button
-												type="button"
-												class="key-btn"
-												class:here
-												aria-pressed={keyed}
-												title={!keyed
-													? KEY_START_HINT
-													: here
-														? KEY_REMOVE_HINT
-														: KEY_ADD_HINT}
-												aria-label={!keyed
-													? `Animate ${param.label}`
-													: here
-														? `Remove the key on ${param.label}`
-														: `Add a key on ${param.label}`}
-												onclick={(e) => onKeyToggle(param.key, e.shiftKey)}
-											>
-												<Diamond size={11} />
-											</button>
-											{#if keyed && onKeySeek}
-												<button
-													type="button"
-													class="key-step"
-													title="Next key"
-													aria-label="Next key of {param.label}"
-													disabled={adjacentKeyTime(
-														effect.keys?.[param.key],
-														keyTime,
-														1,
-													) === null}
-													onclick={() => onKeySeek(param.key, 1)}
-												>
-													<ChevronRight size={11} />
-												</button>
-											{/if}
-										</div>
+										{@const keys = effect.keys?.[param.key]}
+										<KeyDiamond
+											label={param.label}
+											{keyed}
+											here={keyed && !!keyAtTime(effect, param.key, keyTime)}
+											startHint={KEY_START_HINT}
+											onToggle={(clear) => onKeyToggle(param.key, clear)}
+											prev={onKeySeek &&
+											adjacentKeyTime(keys, keyTime, -1) !== null
+												? () => onKeySeek(param.key, -1)
+												: null}
+											next={onKeySeek &&
+											adjacentKeyTime(keys, keyTime, 1) !== null
+												? () => onKeySeek(param.key, 1)
+												: null}
+										/>
 									{/if}
 									{#if hasTrack && onVolumeLinkChange && !keyed}
 										{#if effect.volumeLinks?.[param.key]}
@@ -1536,53 +1492,6 @@
 
 	label.paint-setting > :global(:not(span)) {
 		flex: none;
-	}
-
-	.param-keys {
-		display: inline-flex;
-		align-items: center;
-		opacity: 0;
-		transition: opacity var(--t-fast);
-	}
-
-	/* Out of the way until the row is hovered, and for good once the param animates. */
-	.param-row:hover .param-keys,
-	.param-keys:focus-within,
-	.param-keys.keyed {
-		opacity: 1;
-	}
-
-	.key-btn,
-	.key-step {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 18px;
-		height: 18px;
-		padding: 0;
-		background: none;
-		border: none;
-		border-radius: var(--r-1);
-		color: var(--text-3);
-		cursor: pointer;
-	}
-
-	.key-step:disabled {
-		opacity: 0.3;
-		cursor: default;
-	}
-
-	.key-btn:hover,
-	.key-step:not(:disabled):hover {
-		color: var(--text);
-	}
-
-	.param-keys.keyed .key-btn {
-		color: var(--live);
-	}
-
-	.key-btn.here :global(svg) {
-		fill: currentColor;
 	}
 
 	.volume-link-btn {

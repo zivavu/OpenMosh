@@ -1,5 +1,15 @@
 <script lang="ts">
 	import ChainClipKeys from "../timeline/ChainClipKeys.svelte";
+	import ClipKeys from "../timeline/ClipKeys.svelte";
+	import {
+		hasLaneKeys,
+		laneEaseAt,
+		laneKeyTimes,
+		moveLaneKeys,
+		removeLaneKeysAt,
+		repeatLaneKeys,
+		setLaneEaseAt,
+	} from "../../media/lane-keys";
 	import type { EffectInstance } from "../../effects/types";
 	import type { ChainClip } from "../../editor/chain-clip";
 	import { updateClipsIn } from "../../timeline/clips";
@@ -135,6 +145,19 @@
 		audioVersion = 0,
 	}: Props = $props();
 
+	/** A keyframe edit made on a lane's own keys. */
+	function editLane(
+		laneId: string,
+		edit: (lane: MediaLane) => MediaLane,
+		coalesceKey?: string,
+	) {
+		onBeforeEdit?.(coalesceKey);
+		onChange({
+			...timeline,
+			lanes: timeline.lanes.map((l) => (l.id === laneId ? edit(l) : l)),
+		});
+	}
+
 	/** A keyframe edit made on a clip's bar. */
 	function editClipKeys(
 		clipId: string,
@@ -144,10 +167,14 @@
 		onBeforeEdit?.(coalesceKey);
 		onChange({
 			...timeline,
-			lanes: updateClipsIn(timeline.lanes, new Set([clipId]), (c: ChainClip) => ({
-				...c,
-				effects: edit(c.effects),
-			})),
+			lanes: updateClipsIn(
+				timeline.lanes,
+				new Set([clipId]),
+				(c: ChainClip) => ({
+					...c,
+					effects: edit(c.effects),
+				}),
+			),
 		});
 	}
 
@@ -692,6 +719,34 @@
 				onpointerup={(e) => ctrl.onPointerUp(e)}
 				onpointercancel={(e) => ctrl.onPointerUp(e)}
 			>
+				{#if hasLaneKeys(lane) && lane.clips.some( (c) => selectedClipIds.includes(c.id) )}
+					{const from = $derived(vp.viewStart)}
+					<ClipKeys
+						top
+						noun="Layer keys"
+						times={laneKeyTimes(lane).map((t) => t - from)}
+						length={vp.viewEnd - from}
+						start={from}
+						easeAt={(t) => laneEaseAt(lane, from + t)}
+						beatSec={bpm > 0 ? 60 / bpm : 0}
+						{beatOffset}
+						onSeek={(t) => onSeek?.(t)}
+						onMove={(a, b, key) =>
+							editLane(
+								lane.id,
+								(l) => moveLaneKeys(l, from + a, from + b),
+								key,
+							)}
+						onEase={(t, ease) =>
+							editLane(lane.id, (l) => setLaneEaseAt(l, from + t, ease))}
+						onDelete={(t) =>
+							editLane(lane.id, (l) => removeLaneKeysAt(l, from + t))}
+						onRepeat={() =>
+							editLane(lane.id, (l) =>
+								repeatLaneKeys(l, Math.max(...l.clips.map((c) => c.end))),
+							)}
+					/>
+				{/if}
 				{#each lane.clips as clip (clip.id)}
 					{const left = $derived(vp.toPct(clip.start))}
 					{const width = $derived(vp.toPct(clip.end) - left)}

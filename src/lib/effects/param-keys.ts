@@ -2,13 +2,18 @@
  * that holds the chain, so a clip carries its animation wherever it goes. */
 
 import {
-	keyframeAt,
+	easeAtIn,
 	KEY_NEAR,
 	keyNear,
+	keyTimesOf,
+	moveKey,
 	normalizeTrack,
 	putKeyframe,
 	removeKeyframe,
+	repeatKeys,
 	sampleNumbers,
+	setEaseAt,
+	shiftKeys,
 	type KeyEase,
 	type Keyframe,
 } from "../keyframes";
@@ -17,9 +22,6 @@ import type { EffectInstance, ParamKeys, RangeParam } from "./types";
 
 /** More keys than any hand-built track; a save listing more is damaged. */
 const MAX_KEYS_PER_PARAM = 1000;
-
-/** Keys this close count as one moment on the timeline. */
-const SAME_MOMENT = 1e-3;
 
 export function isKeyed(effect: EffectInstance, paramKey: string): boolean {
 	return (effect.keys?.[paramKey]?.length ?? 0) > 0;
@@ -137,17 +139,13 @@ export function adjacentKeyTime(
 	return best;
 }
 
+function tracksOf(effects: EffectInstance[]): Keyframe<number>[][] {
+	return effects.flatMap((e) => Object.values(e.keys ?? {}));
+}
+
 /** Every moment the chain has a key, sorted, with the keys that sit there merged. */
 export function chainKeyTimes(effects: EffectInstance[]): number[] {
-	const times: number[] = [];
-	for (const e of effects)
-		for (const keys of Object.values(e.keys ?? {}))
-			for (const k of keys) times.push(k.t);
-	times.sort((a, b) => a - b);
-	const out: number[] = [];
-	for (const t of times)
-		if (out.length === 0 || t - out[out.length - 1] > SAME_MOMENT) out.push(t);
-	return out;
+	return keyTimesOf(tracksOf(effects));
 }
 
 /** The ease the keys at `time` share, or undefined when they differ or are linear. */
@@ -155,15 +153,7 @@ export function chainEaseAt(
 	effects: EffectInstance[],
 	time: number,
 ): KeyEase | "mixed" | undefined {
-	let ease: KeyEase | undefined | null = null;
-	for (const e of effects)
-		for (const keys of Object.values(e.keys ?? {})) {
-			const k = keyframeAt(keys, time);
-			if (!k) continue;
-			if (ease === null) ease = k.ease;
-			else if (ease !== k.ease) return "mixed";
-		}
-	return ease ?? undefined;
+	return easeAtIn(tracksOf(effects), time);
 }
 
 /** Each effect's keys rewritten by `map`; effects without keys stay as they are. */
@@ -186,9 +176,7 @@ export function shiftChainKeys(
 	delta: number,
 ): EffectInstance[] {
 	if (delta === 0 || !chainHasKeys(effects)) return effects;
-	return mapKeys(effects, (keys) =>
-		keys.map((k) => ({ ...k, t: k.t + delta })),
-	);
+	return mapKeys(effects, (keys) => shiftKeys(keys, delta));
 }
 
 /** Every key at `from` moved to `to`, landing on whatever sat there. */
@@ -197,14 +185,7 @@ export function moveChainKeys(
 	from: number,
 	to: number,
 ): EffectInstance[] {
-	return mapKeys(effects, (keys) => {
-		const k = keyframeAt(keys, from);
-		if (!k) return keys;
-		const rest = removeKeyframe(keys, k.t);
-		const moved = putKeyframe(rest, to, k.v);
-		if (k.ease) keyframeAt(moved, Math.max(0, to))!.ease = k.ease;
-		return moved;
-	});
+	return mapKeys(effects, (keys) => moveKey(keys, from, to));
 }
 
 export function removeChainKeysAt(
@@ -219,13 +200,19 @@ export function setChainEaseAt(
 	time: number,
 	ease: KeyEase | undefined,
 ): EffectInstance[] {
-	return mapKeys(effects, (keys) =>
-		keys.map((k) => {
-			if (Math.abs(k.t - time) > SAME_MOMENT) return k;
-			const { ease: _, ...plain } = k;
-			return ease ? { ...plain, ease } : plain;
-		}),
-	);
+	return mapKeys(effects, (keys) => setEaseAt(keys, time, ease));
+}
+
+/** The keys from the chain's first to its last played again and again up to `length`. */
+export function repeatChainKeys(
+	effects: EffectInstance[],
+	length: number,
+): EffectInstance[] {
+	const times = chainKeyTimes(effects);
+	if (times.length < 2) return effects;
+	const first = times[0];
+	const span = times[times.length - 1] - first;
+	return mapKeys(effects, (keys) => repeatKeys(keys, first, span, length));
 }
 
 /** Every key gone from the effects a roll replaces. */
@@ -287,41 +274,4 @@ export function copyParamKeys(keys: ParamKeys): ParamKeys {
 			track.map((key) => ({ ...key })),
 		]),
 	);
-}
-
-/** How long a repeat takes to jump back to the start of its run, when the run
- * doesn't end where it began. */
-const REPEAT_JUMP = 1 / 120;
-
-/** The keys from the first to the last played again and again up to `length`. A
- * run that ends on its start value loops seamlessly; one that doesn't jumps back. */
-export function repeatChainKeys(
-	effects: EffectInstance[],
-	length: number,
-): EffectInstance[] {
-	const times = chainKeyTimes(effects);
-	if (times.length < 2) return effects;
-	const first = times[0];
-	const span = times[times.length - 1] - first;
-	if (span <= SAME_MOMENT) return effects;
-	// Bounded however short the run: a crafted clip can't make this spin.
-	const cycles = Math.min(Math.floor((length - first) / span), 1000);
-	return mapKeys(effects, (keys) => {
-		const run = keys.filter((k) => k.t >= first - SAME_MOMENT);
-		let out = keys;
-		for (let n = 1; n <= cycles; n++) {
-			for (const [i, k] of run.entries()) {
-				let t = k.t + n * span;
-				if (t > length + SAME_MOMENT) break;
-				const there = keyframeAt(out, t);
-				if (i === 0 && there) {
-					if (there.v === k.v) continue;
-					t += REPEAT_JUMP;
-				}
-				out = putKeyframe(out, t, k.v);
-				if (k.ease) keyframeAt(out, t)!.ease = k.ease;
-			}
-		}
-		return out;
-	});
 }

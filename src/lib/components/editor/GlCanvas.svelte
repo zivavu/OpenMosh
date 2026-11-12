@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { laneStyleAt } from "../../media/lane-keys";
 	import { Minimize } from "lucide-svelte";
 	import type { Snippet } from "svelte";
 	import type { EffectInstance } from "../../effects";
@@ -345,7 +346,7 @@
 	function updateOutline() {
 		const lane = selectedMediaLane;
 		const mediaRect =
-			lane && renderer ? renderer.mediaLayerRect(lane.id, lane.style) : null;
+			lane && renderer ? renderer.mediaLayerRect(lane.id, placed(lane)) : null;
 		const rect = mediaRect ?? selectedTextRect();
 		const fit = rect ? frameFit() : null;
 		if (!rect || !fit || !previewArea) {
@@ -583,9 +584,14 @@
 	/** Client pixels of slack before a press turns into a move. */
 	const MOVE_SLOP = 3;
 
+	/** A lane's placement where the playhead is: its keys, sampled. */
+	function placed(lane: MediaLane): MediaStyle {
+		return laneStyleAt(lane, textTime);
+	}
+
 	function laneStyle(laneId: string): MediaStyle | null {
 		const lane = mediaTimeline?.lanes.find((l) => l.id === laneId);
-		return lane ? { ...lane.style } : null;
+		return lane ? { ...placed(lane) } : null;
 	}
 
 	function startMove(
@@ -723,13 +729,13 @@
 	function startScale(e: PointerEvent, hx: -1 | 0 | 1, hy: -1 | 0 | 1) {
 		const lane = selectedMediaLane;
 		if (!onLayerStyleChange || !lane || !renderer || e.button !== 0) return;
-		const rect = renderer.mediaLayerRect(lane.id, lane.style);
+		const rect = renderer.mediaLayerRect(lane.id, placed(lane));
 		if (!rect) return;
 		e.stopPropagation();
 		drag = {
 			kind: "scale",
 			laneId: lane.id,
-			from: { ...lane.style },
+			from: { ...placed(lane) },
 			moved: false,
 			hx,
 			hy,
@@ -747,7 +753,7 @@
 		const fit = frameFit();
 		if (!onLayerStyleChange || !lane || !renderer || !fit || e.button !== 0)
 			return;
-		const rect = renderer.mediaLayerRect(lane.id, lane.style);
+		const rect = renderer.mediaLayerRect(lane.id, placed(lane));
 		if (!rect) return;
 		e.stopPropagation();
 		const cx = rect.x + rect.w / 2;
@@ -757,7 +763,7 @@
 		drag = {
 			kind: "rotate",
 			laneId: lane.id,
-			from: { ...lane.style },
+			from: { ...placed(lane) },
 			moved: false,
 			cx,
 			cy,
@@ -769,9 +775,9 @@
 
 	function resetRotation() {
 		const lane = selectedMediaLane;
-		if (!onLayerStyleChange || !lane || lane.style.rotation === 0) return;
+		if (!onLayerStyleChange || !lane || placed(lane).rotation === 0) return;
 		onLayerDragStart?.(lane.id);
-		onLayerStyleChange(lane.id, { ...lane.style, rotation: 0 });
+		onLayerStyleChange(lane.id, { ...placed(lane), rotation: 0 });
 	}
 
 	function dragMove(e: PointerEvent) {

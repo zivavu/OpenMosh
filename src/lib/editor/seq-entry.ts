@@ -9,7 +9,8 @@ import { normalizeSourceEdits, type SourceEdit } from "../media/source-edit";
 
 /** Bumped when what a saved entry means changes; see SeqEntry.v. v3 moved the song
  * onto an audio lane and gave the project its own length; v4 runs an auto clip's
- * chain after its roll; v5 keys effect sliders over their clip. */
+ * chain after its roll; v5 keys effect sliders over their clip and a layer's placement
+ * over the timeline. */
 export const SEQ_ENTRY_VERSION = 5;
 
 /** As much of a saved segment as the migration reads. */

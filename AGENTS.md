@@ -150,6 +150,13 @@ Outside CI a run reuses whatever already serves its port, so when my dev server 
   lane's chain too), and blends the rest back to how that scope began. Moshes, clears and
   rolls never touch a Mask. Presets keep its painting and image. On a media clip it paints in the
   layer's box.
+- Keyframes (`lib/keyframes.ts`): an effect slider's keys (`EffectInstance.keys`) count
+  seconds from its clip's start and travel with the clip; a split shifts the right half's,
+  a trim doesn't, like the media under it. A media layer's placement keys (`MediaLane.keys`)
+  belong to the lane, in timeline seconds, shared by every clip on it. Resolvers sample keys
+  into copies and never write state, since they run inside `$derived`. A roll drops the keys
+  of what it rolls (Lock keeps them), presets keep them, and a param is keyed or
+  audio-linked, never both.
 - Code-split only what sits behind an `{#if}` that starts false, via `lib/lazy.ts`. Inline
   controls stay eager.
 - `Editor.svelte` wires; editor logic lives in `lib/editor/` as a class or factory taking a

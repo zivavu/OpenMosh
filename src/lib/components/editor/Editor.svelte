@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { setLaneStyleAt } from "../../media/lane-keys";
 	import LoadFailed from "../ui/LoadFailed.svelte";
 	import { onMount, tick, untrack } from "svelte";
 	import { hasKeyboard, modKey } from "../../input-device";
@@ -3166,15 +3167,13 @@
 					if (lane)
 						textState.updateLane({ ...lane, style: { ...lane.style, size } });
 				}}
-				onLayerStyleChange={(id, style) =>
-					(mediaState.timeline = updateMediaLaneIn(
+				onLayerStyleChange={(id, style) => {
+					mediaState.timeline = updateMediaLaneIn(
 						mediaState.timeline,
 						id,
-						(l) => ({
-							...l,
-							style,
-						}),
-					))}
+						(l) => setLaneStyleAt(l, style, previewTime),
+					);
+				}}
 			/>
 		</div>
 
@@ -3713,7 +3712,7 @@
 			<MediaClipPanel
 				lane={mediaState.selectedLane}
 				clip={mediaState.selectedClip}
-				time={isSequenceMode ? previewTime : null}
+				time={previewTime}
 				onSeek={clock.seek}
 				sources={poolSources}
 				onLaneChange={mediaState.updateLane}
