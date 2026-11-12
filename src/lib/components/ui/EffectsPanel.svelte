@@ -153,7 +153,12 @@
 		// maxlength stops typing, but not a paste on every browser/IME path.
 		const name = normalizePresetName(presetName);
 		if (!name) return;
-		presets = savePreset(name, $state.snapshot(effects));
+		try {
+			presets = savePreset(name, $state.snapshot(effects));
+		} catch (err) {
+			showToast(err instanceof Error ? err.message : String(err), "error");
+			return;
+		}
 		presetName = "";
 		saving = false;
 	}
@@ -181,7 +186,12 @@
 
 	function handleUpdatePreset(index: number) {
 		const seen = $state.snapshot(presets[index]) as Preset;
-		presets = updatePreset(index, $state.snapshot(effects), seen);
+		try {
+			presets = updatePreset(index, $state.snapshot(effects), seen);
+		} catch (err) {
+			showToast(err instanceof Error ? err.message : String(err), "error");
+			return;
+		}
 		// Its own row first: another preset can share the name.
 		const at =
 			presets[index]?.name === seen.name

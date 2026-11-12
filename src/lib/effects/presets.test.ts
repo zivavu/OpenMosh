@@ -15,6 +15,7 @@ import {
 	presetChainKey,
 	presetFileName,
 	presetsToFile,
+	PresetStorageFull,
 	savePreset,
 	updatePreset,
 } from "./presets";
@@ -199,7 +200,7 @@ describe("savePreset", () => {
 		});
 	});
 
-	it("leaves a Mask's painting and image behind, since they fit one picture", () => {
+	it("keeps a Mask's painting and image", () => {
 		const [preset] = savePreset("one", [
 			instance({
 				defId: "mask",
@@ -212,9 +213,15 @@ describe("savePreset", () => {
 		]);
 		expect(preset.effects[0].values).toEqual({
 			shape: "brush",
-			paint: "",
-			image: "",
+			paint: "data:image/png;base64,AAAA",
+			image: "data:image/png;base64,BBBB",
 		});
+	});
+
+	it("throws when the browser's storage has no room for it", () => {
+		loadPresets();
+		ls.full = true;
+		expect(() => savePreset("big", [instance()])).toThrow(PresetStorageFull);
 	});
 
 	it("omits an empty volumeLinks rather than bloating every entry", () => {

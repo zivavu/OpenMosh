@@ -148,7 +148,7 @@ Outside CI a run reuses whatever already serves its port, so when my dev server 
 - Area masking is the Mask effect (`effects/catalog/mask.ts`), not a per-effect toggle. It
   limits the effects above it, back to the previous Mask or the top of its own chain (an FX
   lane's chain too), and blends the rest back to how that scope began. Moshes, clears and
-  rolls never touch a Mask. Presets drop its painting. On a media clip it paints in the
+  rolls never touch a Mask. Presets keep its painting and image. On a media clip it paints in the
   layer's box.
 - Code-split only what sits behind an `{#if}` that starts false, via `lib/lazy.ts`. Inline
   controls stay eager.
