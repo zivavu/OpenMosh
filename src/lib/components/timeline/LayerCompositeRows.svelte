@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { Snippet } from "svelte";
 	import { BLEND_MODES, type TextOverlayBlendMode } from "../../text-overlay";
 	import RangeSlider from "../ui/RangeSlider.svelte";
 	import { percent } from "../../value-field";
@@ -16,9 +17,11 @@
 			coalesceKey?: string,
 		) => void;
 		onReset: (e: MouseEvent, key: "opacity" | "blendMode") => void;
+		/** Anything to put after the opacity read-out, such as its keyframe switch. */
+		opacityKey?: Snippet;
 	}
 
-	let { style, noun, idPrefix, onStyle, onReset }: Props = $props();
+	let { style, noun, idPrefix, onStyle, onReset, opacityKey }: Props = $props();
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -38,6 +41,7 @@
 		display={percent}
 	/>
 	<span class="val">{Math.round(style.opacity * 100)}%</span>
+	{@render opacityKey?.()}
 </div>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->

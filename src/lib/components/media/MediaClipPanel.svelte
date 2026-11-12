@@ -38,6 +38,19 @@
 		speedFactor,
 	} from "../../value-field";
 	import ClipChainSection from "../timeline/ClipChainSection.svelte";
+	import KeyDiamond from "../ui/KeyDiamond.svelte";
+	import { adjacentKeyTime } from "../../effects/param-keys";
+	import {
+		isPlacementKeyed,
+		laneKeyAt,
+		laneStyleAt,
+		setLaneStyleAt,
+		toggleLaneKey,
+		type PlacementKey,
+	} from "../../media/lane-keys";
+
+	const PLACEMENT_KEY_HINT =
+		"Animate this on the whole layer, whichever clip is playing. A key goes here with its current value; move the playhead, then the value, to add more.";
 	import ClipPanel from "../timeline/ClipPanel.svelte";
 	import FadeRows from "../timeline/FadeRows.svelte";
 	import TransitionRows from "./TransitionRows.svelte";
@@ -164,6 +177,9 @@
 	);
 	let laneSource = $derived(sources.find((s) => s.id === lane?.sourceId));
 
+	/** The placement as the playhead sees it, keys sampled. */
+	let shown = $derived(lane ? laneStyleAt(lane, time) : DEFAULT_MEDIA_STYLE);
+
 	function setStyle<K extends keyof MediaStyle>(
 		key: K,
 		value: MediaStyle[K],
@@ -171,7 +187,20 @@
 	) {
 		if (!lane) return;
 		onBeforeEdit?.(coalesceKey);
-		onLaneChange({ ...lane, style: { ...lane.style, [key]: value } });
+		onLaneChange(setLaneStyleAt(lane, { ...shown, [key]: value }, time));
+	}
+
+	function toggleKey(key: PlacementKey, clear: boolean) {
+		if (!lane || time === null) return;
+		onBeforeEdit?.();
+		onLaneChange(toggleLaneKey(lane, key, time, clear));
+	}
+
+	/** The playhead's way to the lane's next key on `key`, or null with none that way. */
+	function stepTo(key: PlacementKey, direction: -1 | 1): (() => void) | null {
+		if (!lane || time === null || !onSeek) return null;
+		const t = adjacentKeyTime(lane.keys?.[key], time, direction);
+		return t === null ? null : () => onSeek(t);
 	}
 
 	function resetStyle(e: MouseEvent, key: keyof MediaStyle) {
@@ -282,6 +311,20 @@
 			{speed >= 1 ? speed.toFixed(1) : speed.toFixed(2)}×
 		</span>
 	</div>
+{/snippet}
+
+{#snippet keyDiamond(key: PlacementKey, label: string)}
+	{#if lane && time !== null}
+		<KeyDiamond
+			{label}
+			keyed={isPlacementKeyed(lane, key)}
+			here={!!laneKeyAt(lane, key, time)}
+			startHint={PLACEMENT_KEY_HINT}
+			onToggle={(clear) => toggleKey(key, clear)}
+			prev={stepTo(key, -1)}
+			next={stepTo(key, 1)}
+		/>
+	{/if}
 {/snippet}
 
 <ClipPanel
@@ -605,14 +648,15 @@
 				<label for="mc-scale">Scale</label>
 				<RangeSlider
 					id="mc-scale"
-					value={lane.style.scale}
+					value={shown.scale}
 					min={0.05}
 					max={3}
 					step={0.01}
 					oninput={(v) => setStyle("scale", v, `mc-scale-${lane.id}`)}
 					display={percent}
 				/>
-				<span class="val">{Math.round(lane.style.scale * 100)}%</span>
+				<span class="val">{Math.round(shown.scale * 100)}%</span>
+				{@render keyDiamond("scale", "Scale")}
 			</div>
 
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -624,14 +668,15 @@
 				<label for="mc-scale-x">Scale X</label>
 				<RangeSlider
 					id="mc-scale-x"
-					value={lane.style.scaleX}
+					value={shown.scaleX}
 					min={-3}
 					max={3}
 					step={0.01}
 					oninput={(v) => setStyle("scaleX", v, `mc-scale-x-${lane.id}`)}
 					display={percent}
 				/>
-				<span class="val">{Math.round(lane.style.scaleX * 100)}%</span>
+				<span class="val">{Math.round(shown.scaleX * 100)}%</span>
+				{@render keyDiamond("scaleX", "Scale X")}
 			</div>
 
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -643,14 +688,15 @@
 				<label for="mc-scale-y">Scale Y</label>
 				<RangeSlider
 					id="mc-scale-y"
-					value={lane.style.scaleY}
+					value={shown.scaleY}
 					min={-3}
 					max={3}
 					step={0.01}
 					oninput={(v) => setStyle("scaleY", v, `mc-scale-y-${lane.id}`)}
 					display={percent}
 				/>
-				<span class="val">{Math.round(lane.style.scaleY * 100)}%</span>
+				<span class="val">{Math.round(shown.scaleY * 100)}%</span>
+				{@render keyDiamond("scaleY", "Scale Y")}
 			</div>
 
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -703,14 +749,15 @@
 				<label for="mc-x">Position X</label>
 				<RangeSlider
 					id="mc-x"
-					value={lane.style.x}
+					value={shown.x}
 					min={-0.5}
 					max={1.5}
 					step={0.005}
 					oninput={(v) => setStyle("x", v, `mc-x-${lane.id}`)}
 					display={hundredths}
 				/>
-				<span class="val">{Math.round(lane.style.x * 100)}</span>
+				<span class="val">{Math.round(shown.x * 100)}</span>
+				{@render keyDiamond("x", "X")}
 			</div>
 
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -722,14 +769,15 @@
 				<label for="mc-y">Position Y</label>
 				<RangeSlider
 					id="mc-y"
-					value={lane.style.y}
+					value={shown.y}
 					min={-0.5}
 					max={1.5}
 					step={0.005}
 					oninput={(v) => setStyle("y", v, `mc-y-${lane.id}`)}
 					display={hundredths}
 				/>
-				<span class="val">{Math.round(lane.style.y * 100)}</span>
+				<span class="val">{Math.round(shown.y * 100)}</span>
+				{@render keyDiamond("y", "Y")}
 			</div>
 
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -741,24 +789,29 @@
 				<label for="mc-rot">Rotation</label>
 				<RangeSlider
 					id="mc-rot"
-					value={lane.style.rotation}
+					value={shown.rotation}
 					min={-180}
 					max={180}
 					step={1}
 					oninput={(v) => setStyle("rotation", v, `mc-rot-${lane.id}`)}
 					display={degrees}
 				/>
-				<span class="val">{Math.round(lane.style.rotation)}°</span>
+				<span class="val">{Math.round(shown.rotation)}°</span>
+				{@render keyDiamond("rotation", "Rotation")}
 			</div>
 
 			<LayerCompositeRows
-				style={lane.style}
+				style={shown}
 				noun="the media"
 				idPrefix="mc"
 				onStyle={(key, value, coalesceKey) =>
 					setStyle(key, value as never, coalesceKey)}
 				onReset={resetStyle}
-			/>
+			>
+				{#snippet opacityKey()}
+					{@render keyDiamond("opacity", "Opacity")}
+				{/snippet}
+			</LayerCompositeRows>
 		{/if}
 	{/snippet}
 

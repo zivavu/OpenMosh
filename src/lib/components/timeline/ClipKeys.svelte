@@ -22,6 +22,10 @@
 		onEase: (t: number, ease: KeyEase | undefined) => void;
 		onDelete: (t: number) => void;
 		onRepeat?: () => void;
+		/** Along the top edge, for keys that belong to the whole lane. */
+		top?: boolean;
+		/** What the diamonds are keys of, for their tooltip. */
+		noun?: string;
 	}
 
 	let {
@@ -36,6 +40,8 @@
 		onEase,
 		onDelete,
 		onRepeat,
+		top = false,
+		noun = "Keys",
 	}: Props = $props();
 
 	/** Within this many pixels of a beat, a dragged key lands on it. */
@@ -136,7 +142,7 @@
 	];
 </script>
 
-<div class="clip-keys" bind:this={strip}>
+<div class="clip-keys" class:top bind:this={strip}>
 	{#each times as t, i (i)}
 		{#if t >= 0 && t <= length}
 			<button
@@ -144,10 +150,10 @@
 				class="clip-key"
 				class:hold={easeAt(t) === "hold"}
 				style="left: {pct(t)}%"
-				title="Keys at {formatTimeMs(
+				title="{noun} at {formatTimeMs(
 					start + t,
 				)}. Click to jump here and drag to move them. Right-click to change their ease or delete them."
-				aria-label="Keys at {formatTimeMs(start + t)}"
+				aria-label="{noun} at {formatTimeMs(start + t)}"
 				onpointerdown={(e) => onPointerDown(e, t)}
 				oncontextmenu={(e) => openMenu(e, t)}
 				onkeydown={(e) => onKeydown(e, t)}
@@ -205,6 +211,16 @@
 		bottom: 0;
 		height: 12px;
 		pointer-events: none;
+	}
+
+	.clip-keys.top {
+		top: 0;
+		bottom: auto;
+	}
+
+	.clip-keys.top .clip-key {
+		top: 1px;
+		bottom: auto;
 	}
 
 	.clip-key {
