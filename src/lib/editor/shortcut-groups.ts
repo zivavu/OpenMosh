@@ -173,6 +173,14 @@ const CLIP_ROWS: ShortcutRow[] = [
 	},
 	{ keys: ["Delete on a key"], description: "Delete the selected keys" },
 	{
+		keys: ["Drag a key in a setting row"],
+		description: "Move it in time and value; Shift keeps it to one direction",
+	},
+	{
+		keys: ["Dbl-click a setting row"],
+		description: "Add a key there; how high you click sets its value",
+	},
+	{
 		keys: ["Right-click a key"],
 		description:
 			"Ease the selected keys, delete them or every key, simplify, or repeat to the end",

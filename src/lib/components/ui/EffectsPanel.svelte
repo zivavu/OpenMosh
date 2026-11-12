@@ -55,6 +55,7 @@
 	import EffectItem from "./EffectItem.svelte";
 	import { showToast } from "./toast.svelte";
 	import { ParamTakes } from "../../effects/param-take";
+	import { effectFocus } from "../../effects/effect-focus.svelte";
 	import {
 		adjacentKeyTime,
 		clearParamKeys,
@@ -149,6 +150,17 @@
 		playing: () => playing,
 	});
 	onDestroy(() => takes.dispose());
+
+	// A keyframe row asked for one of this list's effects: open it and bring it in view.
+	$effect(() => {
+		const id = effectFocus.id;
+		if (!id) return;
+		const effect = effects.find((e) => e.instanceId === id);
+		if (!effect) return;
+		effectFocus.id = null;
+		effect.expanded = true;
+		void tick().then(() => centerOnEffect(id));
+	});
 
 	/** False for an effect the roll leaves alone; its controls stay live. */
 	function isRolled(effect: EffectInstance): boolean {

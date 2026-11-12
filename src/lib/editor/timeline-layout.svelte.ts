@@ -133,12 +133,21 @@ const FOLD_KEY = "openmosh-folded-lanes";
 /** Lane ids from every project share the key, so only the latest folds stay. */
 const MAX_FOLDED = 500;
 
+/** Lanes with their setting rows open under them, kept the same way as folds. */
+export const KEY_ROWS_KEY = "openmosh-key-rows";
+
 export class LaneFolds {
-	ids = $state<Set<string>>(new Set(readJson<string[]>(FOLD_KEY, [])));
+	readonly #key: string;
+	ids: Set<string>;
+
+	constructor(key = FOLD_KEY) {
+		this.#key = key;
+		this.ids = $state(new Set(readJson<string[]>(key, [])));
+	}
 
 	#set(next: Set<string>) {
 		this.ids = next;
-		writeJson(FOLD_KEY, [...next].slice(-MAX_FOLDED));
+		writeJson(this.#key, [...next].slice(-MAX_FOLDED));
 	}
 
 	allFolded(laneIds: string[]): boolean {

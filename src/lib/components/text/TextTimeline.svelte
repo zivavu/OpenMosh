@@ -1,4 +1,14 @@
 <script lang="ts">
+	import KeyRows from "../timeline/KeyRows.svelte";
+	import KeyRowsToggle from "../timeline/KeyRowsToggle.svelte";
+	import { clipAt } from "../../timeline/clips";
+	import { effectFocus } from "../../effects/effect-focus.svelte";
+	import {
+		chainKeyRows,
+		withChainTracks,
+		type KeyRow,
+		type RowTracks,
+	} from "../../timeline/key-rows";
 	import ChainClipKeys from "../timeline/ChainClipKeys.svelte";
 	import type { EffectInstance } from "../../effects/types";
 	import type { ChainClip } from "../../editor/chain-clip";
@@ -60,6 +70,11 @@
 		/** Seconds to the first beat, which dragged keys snap to. */
 		beatOffset?: number;
 		onSeek?: (time: number) => void;
+		/** Lanes whose animated settings show in rows under them. */
+		keyRowsOpen?: Set<string>;
+		onToggleKeyRows?: (laneId: string) => void;
+		/** Where the playhead is, for the clip a lane's setting rows show. */
+		playhead?: number;
 		/** The clip toolbar's actions, fanned out over the selection. */
 		onApplyPreset?: (clipIds: string[], preset: Preset) => void;
 		onRoll?: (clipIds: string[]) => void;
@@ -89,6 +104,9 @@
 		bpm = 0,
 		beatOffset = 0,
 		onSeek,
+		keyRowsOpen = new Set<string>(),
+		onToggleKeyRows,
+		playhead = 0,
 		onApplyPreset,
 		onRoll,
 		onClear,
@@ -96,6 +114,52 @@
 		lyricsSync = null,
 		lyricsOpen = $bindable(false),
 	}: Props = $props();
+
+	/** The clip a lane's setting rows show: the one picked on it, else the one
+	 * under the playhead. */
+	function rowClip(lane: TextLane) {
+		return (
+			lane.clips.find((c) => c.id === selectedClipId) ??
+			lane.clips.find((c) => selectedClipIds.includes(c.id)) ??
+			clipAt(lane, playhead)
+		);
+	}
+
+	function keyRowsOf(lane: TextLane): KeyRow[] {
+		const clip = rowClip(lane);
+		return clip ? chainKeyRows(clip) : [];
+	}
+
+	function editKeyRows(
+		lane: TextLane,
+		tracks: RowTracks,
+		coalesceKey?: string,
+	) {
+		const clip = rowClip(lane);
+		onBeforeEdit?.(coalesceKey);
+		if (!clip) return;
+		onChange({
+			...timeline,
+			lanes: timeline.lanes.map((l) =>
+				l.id !== lane.id
+					? l
+					: {
+							...l,
+							clips: l.clips.map((c) =>
+								c.id === clip.id
+									? { ...c, effects: withChainTracks(c.effects, tracks) }
+									: c,
+							),
+						},
+			),
+		});
+	}
+
+	function openKeyRow(lane: TextLane, row: KeyRow) {
+		const clip = rowClip(lane);
+		if (clip && !selectedClipIds.includes(clip.id)) ctrl.selectOnly(clip.id);
+		if (row.instanceId) effectFocus.id = row.instanceId;
+	}
 
 	/** A keyframe edit made on a clip's bar. */
 	function editClipKeys(
@@ -249,7 +313,16 @@
 				onNameClick={() => ctrl.openLane(lane)}
 				onRename={(name) => ctrl.setLane(lane.id, "name", name)}
 				onDelete={() => ctrl.requestDeleteLane(lane)}
-			/>
+			>
+				{#snippet trailing()}
+					{#if onToggleKeyRows && keyRowsOf(lane).length > 0}
+						<KeyRowsToggle
+							open={keyRowsOpen.has(lane.id)}
+							onToggle={() => onToggleKeyRows(lane.id)}
+						/>
+					{/if}
+				{/snippet}
+			</ClipLaneGutter>
 
 			<div
 				class="tl-lane lane-track"
@@ -304,6 +377,7 @@
 							<ChainClipKeys
 								{clip}
 								selected={selectedClipIds.includes(clip.id)}
+								summary={!keyRowsOpen.has(lane.id)}
 								{bpm}
 								{beatOffset}
 								{onSeek}
@@ -323,6 +397,23 @@
 				<ClipBoundaries {ctrl} {lane} />
 			</div>
 		</div>
+		{#if keyRowsOpen.has(lane.id)}
+			{@const rows = keyRowsOf(lane)}
+			{#if rows.length > 0}
+				<KeyRows
+					{rows}
+					order={stackIndex(layerOrder, lane.id)}
+					toPct={(t) => vp.toPct(t)}
+					viewStart={vp.viewStart}
+					viewEnd={vp.viewEnd}
+					{bpm}
+					{beatOffset}
+					onSeek={(t) => onSeek?.(t)}
+					onTracks={(tracks, key) => editKeyRows(lane, tracks, key)}
+					onOpenRow={(row) => openKeyRow(lane, row)}
+				/>
+			{/if}
+		{/if}
 	{/each}
 
 	{#if ctrl.lanePendingDelete}

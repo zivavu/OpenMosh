@@ -19,6 +19,8 @@
 		clip: ChainClip;
 		/** Unselected, the clip only shows that it animates. */
 		selected: boolean;
+		/** Off while the lane's setting rows are open: they show these keys instead. */
+		summary?: boolean;
 		bpm?: number;
 		beatOffset?: number;
 		onSeek?: (time: number) => void;
@@ -31,6 +33,7 @@
 	let {
 		clip,
 		selected,
+		summary = true,
 		bpm = 0,
 		beatOffset = 0,
 		onSeek,
@@ -42,7 +45,7 @@
 
 {#if !chainHasKeys(clip.effects)}
 	<!-- nothing keyed -->
-{:else if !selected}
+{:else if !selected || !summary}
 	<span class="animated" aria-hidden="true"></span>
 {:else}
 	<ClipKeys

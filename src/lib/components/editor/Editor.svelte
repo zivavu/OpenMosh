@@ -213,6 +213,7 @@
 	import TimelineStack from "../ui/TimelineStack.svelte";
 	import type { TimelineStackState } from "../../editor/timeline-stack.svelte";
 	import {
+		KEY_ROWS_KEY,
 		LaneFolds,
 		TimelineSplit,
 	} from "../../editor/timeline-layout.svelte";
@@ -2044,6 +2045,7 @@
 
 	const timelineSplit = new TimelineSplit();
 	const laneFolds = new LaneFolds();
+	const keyRowLanes = new LaneFolds(KEY_ROWS_KEY);
 
 	const handleKeydown = createKeyboardHandler({
 		save,
@@ -3482,6 +3484,9 @@
 							onClear={mediaState.clear}
 							beatOffset={tempo.beatOffset}
 							onSeek={clock.seek}
+							keyRowsOpen={keyRowLanes.ids}
+							onToggleKeyRows={keyRowLanes.toggle}
+							playhead={previewTime}
 							onModeChange={mediaState.modeChange}
 							plan={isSequenceMode ? mixPlan : undefined}
 							{peaksOf}
@@ -3506,6 +3511,9 @@
 							onClear={textState.clear}
 							beatOffset={tempo.beatOffset}
 							onSeek={clock.seek}
+							keyRowsOpen={keyRowLanes.ids}
+							onToggleKeyRows={keyRowLanes.toggle}
+							playhead={previewTime}
 							onModeChange={textState.modeChange}
 							{lyricsSync}
 							bind:lyricsOpen
@@ -3527,6 +3535,9 @@
 							bind:selectedLaneId={fxState.selectedLaneId}
 							beatOffset={tempo.beatOffset}
 							onSeek={clock.seek}
+							keyRowsOpen={keyRowLanes.ids}
+							onToggleKeyRows={keyRowLanes.toggle}
+							playhead={previewTime}
 							onModeChange={fxState.modeChange}
 							onRoll={fxState.moshes.roll}
 							onClear={fxState.clear}

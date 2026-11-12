@@ -1,4 +1,17 @@
 <script lang="ts">
+	import KeyRows from "../timeline/KeyRows.svelte";
+	import KeyRowsToggle from "../timeline/KeyRowsToggle.svelte";
+	import { clipAt } from "../../timeline/clips";
+	import { effectFocus } from "../../effects/effect-focus.svelte";
+	import {
+		chainKeyRows,
+		laneKeyRows,
+		touchesLane,
+		withChainTracks,
+		withLaneTracks,
+		type KeyRow,
+		type RowTracks,
+	} from "../../timeline/key-rows";
 	import ChainClipKeys from "../timeline/ChainClipKeys.svelte";
 	import ClipKeys from "../timeline/ClipKeys.svelte";
 	import {
@@ -103,6 +116,11 @@
 		/** Seconds to the first beat, which dragged keys snap to. */
 		beatOffset?: number;
 		onSeek?: (time: number) => void;
+		/** Lanes whose animated settings show in rows under them. */
+		keyRowsOpen?: Set<string>;
+		onToggleKeyRows?: (laneId: string) => void;
+		/** Where the playhead is, for the clip a lane's setting rows show. */
+		playhead?: number;
 		onApplyPreset?: (clipIds: string[], preset: Preset) => void;
 		onRoll?: (clipIds: string[]) => void;
 		onClear?: (clipIds: string[]) => void;
@@ -138,6 +156,9 @@
 		bpm = 0,
 		beatOffset = 0,
 		onSeek,
+		keyRowsOpen = new Set<string>(),
+		onToggleKeyRows,
+		playhead = 0,
 		onApplyPreset,
 		onRoll,
 		onClear,
@@ -146,6 +167,55 @@
 		peaksOf,
 		audioVersion = 0,
 	}: Props = $props();
+
+	/** The clip a lane's setting rows show: the one picked on it, else the one
+	 * under the playhead. */
+	function rowClip(lane: MediaLane) {
+		return (
+			lane.clips.find((c) => c.id === selectedClipId) ??
+			lane.clips.find((c) => selectedClipIds.includes(c.id)) ??
+			clipAt(lane, playhead)
+		);
+	}
+
+	function keyRowsOf(lane: MediaLane): KeyRow[] {
+		const clip = rowClip(lane);
+		const placement = laneKeyRows(lane);
+		return [
+			...placement,
+			...(clip ? chainKeyRows(clip, placement.length) : []),
+		];
+	}
+
+	function editKeyRows(
+		lane: MediaLane,
+		tracks: RowTracks,
+		coalesceKey?: string,
+	) {
+		const clip = rowClip(lane);
+		onBeforeEdit?.(coalesceKey);
+		onChange({
+			...timeline,
+			lanes: timeline.lanes.map((l) => {
+				if (l.id !== lane.id) return l;
+				const next = touchesLane(tracks) ? withLaneTracks(l, tracks) : l;
+				return {
+					...next,
+					clips: next.clips.map((c) =>
+						c.id === clip?.id
+							? { ...c, effects: withChainTracks(c.effects, tracks) }
+							: c,
+					),
+				};
+			}),
+		});
+	}
+
+	function openKeyRow(lane: MediaLane, row: KeyRow) {
+		const clip = rowClip(lane);
+		if (clip && !selectedClipIds.includes(clip.id)) ctrl.selectOnly(clip.id);
+		if (row.instanceId) effectFocus.id = row.instanceId;
+	}
 
 	/** A keyframe edit made on a lane's own keys. */
 	function editLane(
@@ -686,6 +756,12 @@
 					</button>
 				{/if}
 				{#snippet trailing()}
+					{#if onToggleKeyRows && keyRowsOf(lane).length > 0}
+						<KeyRowsToggle
+							open={keyRowsOpen.has(lane.id)}
+							onToggle={() => onToggleKeyRows(lane.id)}
+						/>
+					{/if}
 					{#if plan && laneHasSound(lane)}
 						{const muted = $derived(lane.audio?.muted ?? false)}
 						<button
@@ -843,6 +919,7 @@
 							<ChainClipKeys
 								{clip}
 								selected={selectedClipIds.includes(clip.id)}
+								summary={!keyRowsOpen.has(lane.id)}
 								{bpm}
 								{beatOffset}
 								{onSeek}
@@ -887,6 +964,23 @@
 				<ClipBoundaries {ctrl} {lane} />
 			</div>
 		</div>
+		{#if keyRowsOpen.has(lane.id)}
+			{@const rows = keyRowsOf(lane)}
+			{#if rows.length > 0}
+				<KeyRows
+					{rows}
+					order={stackIndex(layerOrder, lane.id)}
+					toPct={(t) => vp.toPct(t)}
+					viewStart={vp.viewStart}
+					viewEnd={vp.viewEnd}
+					{bpm}
+					{beatOffset}
+					onSeek={(t) => onSeek?.(t)}
+					onTracks={(tracks, key) => editKeyRows(lane, tracks, key)}
+					onOpenRow={(row) => openKeyRow(lane, row)}
+				/>
+			{/if}
+		{/if}
 	{/each}
 
 	{#if joinPopover}
