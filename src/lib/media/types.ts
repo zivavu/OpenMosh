@@ -29,7 +29,12 @@ import {
 	type SourceEdit,
 } from "./source-edit";
 import { normalizeClipTransition, type ClipTransition } from "./transition";
-import { normalizeLaneKeys, type LaneKeys } from "./lane-keys";
+import {
+	normalizeLaneKeyLinks,
+	normalizeLaneKeys,
+	type LaneKeyLinks,
+	type LaneKeys,
+} from "./lane-keys";
 
 export { MIN_CLIP_LENGTH } from "../timeline/clips";
 
@@ -136,6 +141,8 @@ export interface MediaLane {
 	audio?: LaneAudio;
 	/** Placement keyed over the timeline, in its seconds, shared by every clip. */
 	keys?: LaneKeys;
+	/** Placement values that follow a group's curve. */
+	keyLinks?: LaneKeyLinks;
 }
 
 export interface MediaTimeline {
@@ -286,6 +293,7 @@ export function duplicateMediaLane(lane: MediaLane, z: number): MediaLane {
 		z,
 		style: { ...lane.style },
 		...(lane.keys && { keys: normalizeLaneKeys(lane.keys) }),
+		...(lane.keyLinks && { keyLinks: normalizeLaneKeyLinks(lane.keyLinks) }),
 		clips: lane.clips.map((clip) => ({
 			...clip,
 			id: nextId("mclip"),
@@ -294,9 +302,13 @@ export function duplicateMediaLane(lane: MediaLane, z: number): MediaLane {
 	};
 }
 
-function withLaneKeys(raw: unknown): { keys?: LaneKeys } {
+function withLaneKeys(
+	raw: unknown,
+	rawLinks: unknown,
+): { keys?: LaneKeys; keyLinks?: LaneKeyLinks } {
 	const keys = normalizeLaneKeys(raw);
-	return keys ? { keys } : {};
+	const keyLinks = normalizeLaneKeyLinks(rawLinks);
+	return { ...(keys && { keys }), ...(keyLinks && { keyLinks }) };
 }
 
 /** A clip saved with no chain at all is backfilled, not left switch-less. */
@@ -320,7 +332,7 @@ export function normalizeMediaTimeline(raw: unknown): MediaTimeline {
 			z: finiteOr(lane.z, i),
 			sourceId: lane.sourceId ?? null,
 			style: { ...DEFAULT_MEDIA_STYLE, ...(lane.style ?? {}) },
-			...withLaneKeys(lane.keys),
+			...withLaneKeys(lane.keys, lane.keyLinks),
 			settings: normalizeLaneSettings(lane.settings),
 			audio: normalizeLaneAudio(lane.audio),
 			clips: records<MediaClip>(lane.clips).map((raw) => {

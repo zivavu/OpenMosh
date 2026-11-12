@@ -1,6 +1,6 @@
 <script lang="ts">
 	import LoadFailed from "../ui/LoadFailed.svelte";
-	import { SlidersHorizontal } from "lucide-svelte";
+	import { ArrowUpDown, SlidersHorizontal, X } from "lucide-svelte";
 	import {
 		autoOnSlideshow,
 		clipSourceId,
@@ -39,9 +39,18 @@
 	} from "../../value-field";
 	import ClipChainSection from "../timeline/ClipChainSection.svelte";
 	import KeyDiamond from "../ui/KeyDiamond.svelte";
+	import DualRangeSlider from "../ui/DualRangeSlider.svelte";
+	import { groupColor } from "../../timeline/key-rows";
+	import { keyNear } from "../../keyframes";
+	import type { KeyLink } from "../../key-groups";
 	import { adjacentKeyTime } from "../../effects/param-keys";
 	import {
+		groupPlacement,
 		isPlacementKeyed,
+		laneGroupNames,
+		PLACEMENT_RANGES,
+		setPlacementGroupRange,
+		ungroupPlacement,
 		laneKeyAt,
 		laneStyleAt,
 		setLaneStyleAt,
@@ -204,10 +213,58 @@
 		onLaneChange(toggleLaneKey(lane, key, time, clear));
 	}
 
+	function groupKey(key: PlacementKey, group: string | null | "leave") {
+		if (!lane || time === null) return;
+		onBeforeEdit?.();
+		onLaneChange(
+			group === "leave"
+				? ungroupPlacement(lane, key)
+				: groupPlacement(lane, key, group, time),
+		);
+	}
+
+	function setGroupRange(
+		key: PlacementKey,
+		range: Partial<Pick<KeyLink, "min" | "max" | "inverted">>,
+	) {
+		if (!lane) return;
+		onBeforeEdit?.(`group-range:${lane.id}:${key}`);
+		onLaneChange(setPlacementGroupRange(lane, key, range));
+	}
+
+	function placementGroupMenu(
+		key: PlacementKey,
+		current: string | undefined,
+	): { label: string; onSelect: () => void }[] {
+		if (!lane || time === null) return [];
+		if (current)
+			return [
+				{
+					label: `Leave group ${current}`,
+					onSelect: () => groupKey(key, "leave"),
+				},
+			];
+		return [
+			{ label: "New group", onSelect: () => groupKey(key, null) },
+			...laneGroupNames(lane).map((g) => ({
+				label: `Add to group ${g}`,
+				onSelect: () => groupKey(key, g),
+			})),
+		];
+	}
+
+	const GROUP_UPRIGHT_HINT =
+		"When the group is high, this sits at the top of its range";
+	const GROUP_INVERTED_HINT =
+		"Inverted: when the group is high, this sits at the bottom of its range";
+	const GROUP_LEAVE_HINT =
+		"Leave the group and keep the motion as keys of its own";
+
 	/** The playhead's way to the lane's next key on `key`, or null with none that way. */
 	function stepTo(key: PlacementKey, direction: -1 | 1): (() => void) | null {
 		if (!lane || time === null || !onSeek) return null;
-		const t = adjacentKeyTime(lane.keys?.[key], time, direction);
+		const keys = lane.keyLinks?.[key]?.keys ?? lane.keys?.[key];
+		const t = adjacentKeyTime(keys, time, direction);
 		return t === null ? null : () => onSeek(t);
 	}
 
@@ -323,15 +380,57 @@
 
 {#snippet keyDiamond(key: PlacementKey, label: string)}
 	{#if lane && time !== null}
+		{@const link = lane.keyLinks?.[key]}
 		<KeyDiamond
 			{label}
-			keyed={isPlacementKeyed(lane, key)}
-			here={!!laneKeyAt(lane, key, time)}
+			keyed={isPlacementKeyed(lane, key) || !!link}
+			here={link ? !!keyNear(link.keys, time) : !!laneKeyAt(lane, key, time)}
 			startHint={PLACEMENT_KEY_HINT}
 			onToggle={(clear) => toggleKey(key, clear)}
 			prev={stepTo(key, -1)}
 			next={stepTo(key, 1)}
+			group={link ? { name: link.group, color: groupColor(link.group) } : null}
+			menu={placementGroupMenu(key, link?.group)}
 		/>
+	{/if}
+{/snippet}
+
+{#snippet groupRange(key: PlacementKey)}
+	{@const link = lane?.keyLinks?.[key]}
+	{#if lane && link}
+		{@const range = PLACEMENT_RANGES[key]}
+		<div class="row group-range">
+			<span class="group-label" style="--group: {groupColor(link.group)}"
+				>Group {link.group} →</span
+			>
+			<DualRangeSlider
+				min={range.min}
+				max={range.max}
+				step={range.step}
+				valueLow={link.min}
+				valueHigh={link.max}
+				onChangeLow={(v) => setGroupRange(key, { min: v })}
+				onChangeHigh={(v) => setGroupRange(key, { max: v })}
+				formatValue={(v) => parseFloat(v.toString()).toFixed(2)}
+			/>
+			<button
+				type="button"
+				class="group-btn"
+				class:on={link.inverted}
+				title={link.inverted ? GROUP_INVERTED_HINT : GROUP_UPRIGHT_HINT}
+				onclick={() => setGroupRange(key, { inverted: !link.inverted })}
+			>
+				<ArrowUpDown size={12} />
+			</button>
+			<button
+				type="button"
+				class="group-btn"
+				title={GROUP_LEAVE_HINT}
+				onclick={() => groupKey(key, "leave")}
+			>
+				<X size={12} />
+			</button>
+		</div>
 	{/if}
 {/snippet}
 
@@ -666,6 +765,7 @@
 				<span class="val">{Math.round(shown.scale * 100)}%</span>
 				{@render keyDiamond("scale", "Scale")}
 			</div>
+			{@render groupRange("scale")}
 
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
@@ -686,6 +786,7 @@
 				<span class="val">{Math.round(shown.scaleX * 100)}%</span>
 				{@render keyDiamond("scaleX", "Scale X")}
 			</div>
+			{@render groupRange("scaleX")}
 
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
@@ -706,6 +807,7 @@
 				<span class="val">{Math.round(shown.scaleY * 100)}%</span>
 				{@render keyDiamond("scaleY", "Scale Y")}
 			</div>
+			{@render groupRange("scaleY")}
 
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
@@ -767,6 +869,7 @@
 				<span class="val">{Math.round(shown.x * 100)}</span>
 				{@render keyDiamond("x", "X")}
 			</div>
+			{@render groupRange("x")}
 
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
@@ -787,6 +890,7 @@
 				<span class="val">{Math.round(shown.y * 100)}</span>
 				{@render keyDiamond("y", "Y")}
 			</div>
+			{@render groupRange("y")}
 
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
@@ -807,6 +911,7 @@
 				<span class="val">{Math.round(shown.rotation)}°</span>
 				{@render keyDiamond("rotation", "Rotation")}
 			</div>
+			{@render groupRange("rotation")}
 
 			<LayerCompositeRows
 				style={shown}
@@ -820,6 +925,7 @@
 					{@render keyDiamond("opacity", "Opacity")}
 				{/snippet}
 			</LayerCompositeRows>
+			{@render groupRange("opacity")}
 		{/if}
 	{/snippet}
 
@@ -907,5 +1013,36 @@
 	.src-edit.on {
 		border-color: var(--live);
 		color: var(--live);
+	}
+
+	.group-range {
+		padding-left: 0.75rem;
+	}
+
+	.group-label {
+		-webkit-user-select: none;
+		user-select: none;
+		flex-shrink: 0;
+		font-family: var(--font-mono);
+		font-size: 0.6rem;
+		letter-spacing: 0.04em;
+		color: var(--group);
+	}
+
+	.group-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0.15rem;
+		background: none;
+		border: none;
+		border-radius: var(--r-1);
+		color: var(--text-3);
+		cursor: pointer;
+	}
+
+	.group-btn:hover,
+	.group-btn.on {
+		color: var(--text);
 	}
 </style>

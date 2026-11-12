@@ -9,6 +9,8 @@ import type { KeyLink } from "../key-groups";
 import type { EffectInstance } from "../effects/types";
 import {
 	PLACEMENT_KEYS,
+	PLACEMENT_RANGES,
+	setLaneGroupCurve,
 	setLaneTrack,
 	type PlacementKey,
 } from "../media/lane-keys";
@@ -60,6 +62,7 @@ const GROUP_ROW = "group:";
 
 const EFFECT_ROW = "fx:";
 const LANE_ROW = "lane:";
+const LANE_GROUP_ROW = "lanegroup:";
 
 function effectRowId(instanceId: string, param: string): string {
 	return `${EFFECT_ROW}${instanceId}:${param}`;
@@ -130,26 +133,13 @@ function chainGroups(
 	return new Map([...groups].sort(([a], [b]) => a.localeCompare(b)));
 }
 
-const PLACEMENT_ROWS: Record<
-	PlacementKey,
-	{ label: string; min: number; max: number; step: number }
-> = {
-	x: { label: "X", min: -0.5, max: 1.5, step: 0.005 },
-	y: { label: "Y", min: -0.5, max: 1.5, step: 0.005 },
-	scale: { label: "Scale", min: 0.05, max: 3, step: 0.01 },
-	scaleX: { label: "Scale X", min: -3, max: 3, step: 0.01 },
-	scaleY: { label: "Scale Y", min: -3, max: 3, step: 0.01 },
-	rotation: { label: "Rotation", min: -180, max: 180, step: 1 },
-	opacity: { label: "Opacity", min: 0, max: 1, step: 0.01 },
-};
-
 /** One row per keyed placement value, on the whole timeline. */
 export function laneKeyRows(lane: MediaLane, firstColor = 0): KeyRow[] {
 	const rows: KeyRow[] = [];
 	for (const key of PLACEMENT_KEYS) {
 		const keys = lane.keys?.[key];
 		if (!keys?.length) continue;
-		const { label, min, max, step } = PLACEMENT_ROWS[key];
+		const { label, min, max, step } = PLACEMENT_RANGES[key];
 		rows.push({
 			id: `${LANE_ROW}${key}`,
 			label: `Layer · ${label}`,
@@ -163,6 +153,24 @@ export function laneKeyRows(lane: MediaLane, firstColor = 0): KeyRow[] {
 			to: Infinity,
 		});
 	}
+	const groups = new Map<string, KeyLink[]>();
+	for (const link of Object.values(lane.keyLinks ?? {}))
+		if (link) groups.set(link.group, [...(groups.get(link.group) ?? []), link]);
+	for (const [group, links] of [...groups].sort(([a], [b]) =>
+		a.localeCompare(b),
+	))
+		rows.push({
+			id: `${LANE_GROUP_ROW}${group}`,
+			label: `Layer group ${group} · ${links.length} ${links.length === 1 ? "value" : "values"}`,
+			color: groupColor(group),
+			keys: links[0].keys,
+			min: 0,
+			max: 1,
+			step: 0,
+			offset: 0,
+			from: 0,
+			to: Infinity,
+		});
 	return rows;
 }
 
@@ -192,6 +200,10 @@ export function withChainTracks(
 export function withLaneTracks(lane: MediaLane, tracks: RowTracks): MediaLane {
 	let next = lane;
 	for (const [id, keys] of tracks) {
+		if (id.startsWith(LANE_GROUP_ROW)) {
+			next = setLaneGroupCurve(next, id.slice(LANE_GROUP_ROW.length), keys);
+			continue;
+		}
 		if (!id.startsWith(LANE_ROW)) continue;
 		next = setLaneTrack(next, id.slice(LANE_ROW.length) as PlacementKey, keys);
 	}
@@ -200,7 +212,9 @@ export function withLaneTracks(lane: MediaLane, tracks: RowTracks): MediaLane {
 
 /** Whether any of the edits belong to a lane's own rows rather than a clip's. */
 export function touchesLane(tracks: RowTracks): boolean {
-	return [...tracks.keys()].some((id) => id.startsWith(LANE_ROW));
+	return [...tracks.keys()].some(
+		(id) => id.startsWith(LANE_ROW) || id.startsWith(LANE_GROUP_ROW),
+	);
 }
 
 /** A key on a row, by its row and its time. */

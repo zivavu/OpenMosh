@@ -1,7 +1,17 @@
 import { describe, expect, it } from "bun:test";
-import { DEFAULT_MEDIA_STYLE, resolveMediaLayersAt, type MediaLane } from ".";
+import {
+	DEFAULT_MEDIA_STYLE,
+	normalizeMediaTimeline,
+	resolveMediaLayersAt,
+	type MediaLane,
+} from ".";
+import { laneKeyRows, withLaneTracks } from "../timeline/key-rows";
 import {
 	clearLaneKeys,
+	groupPlacement,
+	laneGroupNames,
+	setPlacementGroupRange,
+	ungroupPlacement,
 	laneKeyTimes,
 	laneStyleAt,
 	normalizeLaneKeys,
@@ -118,5 +128,41 @@ describe("lane placement keys", () => {
 				bogus: [{ t: 0, v: 1 }],
 			}),
 		).toEqual({ opacity: [{ t: 0, v: 1 }], x: [{ t: 1, v: 0 }] });
+	});
+});
+
+describe("layer placement groups", () => {
+	it("moves x and rotation together on one curve, each in its own range", () => {
+		let l = groupPlacement(sliding(), "x", null, 0);
+		l = groupPlacement(l, "rotation", "A", 0);
+		l = setPlacementGroupRange(l, "rotation", { min: 0, max: 90 });
+		const at = laneStyleAt(l, 4);
+		expect(at.x).toBeCloseTo(0.5);
+		expect(at.rotation).toBe(45);
+		expect(laneGroupNames(l)).toEqual(["A"]);
+	});
+
+	it("keys the curve when a grouped value is dragged, and shows as one row", () => {
+		let l = groupPlacement(sliding(), "x", null, 0);
+		l = groupPlacement(l, "opacity", "A", 0);
+		l = setLaneStyleAt(l, { ...laneStyleAt(l, 4), x: 0.8 }, 4);
+		expect(l.keyLinks!.opacity!.keys).toEqual(l.keyLinks!.x!.keys);
+		expect(laneStyleAt(l, 4).x).toBeCloseTo(0.8);
+		const rows = laneKeyRows(l);
+		expect(rows.map((r) => r.label)).toEqual(["Layer group A · 2 values"]);
+		const next = withLaneTracks(l, new Map([[rows[0].id, [{ t: 1, v: 0 }]]]));
+		expect(next.keyLinks!.opacity!.keys).toEqual([{ t: 1, v: 0 }]);
+	});
+
+	it("leaving keeps the motion, and a save reads it back", () => {
+		const grouped = groupPlacement(sliding(), "x", null, 0);
+		const left = ungroupPlacement(grouped, "x");
+		expect(left.keyLinks).toBeUndefined();
+		expect(left.keys?.x?.map((k) => k.v)).toEqual([0.2, 0.8]);
+		const [read] = normalizeMediaTimeline({
+			enabled: true,
+			lanes: [JSON.parse(JSON.stringify(grouped))],
+		}).lanes;
+		expect(read.keyLinks).toEqual(grouped.keyLinks);
 	});
 });
