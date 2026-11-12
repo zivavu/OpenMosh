@@ -58,7 +58,8 @@ function onStep(defId: string, paramKey: string, v: number): number {
 	return Math.max(param.min, Math.min(param.max, snapped));
 }
 
-function withKeys(
+/** The effect with `keys` as the param's whole track; empty stops it animating. */
+export function setParamTrack(
 	effect: EffectInstance,
 	paramKey: string,
 	keys: Keyframe<number>[] | null,
@@ -80,7 +81,7 @@ export function setParamKey(
 ): EffectInstance {
 	const keys = putKeyframe(effect.keys?.[paramKey], time, value);
 	return {
-		...withKeys(effect, paramKey, keys),
+		...setParamTrack(effect, paramKey, keys),
 		values: { ...effect.values, [paramKey]: value },
 	};
 }
@@ -98,7 +99,7 @@ export function removeParamKey(
 	const left = removeKeyframe(keys, hit.t);
 	const value = left.length > 0 ? effect.values[paramKey] : hit.v;
 	return {
-		...withKeys(effect, paramKey, left),
+		...setParamTrack(effect, paramKey, left),
 		values: { ...effect.values, [paramKey]: value },
 	};
 }
@@ -111,7 +112,7 @@ export function clearParamKeys(
 ): EffectInstance {
 	const value = paramValueAt(effect, paramKey, time);
 	return {
-		...withKeys(effect, paramKey, null),
+		...setParamTrack(effect, paramKey, null),
 		values: { ...effect.values, [paramKey]: value },
 	};
 }
@@ -165,7 +166,7 @@ function mapKeys(
 		if (!e.keys) return e;
 		let next: EffectInstance = e;
 		for (const [param, keys] of Object.entries(e.keys))
-			next = withKeys(next, param, map(keys));
+			next = setParamTrack(next, param, map(keys));
 		return next;
 	});
 }
@@ -274,4 +275,10 @@ export function copyParamKeys(keys: ParamKeys): ParamKeys {
 			track.map((key) => ({ ...key })),
 		]),
 	);
+}
+
+/** How far a recorded pass may stray from its keys once thinned: 1% of the slider. */
+export function paramTolerance(defId: string, paramKey: string): number {
+	const param = rangeParam(defId, paramKey);
+	return param ? (param.max - param.min) * 0.01 : 0.01;
 }

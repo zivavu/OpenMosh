@@ -28,6 +28,7 @@
 		/** The playhead, on the timeline the clip sits on; without it nothing is keyed. */
 		time?: number | null;
 		onSeek?: (time: number) => void;
+		playing?: boolean;
 	}
 
 	let {
@@ -44,6 +45,7 @@
 		onAllBands,
 		time = null,
 		onSeek,
+		playing = false,
 	}: Props = $props();
 
 	// Keys sit inside the clip: a playhead past either end keys its nearest edge.
@@ -111,5 +113,6 @@
 	onBeforeUserEdit={onBeforeEdit}
 	{onAllBands}
 	{keyTime}
+	{playing}
 	onKeySeek={onSeek ? (t) => onSeek(clip.start + t) : undefined}
 />
