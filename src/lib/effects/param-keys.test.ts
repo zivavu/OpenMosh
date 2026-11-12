@@ -11,6 +11,7 @@ import {
 	moveChainKeys,
 	paramValueAt,
 	removeParamKey,
+	repeatChainKeys,
 	setChainEaseAt,
 	setParamKey,
 } from "./param-keys";
@@ -135,5 +136,22 @@ describe("on a clip", () => {
 		const target = [{ ...posterize(), instanceId: "other" }];
 		const [out] = fanOutChainEdit(before, after, target);
 		expect(out.keys?.levels).toEqual([{ t: 1, v: 9 }]);
+	});
+});
+
+describe("repeatChainKeys", () => {
+	it("loops a run that ends where it began", () => {
+		let e = setParamKey(posterize(), "levels", 0, 4);
+		e = setParamKey(e, "levels", 1, 12);
+		e = setParamKey(e, "levels", 2, 4);
+		const [out] = repeatChainKeys([e], 6);
+		expect(out.keys?.levels.map((k) => k.t)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+	});
+
+	it("jumps back to the start of a one-way ramp", () => {
+		const [out] = repeatChainKeys([ramp()], 8);
+		expect(paramValueAt(out, "levels", 4)).toBe(12);
+		expect(paramValueAt(out, "levels", 4.1)).toBeLessThan(6);
+		expect(paramValueAt(out, "levels", 8)).toBe(12);
 	});
 });

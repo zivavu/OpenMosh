@@ -288,3 +288,40 @@ export function copyParamKeys(keys: ParamKeys): ParamKeys {
 		]),
 	);
 }
+
+/** How long a repeat takes to jump back to the start of its run, when the run
+ * doesn't end where it began. */
+const REPEAT_JUMP = 1 / 120;
+
+/** The keys from the first to the last played again and again up to `length`. A
+ * run that ends on its start value loops seamlessly; one that doesn't jumps back. */
+export function repeatChainKeys(
+	effects: EffectInstance[],
+	length: number,
+): EffectInstance[] {
+	const times = chainKeyTimes(effects);
+	if (times.length < 2) return effects;
+	const first = times[0];
+	const span = times[times.length - 1] - first;
+	if (span <= SAME_MOMENT) return effects;
+	// Bounded however short the run: a crafted clip can't make this spin.
+	const cycles = Math.min(Math.floor((length - first) / span), 1000);
+	return mapKeys(effects, (keys) => {
+		const run = keys.filter((k) => k.t >= first - SAME_MOMENT);
+		let out = keys;
+		for (let n = 1; n <= cycles; n++) {
+			for (const [i, k] of run.entries()) {
+				let t = k.t + n * span;
+				if (t > length + SAME_MOMENT) break;
+				const there = keyframeAt(out, t);
+				if (i === 0 && there) {
+					if (there.v === k.v) continue;
+					t += REPEAT_JUMP;
+				}
+				out = putKeyframe(out, t, k.v);
+				if (k.ease) keyframeAt(out, t)!.ease = k.ease;
+			}
+		}
+		return out;
+	});
+}

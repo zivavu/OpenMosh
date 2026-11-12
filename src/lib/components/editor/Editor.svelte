@@ -3463,6 +3463,8 @@
 							onApplyPreset={mediaState.applyPreset}
 							onRoll={mediaState.moshes.roll}
 							onClear={mediaState.clear}
+							beatOffset={tempo.beatOffset}
+							onSeek={clock.seek}
 							onModeChange={mediaState.modeChange}
 							plan={isSequenceMode ? mixPlan : undefined}
 							{peaksOf}
@@ -3485,6 +3487,8 @@
 							onApplyPreset={textState.applyPreset}
 							onRoll={textState.moshes.roll}
 							onClear={textState.clear}
+							beatOffset={tempo.beatOffset}
+							onSeek={clock.seek}
 							onModeChange={textState.modeChange}
 							{lyricsSync}
 							bind:lyricsOpen
@@ -3504,6 +3508,8 @@
 							onBeforeEdit={fxState.pushHistory}
 							bpm={tempo.bpm}
 							bind:selectedLaneId={fxState.selectedLaneId}
+							beatOffset={tempo.beatOffset}
+							onSeek={clock.seek}
 							onModeChange={fxState.modeChange}
 							onRoll={fxState.moshes.roll}
 							onClear={fxState.clear}
