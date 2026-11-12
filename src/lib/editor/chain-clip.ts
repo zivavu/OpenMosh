@@ -15,6 +15,7 @@ import {
 	type ClipLane,
 	type TimelineClip,
 } from "../timeline/clips";
+import { chainAtKeyTime, shiftChainKeys } from "../effects/param-keys";
 import type { MoshOptions, MoshStyle } from "./mosh";
 import { putRoll } from "./roll-cache";
 import type { MoshSnapshot } from "./mosh-history";
@@ -202,7 +203,7 @@ export function splitChainClipAt<
 		...clip,
 		id: newId(),
 		start: at,
-		effects: cloneChainEffects(clip.effects),
+		effects: shiftChainKeys(cloneChainEffects(clip.effects), clip.start - at),
 	};
 	// An auto clip's right half picks up on the roll that was playing at the cut.
 	if (clip.mode === "interval" && clip.seed !== undefined)
@@ -257,7 +258,8 @@ export function chainClipEffectsAt(
 	getMoshOptions: () => MoshOptions,
 	tick = chainClipTick(clip, time),
 ): EffectInstance[] {
-	const own = ownChain(clip, cache, clone);
+	const stored = ownChain(clip, cache, clone);
+	const own = chainAtKeyTime(stored, time - clip.start);
 	if (clip.mode !== "interval") return own;
 
 	const options = getMoshOptions();
@@ -268,6 +270,8 @@ export function chainClipEffectsAt(
 		rolled = rollEffects(seed, options);
 		putRoll(cache, rollKey, rolled);
 	}
+	// Keyed values change every frame, so that join isn't worth keeping.
+	if (own !== stored) return [...rolled, ...own];
 	const key = `${rollKey}:${chainId(own)}`;
 	let effects = cache.get(key);
 	if (!effects) {

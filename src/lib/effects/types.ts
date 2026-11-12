@@ -1,3 +1,5 @@
+import type { Keyframe } from "../keyframes";
+
 export function generateId(): string {
 	if (typeof crypto !== "undefined" && crypto.randomUUID) {
 		return crypto.randomUUID();
@@ -155,7 +157,12 @@ export interface EffectInstance {
 	values: Record<string, number | string>;
 	/** For range params: key = param key, value = range (min/max) volume maps to. */
 	volumeLinks?: Record<string, VolumeLink>;
+	/** Keyframed sliders, by param key; seconds from the start of the clip. */
+	keys?: ParamKeys;
 }
+
+/** A param animated over its clip, keys sorted by time. */
+export type ParamKeys = Record<string, Keyframe<number>[]>;
 
 export interface Preset {
 	name: string;
@@ -164,5 +171,6 @@ export interface Preset {
 		enabled: boolean;
 		values: Record<string, number | string>;
 		volumeLinks?: Record<string, VolumeLink>;
+		keys?: ParamKeys;
 	}[];
 }

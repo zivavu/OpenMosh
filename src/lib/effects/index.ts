@@ -23,6 +23,7 @@ import { generateId } from "./types";
 import { EFFECT_DEFINITIONS } from "./definitions";
 import { hydrateEffects } from "./hydrate";
 import { readJson } from "../storage";
+import { copyParamKeys } from "./param-keys";
 
 export function createEffectInstance(def: EffectDefinition): EffectInstance {
 	return {
@@ -42,6 +43,7 @@ export function cloneEffectInstance(e: EffectInstance): EffectInstance {
 		instanceId: generateId(),
 		values: { ...e.values },
 		volumeLinks: e.volumeLinks ? { ...e.volumeLinks } : undefined,
+		...(e.keys && { keys: copyParamKeys(e.keys) }),
 	};
 }
 

@@ -86,6 +86,9 @@
 		onRefreshSlideshow?: (sourceId: string) => void;
 		/** Read the single edit this clip came from again. */
 		onRefreshSingle?: (sessionKey: string) => void;
+		/** The playhead, which keys land at. */
+		time?: number | null;
+		onSeek?: (time: number) => void;
 	}
 
 	let {
@@ -112,6 +115,8 @@
 		onAttachAudio,
 		onRefreshSlideshow,
 		onRefreshSingle,
+		time = null,
+		onSeek,
 	}: Props = $props();
 
 	// This chain runs on the lane's media, so a Mask paints over its box.
@@ -770,6 +775,8 @@
 				hint="this clip's media"
 				note={chainNote}
 				{onAllBands}
+				{time}
+				{onSeek}
 			/>
 		{/if}
 	{/snippet}

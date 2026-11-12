@@ -1,3 +1,4 @@
+import { chainAtKeyTime } from "../effects/param-keys";
 import type { AudioResponse } from "../audio/auto-range";
 import { chainClipEffectsAt, laneMoshOptions } from "../editor/chain-clip";
 import { cutAt, type CutList } from "./cut-list";
@@ -288,7 +289,7 @@ export function resolveMediaLayersAt(
 									slideFrame: lane.style.slideFrame,
 									effects: chains
 										? chains(lane, prev, time, prevAt.sourceTime)
-										: prev.effects,
+										: chainAtKeyTime(prev.effects, time - prev.start),
 								}
 							: null,
 					concrete,
@@ -309,7 +310,9 @@ export function resolveMediaLayersAt(
 			slideFrame: lane.style.slideFrame,
 			style: lane.style,
 			opacity: lane.style.opacity * mediaClipWeight(clip, time),
-			effects: chains ? chains(lane, clip, time, at.sourceTime) : clip.effects,
+			effects: chains
+				? chains(lane, clip, time, at.sourceTime)
+				: chainAtKeyTime(clip.effects, elapsed),
 			response: lane.settings?.audioResponse,
 			transition,
 		});

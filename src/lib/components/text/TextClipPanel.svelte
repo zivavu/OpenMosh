@@ -49,6 +49,9 @@
 		onAllBands?: (band: FreqBand) => void;
 		/** For the font-on-beat rows to say when there's no tempo to follow. */
 		bpm?: number;
+		/** The playhead, which keys land at. */
+		time?: number | null;
+		onSeek?: (time: number) => void;
 	}
 
 	let {
@@ -67,6 +70,8 @@
 		selectionNote = null,
 		onAllBands,
 		bpm,
+		time = null,
+		onSeek,
 	}: Props = $props();
 
 	function setStyle<K extends keyof TextStyle>(
@@ -391,6 +396,8 @@
 				hint="this clip's text"
 				note={chainNote}
 				{onAllBands}
+				{time}
+				{onSeek}
 			>
 				{#if opaqueNames.length > 0}
 					<p class="warn">

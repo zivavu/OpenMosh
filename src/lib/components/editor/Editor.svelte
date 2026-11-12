@@ -1169,6 +1169,14 @@
 		isSequenceMode ? fxState.previewSource(clock.masterTime()) : [],
 	);
 
+	/** The playhead inside the selected fx clip, where its sliders key. */
+	let fxKeyTime = $derived.by(() => {
+		const clip = fxState.selectedClip;
+		if (!clip) return null;
+		const t = clock.masterTime() - clip.start;
+		return Math.min(Math.max(t, 0), clip.end - clip.start);
+	});
+
 	/** The same effects flat, for the panel-facing chain and the audio tick. */
 	let fxChain = $derived(flattenFxLayers(fxLayers));
 
@@ -3699,6 +3707,8 @@
 			<MediaClipPanel
 				lane={mediaState.selectedLane}
 				clip={mediaState.selectedClip}
+				time={isSequenceMode ? previewTime : null}
+				onSeek={clock.seek}
 				sources={poolSources}
 				onLaneChange={mediaState.updateLane}
 				onClipChange={mediaState.updateClip}
@@ -3732,6 +3742,8 @@
 			<TextClipPanel
 				lane={textState.selectedLane}
 				clip={textState.selectedClip}
+				time={previewTime}
+				onSeek={clock.seek}
 				onLaneChange={textState.updateLane}
 				onClipChange={textState.updateClip}
 				onBeforeEdit={textState.beforeClipEdit}
@@ -3799,6 +3811,9 @@
 					}}
 					onBeforeUserEdit={panelBeforeEdit}
 					onAllBands={setFxClipsBand}
+					keyTime={fxKeyTime}
+					onKeySeek={(t) =>
+						fxState.selectedClip && clock.seek(fxState.selectedClip.start + t)}
 				/>
 			{/if}
 		{/snippet}

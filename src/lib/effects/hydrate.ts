@@ -1,4 +1,5 @@
 import { EFFECT_DEFINITIONS } from "./definitions";
+import { hydrateParamKeys } from "./param-keys";
 import { hueToHex } from "../color";
 import { parseKeys, serializeKeys } from "./mask-keys";
 import { reportRemovedEffect, reportResetSetting } from "./load-report";
@@ -196,6 +197,9 @@ export function hydrateEffects(saved: unknown): EffectInstance[] {
 				volumeLinks: hydrateLinks(e.defId, e.volumeLinks),
 			}),
 		});
+		const keys = hydrateParamKeys(e.defId, e.keys);
+		if (keys) hydrated[hydrated.length - 1].keys = keys;
+		else delete hydrated[hydrated.length - 1].keys;
 	}
 	return hydrated;
 }

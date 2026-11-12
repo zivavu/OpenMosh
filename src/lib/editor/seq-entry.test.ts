@@ -14,10 +14,11 @@ import v0 from "./fixtures/seq-entry/v0.json";
 import v2 from "./fixtures/seq-entry/v2.json";
 import v3 from "./fixtures/seq-entry/v3.json";
 import v4 from "./fixtures/seq-entry/v4.json";
+import v5 from "./fixtures/seq-entry/v5.json";
 
 /** Entries as each version saved them, built with that version's own factories.
  * Never regenerate these: they stand for projects already on people's machines. */
-const FIXTURES = { v0, v2, v3, v4 } as unknown as Record<string, SeqEntry>;
+const FIXTURES = { v0, v2, v3, v4, v5 } as unknown as Record<string, SeqEntry>;
 const OPENED = "opened-file";
 
 describe.each(Object.entries(FIXTURES))("a %s entry", (_, entry) => {
@@ -96,6 +97,7 @@ describe("before v3", () => {
 describe.each([
 	["v3", FIXTURES.v3],
 	["v4", FIXTURES.v4],
+	["v5", FIXTURES.v5],
 ])("%s", (_, entry) => {
 	it("keeps its length, song and a span clamped to the length", () => {
 		const restored = readSeqEntry(structuredClone(entry), OPENED);
@@ -215,5 +217,22 @@ describe("isNewerEntry", () => {
 
 	it("is true past the current version", () => {
 		expect(isNewerEntry({ v: SEQ_ENTRY_VERSION + 1 })).toBe(true);
+	});
+});
+
+describe("from v5", () => {
+	it("keeps keyed sliders on layer and fx clips, eases and all", () => {
+		const restored = readSeqEntry(structuredClone(FIXTURES.v5), OPENED);
+		const layer = restored.media!.lanes[0].clips[0].effects.find(
+			(e) => e.defId === "posterize",
+		)!;
+		expect(layer.keys?.levels).toEqual([
+			{ t: 0, v: 3, ease: "hold" },
+			{ t: 4, v: 12 },
+		]);
+		const fx = restored.fx[0].clips[0].effects.find(
+			(e) => e.defId === "pixelate",
+		)!;
+		expect(fx.keys?.size.map((k) => k.t)).toEqual([0, 2, 4]);
 	});
 });
