@@ -155,13 +155,27 @@ const CLIP_ROWS: ShortcutRow[] = [
 		description: "Records its moves as keys, thinned to a few when you let go",
 	},
 	{
-		keys: ["Drag a key on a selected clip"],
-		description:
-			"Move the keys at that moment; they snap to beats unless Alt is held",
+		keys: ["Click a key"],
+		description: "Select it and move the playhead there",
 	},
 	{
+		keys: ["Shift+Click a key"],
+		description: "Select every key between it and the last one picked",
+	},
+	{
+		keys: ["Ctrl/Cmd+Click a key"],
+		description: "Add it to the selection or take it out",
+	},
+	{
+		keys: ["Drag a key"],
+		description:
+			"Move the selected keys; they snap to beats unless Alt is held",
+	},
+	{ keys: ["Delete on a key"], description: "Delete the selected keys" },
+	{
 		keys: ["Right-click a key"],
-		description: "Ease it, delete it, or repeat the keys to the clip's end",
+		description:
+			"Ease the selected keys, delete them or every key, simplify, or repeat to the end",
 	},
 ];
 

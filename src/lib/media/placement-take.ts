@@ -8,6 +8,7 @@ import {
 	isPlacementKeyed,
 	laneStyleAt,
 	PLACEMENT_KEYS,
+	PLACEMENT_TOLERANCE,
 	type LaneKeys,
 	type PlacementKey,
 } from "./lane-keys";
@@ -25,17 +26,6 @@ export interface PlacementTakeHost {
 	time(): number;
 	playing(): boolean;
 }
-
-/** How far a thinned pass may stray from what was recorded. */
-const TOLERANCE: Record<PlacementKey, number> = {
-	x: 0.004,
-	y: 0.004,
-	scale: 0.01,
-	scaleX: 0.01,
-	scaleY: 0.01,
-	rotation: 0.5,
-	opacity: 0.01,
-};
 
 function isPlacement(key: string): key is PlacementKey {
 	return (PLACEMENT_KEYS as readonly string[]).includes(key);
@@ -103,7 +93,7 @@ export class PlacementTakes {
 						keys[p] = writeTake(
 							base[p],
 							taken,
-							final ? TOLERANCE[p] : undefined,
+							final ? PLACEMENT_TOLERANCE[p] : undefined,
 						);
 					return { ...l, keys };
 				}),

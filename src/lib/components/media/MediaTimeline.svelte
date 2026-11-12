@@ -6,9 +6,11 @@
 		laneEaseAt,
 		laneKeyTimes,
 		moveLaneKeys,
+		clearLaneKeys,
 		removeLaneKeysAt,
 		repeatLaneKeys,
 		setLaneEaseAt,
+		simplifyLaneKeys,
 	} from "../../media/lane-keys";
 	import type { EffectInstance } from "../../effects/types";
 	import type { ChainClip } from "../../editor/chain-clip";
@@ -722,8 +724,7 @@
 				{#if hasLaneKeys(lane) && lane.clips.some( (c) => selectedClipIds.includes(c.id) )}
 					{const from = $derived(vp.viewStart)}
 					<ClipKeys
-						top
-						noun="Layer keys"
+						scope="layer"
 						times={laneKeyTimes(lane).map((t) => t - from)}
 						length={vp.viewEnd - from}
 						start={from}
@@ -731,16 +732,34 @@
 						beatSec={bpm > 0 ? 60 / bpm : 0}
 						{beatOffset}
 						onSeek={(t) => onSeek?.(t)}
-						onMove={(a, b, key) =>
+						onMove={(times, delta, key) =>
 							editLane(
 								lane.id,
-								(l) => moveLaneKeys(l, from + a, from + b),
+								(l) =>
+									moveLaneKeys(
+										l,
+										times.map((t) => from + t),
+										delta,
+									),
 								key,
 							)}
-						onEase={(t, ease) =>
-							editLane(lane.id, (l) => setLaneEaseAt(l, from + t, ease))}
-						onDelete={(t) =>
-							editLane(lane.id, (l) => removeLaneKeysAt(l, from + t))}
+						onEase={(times, ease) =>
+							editLane(lane.id, (l) =>
+								setLaneEaseAt(
+									l,
+									times.map((t) => from + t),
+									ease,
+								),
+							)}
+						onDelete={(times) =>
+							editLane(lane.id, (l) =>
+								removeLaneKeysAt(
+									l,
+									times.map((t) => from + t),
+								),
+							)}
+						onDeleteAll={() => editLane(lane.id, clearLaneKeys)}
+						onSimplify={() => editLane(lane.id, simplifyLaneKeys)}
 						onRepeat={() =>
 							editLane(lane.id, (l) =>
 								repeatLaneKeys(l, Math.max(...l.clips.map((c) => c.end))),

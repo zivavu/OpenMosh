@@ -6,6 +6,7 @@ import { generateMosh } from "../editor/mosh";
 import {
 	chainAtKeyTime,
 	chainKeyTimes,
+	clearChainKeys,
 	clearParamKeys,
 	hydrateParamKeys,
 	moveChainKeys,
@@ -14,6 +15,8 @@ import {
 	repeatChainKeys,
 	setChainEaseAt,
 	setParamKey,
+	simplifyChainKeys,
+	removeChainKeysAt,
 } from "./param-keys";
 import type { EffectInstance } from "./types";
 
@@ -71,12 +74,24 @@ describe("chain key edits", () => {
 		const a = ramp();
 		const b = { ...setParamKey(posterize(), "levels", 4, 2) };
 		expect(chainKeyTimes([a, b])).toEqual([0, 4]);
-		const moved = moveChainKeys([a, b], 4, 3);
+		const moved = moveChainKeys([a, b], [4], -1);
 		expect(chainKeyTimes(moved)).toEqual([0, 3]);
 	});
 
+	it("deletes, clears and simplifies keys across the chain", () => {
+		const both = [ramp(), setParamKey(posterize(), "levels", 4, 2)];
+		expect(chainKeyTimes(removeChainKeysAt(both, [0, 4]))).toEqual([]);
+		const [cleared] = clearChainKeys([ramp()]);
+		expect(cleared.keys).toBeUndefined();
+		expect(cleared.values.levels).toBe(4);
+		let dense = posterize();
+		for (let i = 0; i <= 40; i++)
+			dense = setParamKey(dense, "levels", i / 10, 4 + i / 5);
+		expect(simplifyChainKeys([dense])[0].keys?.levels).toHaveLength(2);
+	});
+
 	it("sets an ease on every key at a moment", () => {
-		const [e] = setChainEaseAt([ramp()], 0, "hold");
+		const [e] = setChainEaseAt([ramp()], [0], "hold");
 		expect(paramValueAt(e, "levels", 3.9)).toBe(4);
 	});
 });

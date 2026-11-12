@@ -5,13 +5,15 @@ import {
 	easeAtIn,
 	keyNear,
 	keyTimesOf,
-	moveKey,
 	normalizeTrack,
 	putKeyframe,
 	removeKeyframe,
 	repeatKeys,
 	sampleNumbers,
-	setEaseAt,
+	removeKeysAtTimes,
+	setEaseAtTimes,
+	shiftKeysAt,
+	simplifyKeys,
 	type KeyEase,
 	type Keyframe,
 } from "../keyframes";
@@ -152,29 +154,66 @@ function mapTracks(
 
 export function moveLaneKeys(
 	lane: MediaLane,
-	from: number,
-	to: number,
+	times: readonly number[],
+	delta: number,
 ): MediaLane {
-	return mapTracks(lane, (keys) => moveKey(keys, from, to));
+	return mapTracks(lane, (keys) => shiftKeysAt(keys, times, delta));
 }
 
-export function removeLaneKeysAt(lane: MediaLane, time: number): MediaLane {
-	const held = laneStyleAt(lane, time);
-	const next = mapTracks(lane, (keys) => removeKeyframe(keys, time));
-	// A track left with nothing keeps the value its last key had.
-	const style = { ...next.style };
-	for (const key of PLACEMENT_KEYS)
-		if (isPlacementKeyed(lane, key) && !isPlacementKeyed(next, key))
-			style[key] = held[key];
-	return { ...next, style };
+/** A track left with nothing keeps the value its first key had. */
+function settleEmptied(before: MediaLane, after: MediaLane): MediaLane {
+	const style = { ...after.style };
+	for (const key of PLACEMENT_KEYS) {
+		const keys = before.keys?.[key];
+		if (keys?.length && !isPlacementKeyed(after, key)) style[key] = keys[0].v;
+	}
+	return { ...after, style };
+}
+
+export function removeLaneKeysAt(
+	lane: MediaLane,
+	times: readonly number[],
+): MediaLane {
+	return settleEmptied(
+		lane,
+		mapTracks(lane, (keys) => removeKeysAtTimes(keys, times)),
+	);
+}
+
+export function clearLaneKeys(lane: MediaLane): MediaLane {
+	return settleEmptied(
+		lane,
+		mapTracks(lane, () => []),
+	);
 }
 
 export function setLaneEaseAt(
 	lane: MediaLane,
-	time: number,
+	times: readonly number[],
 	ease: KeyEase | undefined,
 ): MediaLane {
-	return mapTracks(lane, (keys) => setEaseAt(keys, time, ease));
+	return mapTracks(lane, (keys) => setEaseAtTimes(keys, times, ease));
+}
+
+/** How far thinned keys may stray from the motion they replace. */
+export const PLACEMENT_TOLERANCE: Record<PlacementKey, number> = {
+	x: 0.004,
+	y: 0.004,
+	scale: 0.01,
+	scaleX: 0.01,
+	scaleY: 0.01,
+	rotation: 0.5,
+	opacity: 0.01,
+};
+
+export function simplifyLaneKeys(lane: MediaLane): MediaLane {
+	let next = lane;
+	for (const key of PLACEMENT_KEYS) {
+		const keys = lane.keys?.[key];
+		if (keys)
+			next = withTrack(next, key, simplifyKeys(keys, PLACEMENT_TOLERANCE[key]));
+	}
+	return next;
 }
 
 /** The lane's keys from first to last played again and again until `end`. */

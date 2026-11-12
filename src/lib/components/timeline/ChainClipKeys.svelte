@@ -5,10 +5,12 @@
 		chainEaseAt,
 		chainHasKeys,
 		chainKeyTimes,
+		clearChainKeys,
 		moveChainKeys,
 		removeChainKeysAt,
 		repeatChainKeys,
 		setChainEaseAt,
+		simplifyChainKeys,
 	} from "../../effects/param-keys";
 	import ClipKeys from "./ClipKeys.svelte";
 
@@ -44,6 +46,7 @@
 	<span class="animated" aria-hidden="true"></span>
 {:else}
 	<ClipKeys
+		scope="clip"
 		times={chainKeyTimes(clip.effects)}
 		{length}
 		start={clip.start}
@@ -51,9 +54,12 @@
 		beatSec={bpm > 0 ? 60 / bpm : 0}
 		{beatOffset}
 		onSeek={(t) => onSeek?.(t)}
-		onMove={(from, to, key) => onEdit((e) => moveChainKeys(e, from, to), key)}
-		onEase={(t, ease) => onEdit((e) => setChainEaseAt(e, t, ease))}
-		onDelete={(t) => onEdit((e) => removeChainKeysAt(e, t))}
+		onMove={(times, delta, key) =>
+			onEdit((e) => moveChainKeys(e, times, delta), key)}
+		onEase={(times, ease) => onEdit((e) => setChainEaseAt(e, times, ease))}
+		onDelete={(times) => onEdit((e) => removeChainKeysAt(e, times))}
+		onDeleteAll={() => onEdit(clearChainKeys)}
+		onSimplify={() => onEdit(simplifyChainKeys)}
 		onRepeat={() => onEdit((e) => repeatChainKeys(e, length))}
 	/>
 {/if}
