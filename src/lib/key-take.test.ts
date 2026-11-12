@@ -117,6 +117,7 @@ describe("ParamTakes", () => {
 		const takes = new ParamTakes({
 			effects: () => effects,
 			replace: (i, e) => (effects = effects.map((x, j) => (j === i ? e : x))),
+			replaceAll: (next) => (effects = next),
 			beforeEdit: () => edits++,
 			afterEdit: () => {},
 			time: () => t,
@@ -143,6 +144,7 @@ describe("ParamTakes", () => {
 		const host = {
 			effects: () => effects,
 			replace: () => {},
+			replaceAll: () => {},
 			beforeEdit: () => {},
 			afterEdit: () => {},
 			time: () => 1,

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ContextMenu from "../ui/ContextMenu.svelte";
 	import { Diamond } from "lucide-svelte";
 	import { formatTimeMs } from "../../audio/audio-utils";
 	import type { KeyEase } from "../../keyframes";
@@ -183,20 +184,6 @@
 		menu = null;
 	}
 
-	$effect(() => {
-		if (!menu) return;
-		const close = (e: Event) => {
-			if (e instanceof KeyboardEvent && e.key !== "Escape") return;
-			menu = null;
-		};
-		window.addEventListener("pointerdown", close);
-		window.addEventListener("keydown", close);
-		return () => {
-			window.removeEventListener("pointerdown", close);
-			window.removeEventListener("keydown", close);
-		};
-	});
-
 	/** The ease every selected key shares, for the menu's check mark. */
 	let sharedEase = $derived.by(() => {
 		const eases = selected.map(easeAt);
@@ -237,13 +224,7 @@
 
 {#if menu}
 	<!-- Fixed, so the lane's own overflow can't clip it. -->
-	<div
-		class="key-menu"
-		role="menu"
-		tabindex="-1"
-		style="left: {menu.x}px; top: {menu.y}px"
-		onpointerdown={(e) => e.stopPropagation()}
-	>
+	<ContextMenu x={menu.x} y={menu.y} onClose={() => (menu = null)}>
 		{#each EASES as option (option.label)}
 			<button
 				type="button"
@@ -297,7 +278,7 @@
 				onclick={() => pick(onRepeat)}>Repeat to the {scope}'s end</button
 			>
 		{/if}
-	</div>
+	</ContextMenu>
 {/if}
 
 <style>
@@ -358,49 +339,5 @@
 	.clip-key:hover,
 	.clip-key:focus-visible {
 		color: var(--text);
-	}
-
-	.key-menu {
-		position: fixed;
-		z-index: 1000;
-		min-width: 180px;
-		padding: 0.25rem;
-		display: flex;
-		flex-direction: column;
-		background: var(--raised);
-		border: 1px solid var(--line-strong);
-		border-radius: var(--r-2);
-		box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
-	}
-
-	.key-menu button {
-		padding: 0.3rem 0.5rem;
-		text-align: left;
-		font-size: 0.72rem;
-		color: var(--text-2);
-		background: none;
-		border: none;
-		border-radius: var(--r-1);
-		cursor: pointer;
-	}
-
-	.key-menu button:hover {
-		background: var(--sunken);
-		color: var(--text);
-	}
-
-	.key-menu button.active {
-		color: var(--live);
-	}
-
-	.key-menu button.danger:hover {
-		color: var(--rec);
-	}
-
-	.key-menu hr {
-		width: 100%;
-		margin: 0.2rem 0;
-		border: none;
-		border-top: 1px solid var(--line);
 	}
 </style>

@@ -7,6 +7,7 @@ import {
 	type ParamKeys,
 	type VolumeLink,
 } from "../effects";
+import type { KeyLink } from "../key-groups";
 import { hasVolumeLinks, setAllLinkBands } from "../effects/link-bands";
 import type { ChainClip } from "./chain-clip";
 import { handBuiltLabel, isHandBuiltLabel, isHeld } from "./sequence";
@@ -77,7 +78,19 @@ function applyChanges(
 		if (track) keys[k] = track.map((key) => ({ ...key }));
 		else delete keys[k];
 	}
-	const { keys: _, ...rest } = target;
+	const keyLinks: Record<string, KeyLink> = { ...target.keyLinks };
+	const linked = new Set([
+		...Object.keys(before.keyLinks ?? {}),
+		...Object.keys(after.keyLinks ?? {}),
+	]);
+	for (const k of linked) {
+		const link = after.keyLinks?.[k];
+		if (JSON.stringify(before.keyLinks?.[k]) === JSON.stringify(link)) continue;
+		if (link)
+			keyLinks[k] = { ...link, keys: link.keys.map((key) => ({ ...key })) };
+		else delete keyLinks[k];
+	}
+	const { keys: _, keyLinks: __, ...rest } = target;
 	return {
 		...rest,
 		enabled: after.enabled !== before.enabled ? after.enabled : target.enabled,
@@ -85,6 +98,7 @@ function applyChanges(
 		values,
 		volumeLinks: Object.keys(links).length > 0 ? links : undefined,
 		...(Object.keys(keys).length > 0 && { keys }),
+		...(Object.keys(keyLinks).length > 0 && { keyLinks }),
 	};
 }
 

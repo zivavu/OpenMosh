@@ -236,6 +236,15 @@ describe("from v5", () => {
 		expect(fx.keys?.size.map((k) => k.t)).toEqual([0, 2, 4]);
 	});
 
+	it("keeps a grouped slider's link to its group", () => {
+		const restored = readSeqEntry(structuredClone(FIXTURES.v5), OPENED);
+		const vhs = restored.media!.lanes[0].clips[0].effects.find(
+			(e) => e.defId === "vhs",
+		)!;
+		expect(vhs.keyLinks?.static).toMatchObject({ group: "A", inverted: true });
+		expect(vhs.keyLinks?.static.keys).toHaveLength(2);
+	});
+
 	it("keeps a layer's keyed placement", () => {
 		const restored = readSeqEntry(structuredClone(FIXTURES.v5), OPENED);
 		const lane = restored.media!.lanes[0];

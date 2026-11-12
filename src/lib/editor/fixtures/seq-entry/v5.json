@@ -994,6 +994,25 @@
 									"static": 0.5,
 									"speed": 1,
 									"tracking": 0.5
+								},
+								"keyLinks": {
+									"static": {
+										"group": "A",
+										"min": 0.1,
+										"max": 0.6,
+										"inverted": true,
+										"keys": [
+											{
+												"t": 0,
+												"v": 0
+											},
+											{
+												"t": 4,
+												"v": 1,
+												"ease": "smooth"
+											}
+										]
+									}
 								}
 							}
 						]
