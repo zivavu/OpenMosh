@@ -4,6 +4,7 @@ import {
 	cloneEffectInstance,
 	type EffectInstance,
 	type FreqBand,
+	type ParamKeys,
 	type VolumeLink,
 } from "../effects";
 import { hasVolumeLinks, setAllLinkBands } from "../effects/link-bands";
@@ -64,12 +65,26 @@ function applyChanges(
 		if (link) links[k] = { ...link };
 		else delete links[k];
 	}
+	// Key times count from each clip's start, so every target gets the same ramp.
+	const keys: ParamKeys = { ...target.keys };
+	const keyed = new Set([
+		...Object.keys(before.keys ?? {}),
+		...Object.keys(after.keys ?? {}),
+	]);
+	for (const k of keyed) {
+		const track = after.keys?.[k];
+		if (JSON.stringify(before.keys?.[k]) === JSON.stringify(track)) continue;
+		if (track) keys[k] = track.map((key) => ({ ...key }));
+		else delete keys[k];
+	}
+	const { keys: _, ...rest } = target;
 	return {
-		...target,
+		...rest,
 		enabled: after.enabled !== before.enabled ? after.enabled : target.enabled,
 		locked: after.locked !== before.locked ? after.locked : target.locked,
 		values,
 		volumeLinks: Object.keys(links).length > 0 ? links : undefined,
+		...(Object.keys(keys).length > 0 && { keys }),
 	};
 }
 

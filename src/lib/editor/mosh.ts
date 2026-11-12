@@ -210,6 +210,8 @@ export function generateMosh(
 			if (effect.volumeLinks && isMoshable(effect)) delete effect.volumeLinks;
 		}
 	}
+	// A roll writes fresh values, so the animation it replaces goes with them.
+	for (const effect of effects) if (isMoshable(effect)) delete effect.keys;
 }
 
 /** On top of the roll, not part of it: 3D Transform stays out of flat media's moshes. */

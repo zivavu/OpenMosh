@@ -25,6 +25,9 @@
 		/** Whether edits here also reach the rest of a multi-selection. */
 		note?: string | null;
 		onAllBands?: (band: FreqBand) => void;
+		/** The playhead, on the timeline the clip sits on; without it nothing is keyed. */
+		time?: number | null;
+		onSeek?: (time: number) => void;
 	}
 
 	let {
@@ -39,7 +42,16 @@
 		children,
 		note = null,
 		onAllBands,
+		time = null,
+		onSeek,
 	}: Props = $props();
+
+	// Keys sit inside the clip: a playhead past either end keys its nearest edge.
+	let keyTime = $derived(
+		time === null
+			? null
+			: Math.min(Math.max(time - clip.start, 0), clip.end - clip.start),
+	);
 
 	// The clip's chain, mirrored for EffectsPanel to own and written back on every
 	// edit: the chain on show is this mirror, so the editor has nothing to apply.
@@ -98,4 +110,6 @@
 		})}
 	onBeforeUserEdit={onBeforeEdit}
 	{onAllBands}
+	{keyTime}
+	onKeySeek={onSeek ? (t) => onSeek(clip.start + t) : undefined}
 />

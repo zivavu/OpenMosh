@@ -54,6 +54,15 @@
 	import { keepLockedInPreset } from "../../editor/sequence";
 	import EffectItem from "./EffectItem.svelte";
 	import { showToast } from "./toast.svelte";
+	import {
+		adjacentKeyTime,
+		clearParamKeys,
+		isKeyed,
+		keyAtTime,
+		paramValueAt,
+		removeParamKey,
+		setParamKey,
+	} from "../../effects/param-keys";
 	import { downloadFile } from "../../utils";
 
 	export type { SpectrumData };
@@ -95,6 +104,10 @@
 		rolledChain?: boolean;
 		/** Which effects the roll owns: 'all' rebuilds the chain, 'moshable' runs over a copy. */
 		rolledScope?: "all" | "moshable";
+		/** Seconds into the clip that holds this chain; null where sliders can't be keyed. */
+		keyTime?: number | null;
+		/** Move the playhead to this many seconds into the clip. */
+		onKeySeek?: (clipTime: number) => void;
 	}
 
 	let {
@@ -116,6 +129,8 @@
 		rolledChain = false,
 		rolledScope = "all",
 		headless = false,
+		keyTime = null,
+		onKeySeek,
 	}: Props = $props();
 
 	/** False for an effect the roll leaves alone; its controls stay live. */
@@ -481,13 +496,44 @@
 		else if (history !== "none") {
 			onBeforeUserEdit?.(`param:${effects[index].instanceId}:${key}`);
 		}
-		effects[index].values[key] = value;
+		if (
+			keyTime !== null &&
+			typeof value === "number" &&
+			isKeyed(effects[index], key)
+		)
+			effects[index] = setParamKey(effects[index], key, keyTime, value);
+		else effects[index].values[key] = value;
 		if (!effects[index].enabled) {
 			hold(effects[index]);
 			effects[index].enabled = true;
 		}
 		appliedIndex = null;
 		onUserEdit?.();
+	}
+
+	/** Start animating a param, key it at the playhead, or take the key there away. */
+	function keyToggle(index: number, key: string, clear: boolean) {
+		if (keyTime === null) return;
+		const effect = effects[index];
+		onBeforeUserEdit?.();
+		if (!isKeyed(effect, key)) {
+			const value = Number(effect.values[key]);
+			effects[index] = setParamKey(effect, key, keyTime, value);
+		} else if (clear) effects[index] = clearParamKeys(effect, key, keyTime);
+		else if (keyAtTime(effect, key, keyTime))
+			effects[index] = removeParamKey(effect, key, keyTime);
+		else {
+			const value = Number(paramValueAt(effect, key, keyTime));
+			effects[index] = setParamKey(effect, key, keyTime, value);
+		}
+		appliedIndex = null;
+		onUserEdit?.();
+	}
+
+	function keySeek(index: number, key: string, direction: -1 | 1) {
+		if (keyTime === null) return;
+		const t = adjacentKeyTime(effects[index].keys?.[key], keyTime, direction);
+		if (t !== null) onKeySeek?.(t);
 	}
 
 	function handleDragStart(index: number, e: DragEvent) {
@@ -1020,6 +1066,9 @@
 					onDragEnd={clearDragState}
 					onTouchDragStart={(e) => handleTouchDragStart(i, e)}
 					effectIndex={i}
+					{keyTime}
+					onKeyToggle={(key, clear) => keyToggle(i, key, clear)}
+					onKeySeek={onKeySeek ? (key, dir) => keySeek(i, key, dir) : undefined}
 				/>
 			{/each}
 

@@ -1,3 +1,4 @@
+import { chainAtKeyTime } from "../effects/param-keys";
 import { chainClipEffectsAt } from "../editor/chain-clip";
 import type { MoshOptions } from "../editor/mosh";
 import type { EffectInstance } from "../effects/types";
@@ -140,7 +141,9 @@ export function resolveTextLayersAt(
 			z: lane.z,
 			text: clip.text,
 			style,
-			effects: chains ? chains(clip, time) : clip.effects,
+			effects: chains
+				? chains(clip, time)
+				: chainAtKeyTime(clip.effects, time - clip.start),
 		});
 	}
 	return layers;

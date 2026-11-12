@@ -1,4 +1,5 @@
-import type { EffectInstance, Preset, VolumeLink } from "./types";
+import type { EffectInstance, ParamKeys, Preset, VolumeLink } from "./types";
+import { copyParamKeys, hydrateParamKeys } from "./param-keys";
 import { generateId } from "./types";
 import { getDefinition, hydrateLinks, hydrateValues } from "./hydrate";
 import { reportRemovedEffect } from "./load-report";
@@ -88,7 +89,8 @@ export function presetChainKey(effects: EffectInstance[]): string {
 			.map((e) => {
 				const values = { ...e.values };
 				for (const key of Object.keys(e.volumeLinks ?? {})) delete values[key];
-				return [e.defId, values, e.volumeLinks];
+				for (const key of Object.keys(e.keys ?? {})) delete values[key];
+				return [e.defId, values, e.volumeLinks, e.keys];
 			}),
 	);
 }
@@ -103,6 +105,7 @@ function serializeEffects(effects: EffectInstance[]): Preset["effects"] {
 			Object.keys(e.volumeLinks).length > 0 && {
 				volumeLinks: copyLinks(e.volumeLinks),
 			}),
+		...(e.keys && { keys: copyParamKeys(e.keys) }),
 	}));
 }
 
@@ -163,6 +166,7 @@ export function applyPreset(preset: Preset): EffectInstance[] {
 		.filter((pe) => getDefinition(pe.defId))
 		.map((pe) => {
 			const links = pe.volumeLinks && hydrateLinks(pe.defId, pe.volumeLinks);
+			const keys = hydrateParamKeys(pe.defId, pe.keys);
 			return {
 				instanceId: generateId(),
 				defId: pe.defId,
@@ -173,6 +177,7 @@ export function applyPreset(preset: Preset): EffectInstance[] {
 				// still gets a sane value for it.
 				values: hydrateValues(pe.defId, pe.values),
 				...(links && { volumeLinks: links }),
+				...(keys && { keys }),
 			};
 		});
 }
@@ -242,6 +247,7 @@ export function parsePresetFile(text: string): Preset[] {
 				...(isRecord(e.volumeLinks) && {
 					volumeLinks: e.volumeLinks as Record<string, VolumeLink>,
 				}),
+				...(isRecord(e.keys) && { keys: e.keys as ParamKeys }),
 			});
 		}
 		const name = normalizePresetName(p.name);
