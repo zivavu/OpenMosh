@@ -77,6 +77,19 @@ function withTrack(
 	return Object.keys(next).length > 0 ? { ...rest, keys: next } : rest;
 }
 
+/** The lane with `keys` as that value's whole track; emptied, it holds its first key. */
+export function setLaneTrack(
+	lane: MediaLane,
+	key: PlacementKey,
+	keys: Keyframe<number>[],
+): MediaLane {
+	const before = lane.keys?.[key];
+	const next = withTrack(lane, key, keys);
+	return keys.length === 0 && before?.length
+		? { ...next, style: { ...next.style, [key]: before[0].v } }
+		: next;
+}
+
 /** An edit to the placement at `time`: keyed values get a key there, the rest are
  * written as they are. */
 export function setLaneStyleAt(
