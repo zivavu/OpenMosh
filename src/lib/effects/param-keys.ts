@@ -6,14 +6,16 @@ import {
 	KEY_NEAR,
 	keyNear,
 	keyTimesOf,
-	moveKey,
 	normalizeTrack,
 	putKeyframe,
 	removeKeyframe,
 	repeatKeys,
 	sampleNumbers,
-	setEaseAt,
+	removeKeysAtTimes,
+	setEaseAtTimes,
 	shiftKeys,
+	shiftKeysAt,
+	simplifyKeys,
 	type KeyEase,
 	type Keyframe,
 } from "../keyframes";
@@ -165,8 +167,13 @@ function mapKeys(
 	return effects.map((e) => {
 		if (!e.keys) return e;
 		let next: EffectInstance = e;
-		for (const [param, keys] of Object.entries(e.keys))
-			next = setParamTrack(next, param, map(keys));
+		for (const [param, keys] of Object.entries(e.keys)) {
+			const mapped = map(keys);
+			next = setParamTrack(next, param, mapped);
+			// A track emptied holds the value it started on.
+			if (mapped.length === 0 && keys.length > 0)
+				next = { ...next, values: { ...next.values, [param]: keys[0].v } };
+		}
 		return next;
 	});
 }
@@ -180,28 +187,47 @@ export function shiftChainKeys(
 	return mapKeys(effects, (keys) => shiftKeys(keys, delta));
 }
 
-/** Every key at `from` moved to `to`, landing on whatever sat there. */
+/** The keys at `times` moved by `delta`, landing on whatever sat there. */
 export function moveChainKeys(
 	effects: EffectInstance[],
-	from: number,
-	to: number,
+	times: readonly number[],
+	delta: number,
 ): EffectInstance[] {
-	return mapKeys(effects, (keys) => moveKey(keys, from, to));
+	return mapKeys(effects, (keys) => shiftKeysAt(keys, times, delta));
 }
 
 export function removeChainKeysAt(
 	effects: EffectInstance[],
-	time: number,
+	times: readonly number[],
 ): EffectInstance[] {
-	return mapKeys(effects, (keys) => removeKeyframe(keys, time));
+	return mapKeys(effects, (keys) => removeKeysAtTimes(keys, times));
+}
+
+export function clearChainKeys(effects: EffectInstance[]): EffectInstance[] {
+	return mapKeys(effects, () => []);
 }
 
 export function setChainEaseAt(
 	effects: EffectInstance[],
-	time: number,
+	times: readonly number[],
 	ease: KeyEase | undefined,
 ): EffectInstance[] {
-	return mapKeys(effects, (keys) => setEaseAt(keys, time, ease));
+	return mapKeys(effects, (keys) => setEaseAtTimes(keys, times, ease));
+}
+
+/** Keys that add nothing to the motion, dropped: within 1% of each slider. */
+export function simplifyChainKeys(effects: EffectInstance[]): EffectInstance[] {
+	return effects.map((e) => {
+		if (!e.keys) return e;
+		let next = e;
+		for (const [param, keys] of Object.entries(e.keys))
+			next = setParamTrack(
+				next,
+				param,
+				simplifyKeys(keys, paramTolerance(e.defId, param)),
+			);
+		return next;
+	});
 }
 
 /** The keys from the chain's first to its last played again and again up to `length`. */
