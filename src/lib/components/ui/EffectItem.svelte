@@ -271,7 +271,7 @@
 
 	const IMAGE_EMPTY_HINT = "A black-and-white image or a cutout";
 	const KEY_START_HINT =
-		"Animate this setting. A key goes here with its current value; move the playhead, then the slider, to add more.";
+		"Animate this setting. A key goes here with its current value; move the playhead, then the slider, to add more. Once it's animated, holding the slider while the song plays records your moves.";
 	const LOAD_MASK_HINT =
 		"White areas get the effects and black areas don't. A cutout with a transparent background works too: the effects go on the part that's left.";
 

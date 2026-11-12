@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { tick } from "svelte";
+	import { onDestroy, tick } from "svelte";
 	import type { ParamHistory } from "../../effects/mask-paint.svelte";
 	import { SvelteMap } from "svelte/reactivity";
 	import { readJson, writeJson } from "../../storage";
@@ -54,6 +54,7 @@
 	import { keepLockedInPreset } from "../../editor/sequence";
 	import EffectItem from "./EffectItem.svelte";
 	import { showToast } from "./toast.svelte";
+	import { ParamTakes } from "../../effects/param-take";
 	import {
 		adjacentKeyTime,
 		clearParamKeys,
@@ -108,6 +109,8 @@
 		keyTime?: number | null;
 		/** Move the playhead to this many seconds into the clip. */
 		onKeySeek?: (clipTime: number) => void;
+		/** The song is playing: a keyed slider held now records a pass. */
+		playing?: boolean;
 	}
 
 	let {
@@ -131,7 +134,21 @@
 		headless = false,
 		keyTime = null,
 		onKeySeek,
+		playing = false,
 	}: Props = $props();
+
+	const takes = new ParamTakes({
+		effects: () => effects,
+		replace: (i, effect) => (effects[i] = effect),
+		beforeEdit: () => onBeforeUserEdit?.(),
+		afterEdit: () => {
+			appliedIndex = null;
+			onUserEdit?.();
+		},
+		time: () => keyTime,
+		playing: () => playing,
+	});
+	onDestroy(() => takes.dispose());
 
 	/** False for an effect the roll leaves alone; its controls stay live. */
 	function isRolled(effect: EffectInstance): boolean {
@@ -492,6 +509,7 @@
 		/** Unset: a slider's ticks share one entry while they keep coming. */
 		history?: ParamHistory,
 	) {
+		if (typeof value === "number" && takes.edit(index, key, value)) return;
 		if (history === "new") onBeforeUserEdit?.();
 		else if (history !== "none") {
 			onBeforeUserEdit?.(`param:${effects[index].instanceId}:${key}`);

@@ -50,7 +50,7 @@
 	} from "../../media/lane-keys";
 
 	const PLACEMENT_KEY_HINT =
-		"Animate this on the whole layer, whichever clip is playing. A key goes here with its current value; move the playhead, then the value, to add more.";
+		"Animate this on the whole layer, whichever clip is playing. A key goes here with its current value; move the playhead, then the value, to add more. Once it's animated, holding it while the song plays records your moves.";
 	import ClipPanel from "../timeline/ClipPanel.svelte";
 	import FadeRows from "../timeline/FadeRows.svelte";
 	import TransitionRows from "./TransitionRows.svelte";
@@ -102,6 +102,10 @@
 		/** The playhead, which keys land at. */
 		time?: number | null;
 		onSeek?: (time: number) => void;
+		/** The song is playing: a keyed value held now records a pass. */
+		playing?: boolean;
+		/** A keyed placement held through playback; false when it isn't one. */
+		onPlacementTake?: (laneId: string, style: MediaStyle) => boolean;
 	}
 
 	let {
@@ -130,6 +134,8 @@
 		onRefreshSingle,
 		time = null,
 		onSeek,
+		playing = false,
+		onPlacementTake,
 	}: Props = $props();
 
 	// This chain runs on the lane's media, so a Mask paints over its box.
@@ -186,8 +192,10 @@
 		coalesceKey?: string,
 	) {
 		if (!lane) return;
+		const next = { ...shown, [key]: value };
+		if (onPlacementTake?.(lane.id, next)) return;
 		onBeforeEdit?.(coalesceKey);
-		onLaneChange(setLaneStyleAt(lane, { ...shown, [key]: value }, time));
+		onLaneChange(setLaneStyleAt(lane, next, time));
 	}
 
 	function toggleKey(key: PlacementKey, clear: boolean) {
@@ -830,6 +838,7 @@
 				{onAllBands}
 				{time}
 				{onSeek}
+				{playing}
 			/>
 		{/if}
 	{/snippet}

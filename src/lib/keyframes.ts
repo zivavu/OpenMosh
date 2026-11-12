@@ -229,3 +229,101 @@ export function repeatKeys<T>(
 	}
 	return out;
 }
+
+function hasTime(times: readonly number[], t: number): boolean {
+	return times.some((x) => Math.abs(x - t) <= SAME_MOMENT);
+}
+
+/** The keys at `times` moved by `delta`, landing on whatever sat there. */
+export function shiftKeysAt<T>(
+	keys: Keyframe<T>[],
+	times: readonly number[],
+	delta: number,
+): Keyframe<T>[] {
+	const moving = keys.filter((k) => hasTime(times, k.t));
+	if (moving.length === 0 || delta === 0) return keys;
+	let out = keys.filter((k) => !hasTime(times, k.t));
+	for (const k of moving) {
+		out = putKeyframe(out, k.t + delta, k.v);
+		if (k.ease) keyframeAt(out, Math.max(0, k.t + delta))!.ease = k.ease;
+	}
+	return out;
+}
+
+export function removeKeysAtTimes<T>(
+	keys: Keyframe<T>[],
+	times: readonly number[],
+): Keyframe<T>[] {
+	return keys.filter((k) => !hasTime(times, k.t));
+}
+
+export function setEaseAtTimes<T>(
+	keys: Keyframe<T>[],
+	times: readonly number[],
+	ease: KeyEase | undefined,
+): Keyframe<T>[] {
+	return times.reduce((out, t) => setEaseAt(out, t, ease), keys);
+}
+
+/** Linear keys that sit within `tolerance` of the line through their neighbours,
+ * dropped. Keys with an ease of their own stay, as do the two ends of each run. */
+export function simplifyKeys(
+	keys: Keyframe<number>[],
+	tolerance: number,
+): Keyframe<number>[] {
+	if (keys.length < 3) return keys;
+	const keep = new Uint8Array(keys.length);
+	keep[0] = 1;
+	keep[keys.length - 1] = 1;
+	keys.forEach((k, i) => {
+		if (k.ease || (i > 0 && keys[i - 1].ease)) keep[i] = 1;
+	});
+	// Douglas-Peucker on value error, over each stretch between kept keys. A stack,
+	// so a long take can't run out of call depth.
+	const stack: [number, number][] = [];
+	let from = 0;
+	for (let i = 1; i < keys.length; i++) {
+		if (!keep[i]) continue;
+		stack.push([from, i]);
+		from = i;
+	}
+	while (stack.length > 0) {
+		const [a, b] = stack.pop()!;
+		if (b - a < 2) continue;
+		const ka = keys[a];
+		const kb = keys[b];
+		const span = kb.t - ka.t;
+		let worst = -1;
+		let worstErr = tolerance;
+		for (let i = a + 1; i < b; i++) {
+			const k = span > 0 ? (keys[i].t - ka.t) / span : 0;
+			const err = Math.abs(keys[i].v - lerp(ka.v, kb.v, k));
+			if (err > worstErr) {
+				worstErr = err;
+				worst = i;
+			}
+		}
+		if (worst < 0) continue;
+		keep[worst] = 1;
+		stack.push([a, worst], [worst, b]);
+	}
+	return keys.filter((_, i) => keep[i]);
+}
+
+/** A recorded pass written over `base`: the keys inside the stretch it covered go,
+ * its samples come in. With `tolerance`, the samples are thinned first. */
+export function writeTake(
+	base: Keyframe<number>[] | undefined,
+	samples: Keyframe<number>[],
+	tolerance?: number,
+): Keyframe<number>[] {
+	if (samples.length === 0) return base ?? [];
+	const from = samples[0].t;
+	const to = samples[samples.length - 1].t;
+	const kept = (base ?? []).filter(
+		(k) => k.t < from - SAME_MOMENT || k.t > to + SAME_MOMENT,
+	);
+	const take =
+		tolerance === undefined ? samples : simplifyKeys(samples, tolerance);
+	return [...kept, ...take].sort((a, b) => a.t - b.t);
+}

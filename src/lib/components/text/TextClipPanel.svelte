@@ -52,6 +52,8 @@
 		/** The playhead, which keys land at. */
 		time?: number | null;
 		onSeek?: (time: number) => void;
+		/** The song is playing: a keyed value held now records a pass. */
+		playing?: boolean;
 	}
 
 	let {
@@ -72,6 +74,7 @@
 		bpm,
 		time = null,
 		onSeek,
+		playing = false,
 	}: Props = $props();
 
 	function setStyle<K extends keyof TextStyle>(
@@ -398,6 +401,7 @@
 				{onAllBands}
 				{time}
 				{onSeek}
+				{playing}
 			>
 				{#if opaqueNames.length > 0}
 					<p class="warn">

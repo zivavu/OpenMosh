@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { setLaneStyleAt } from "../../media/lane-keys";
+	import { PlacementTakes } from "../../media/placement-take";
 	import LoadFailed from "../ui/LoadFailed.svelte";
 	import { onMount, tick, untrack } from "svelte";
 	import { hasKeyboard, modKey } from "../../input-device";
@@ -1169,6 +1170,21 @@
 	let fxLayers = $derived(
 		isSequenceMode ? fxState.previewSource(clock.masterTime()) : [],
 	);
+
+	// A layer's keyed placement, held through playback, records a pass.
+	const placementTakes = new PlacementTakes({
+		lane: (id) => mediaState.timeline.lanes.find((l) => l.id === id) ?? null,
+		setLane: (id, edit) =>
+			void (mediaState.timeline = updateMediaLaneIn(
+				mediaState.timeline,
+				id,
+				edit,
+			)),
+		beforeEdit: () => mediaState.pushHistory(),
+		time: () => previewTime,
+		playing: () => clock.playing(),
+	});
+	$effect(() => () => placementTakes.dispose());
 
 	/** The playhead inside the selected fx clip, where its sliders key. */
 	let fxKeyTime = $derived.by(() => {
@@ -3168,6 +3184,8 @@
 						textState.updateLane({ ...lane, style: { ...lane.style, size } });
 				}}
 				onLayerStyleChange={(id, style) => {
+					// The drag's start already marked it for undo.
+					if (placementTakes.edit(id, style, false)) return;
 					mediaState.timeline = updateMediaLaneIn(
 						mediaState.timeline,
 						id,
@@ -3714,6 +3732,8 @@
 				clip={mediaState.selectedClip}
 				time={previewTime}
 				onSeek={clock.seek}
+				playing={clock.playing()}
+				onPlacementTake={(id, style) => placementTakes.edit(id, style)}
 				sources={poolSources}
 				onLaneChange={mediaState.updateLane}
 				onClipChange={mediaState.updateClip}
@@ -3749,6 +3769,7 @@
 				clip={textState.selectedClip}
 				time={previewTime}
 				onSeek={clock.seek}
+				playing={clock.playing()}
 				onLaneChange={textState.updateLane}
 				onClipChange={textState.updateClip}
 				onBeforeEdit={textState.beforeClipEdit}
@@ -3817,6 +3838,7 @@
 					onBeforeUserEdit={panelBeforeEdit}
 					onAllBands={setFxClipsBand}
 					keyTime={fxKeyTime}
+					playing={clock.playing()}
 					onKeySeek={(t) =>
 						fxState.selectedClip && clock.seek(fxState.selectedClip.start + t)}
 				/>
