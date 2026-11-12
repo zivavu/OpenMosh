@@ -6,6 +6,13 @@ import {
 	keysTester,
 	type KeySpec,
 } from "../color-key";
+import {
+	keySegment,
+	lerp,
+	normalizeTrack,
+	sampleTrack,
+	type Keyframe,
+} from "../keyframes";
 
 export type KeyColor = { r: number; g: number; b: number };
 
@@ -114,11 +121,13 @@ export const SPAN_MIN = 0.1;
 export const SPEED_MIN = 0.25;
 export const SPEED_MAX = 4;
 
-/** One keyed value, stamped in seconds into the source's own media time. */
-export interface Keyframe<T> {
-	t: number;
-	v: T;
-}
+export {
+	KEY_NEAR,
+	keyframeAt,
+	putKeyframe,
+	removeKeyframe,
+	type Keyframe,
+} from "../keyframes";
 
 /** Where the erase mask sits at a given moment. `x`/`y` are source-space units
  * (1 = the whole frame), `scale` is about its centre. */
@@ -422,37 +431,6 @@ export function normalizeSourceEdits(raw: unknown): Record<string, SourceEdit> {
 // Linear between neighbouring keys, held flat outside the first and last. No
 // easing: these tracks follow footage.
 
-/** Two keys are the same key within this many seconds. */
-const KEY_EPSILON = 1e-3;
-
-/** How close the playhead must be to count as sitting on a key, for the editing UI. */
-export const KEY_NEAR = 0.02;
-
-function lerp(a: number, b: number, k: number): number {
-	return a + (b - a) * k;
-}
-
-/** The track's value at `time`, or null when empty. Keys are assumed sorted. */
-function sampleTrack<T>(
-	keys: Keyframe<T>[] | undefined,
-	time: number,
-	blend: (a: T, b: T, k: number) => T,
-): T | null {
-	if (!keys || keys.length === 0) return null;
-	if (keys.length === 1 || time <= keys[0].t) return keys[0].v;
-	const last = keys[keys.length - 1];
-	if (time >= last.t) return last.v;
-	// Linear scan: a hand-placed track is a handful of keys.
-	for (let i = 1; i < keys.length; i++) {
-		const b = keys[i];
-		if (b.t < time) continue;
-		const a = keys[i - 1];
-		const span = b.t - a.t;
-		return span <= 0 ? b.v : blend(a.v, b.v, (time - a.t) / span);
-	}
-	return last.v;
-}
-
 function blendCrop(a: CropRect, b: CropRect, k: number): CropRect {
 	return clampCrop({
 		x: lerp(a.x, b.x, k),
@@ -510,24 +488,14 @@ function sampleMaskTrack(
 	keys: Keyframe<MaskKey>[] | undefined,
 	time: number,
 ): SampledMask | null {
-	if (!keys || keys.length === 0) return null;
-	const at = (i: number, mix = 0): SampledMask => ({ ...keys[i].v, mix });
-	if (keys.length === 1 || time <= keys[0].t) return at(0);
-	const lastIndex = keys.length - 1;
-	if (time >= keys[lastIndex].t) return at(lastIndex);
-	for (let i = 1; i < keys.length; i++) {
-		const b = keys[i];
-		if (b.t < time) continue;
-		const a = keys[i - 1];
-		const span = b.t - a.t;
-		const k = span <= 0 ? 1 : (time - a.t) / span;
-		return {
-			...blendMaskKey(a.v, b.v, k),
-			next: b.v.mask,
-			mix: k,
-		};
-	}
-	return at(lastIndex);
+	const seg = keys && keySegment(keys, time);
+	if (!seg) return null;
+	if (seg.a === seg.b) return { ...seg.a.v, mix: 0 };
+	return {
+		...blendMaskKey(seg.a.v, seg.b.v, seg.k),
+		next: seg.b.v.mask,
+		mix: seg.k,
+	};
 }
 
 /** Where in the media `t` really lands, for a source `duration` seconds long. A
@@ -581,33 +549,6 @@ export function cropExtent(edit: SourceEdit): { w: number; h: number } {
 	return { w: Math.min(w, 1), h: Math.min(h, 1) };
 }
 
-/** `keys` with `v` set at `time`, replacing the key there. Returns a new sorted array. */
-export function putKeyframe<T>(
-	keys: Keyframe<T>[] | undefined,
-	time: number,
-	v: T,
-): Keyframe<T>[] {
-	const t = Math.max(0, time);
-	const out = (keys ?? []).filter((k) => Math.abs(k.t - t) > KEY_EPSILON);
-	out.push({ t, v });
-	out.sort((a, b) => a.t - b.t);
-	return out;
-}
-
-export function removeKeyframe<T>(
-	keys: Keyframe<T>[] | undefined,
-	time: number,
-): Keyframe<T>[] {
-	return (keys ?? []).filter((k) => Math.abs(k.t - time) > KEY_EPSILON);
-}
-
-export function keyframeAt<T>(
-	keys: Keyframe<T>[] | undefined,
-	time: number,
-): Keyframe<T> | null {
-	return (keys ?? []).find((k) => Math.abs(k.t - time) <= KEY_EPSILON) ?? null;
-}
-
 function normalizeAnim(raw: unknown): SourceEditAnim | undefined {
 	if (!raw || typeof raw !== "object") return undefined;
 	const a = raw as Partial<SourceEditAnim>;
@@ -620,21 +561,6 @@ function normalizeAnim(raw: unknown): SourceEditAnim | undefined {
 		...(key ? { key } : {}),
 		...(mask ? { mask } : {}),
 	};
-}
-
-/** Sorted, de-duplicated and dropped entirely when nothing survives. */
-function normalizeTrack<T>(
-	raw: unknown,
-	value: (raw: unknown) => T,
-): Keyframe<T>[] | undefined {
-	if (!Array.isArray(raw)) return undefined;
-	let out: Keyframe<T>[] = [];
-	for (const entry of raw) {
-		const t = (entry as Partial<Keyframe<T>>)?.t;
-		if (typeof t !== "number" || !Number.isFinite(t)) continue;
-		out = putKeyframe(out, t, value((entry as Keyframe<T>).v));
-	}
-	return out.length > 0 ? out : undefined;
 }
 
 function normalizeAnimatedKey(raw: unknown): AnimatedKey {
