@@ -1,7 +1,7 @@
 <script lang="ts">
 	import ContextMenu from "../ui/ContextMenu.svelte";
 	import { Diamond } from "lucide-svelte";
-	import { untrack } from "svelte";
+	import { onDestroy, untrack } from "svelte";
 	import { formatTimeMs } from "../../audio/audio-utils";
 	import {
 		putKeyframe,
@@ -20,7 +20,13 @@
 		type KeyRow,
 		type RowTracks,
 	} from "../../timeline/key-rows";
-	import { CHAIN_OWNER, keyFocus } from "../../timeline/key-focus.svelte";
+	import {
+		CHAIN_OWNER,
+		dropBoxed,
+		holdBoxed,
+		keyBox,
+		keyFocus,
+	} from "../../timeline/key-focus.svelte";
 
 	/** The rows under a lane, one per animated setting: its value drawn as a line
 	 * and its keys on it. Keys are picked like clips and drag both ways: sideways
@@ -93,6 +99,28 @@
 			anchor = ref;
 		});
 	});
+
+	// A shift-drag box over this lane selects the keys inside it, for the next Delete.
+	const boxId = Symbol("key-rows");
+	let boxSerial = 0;
+	$effect(() => {
+		const box = keyBox.current;
+		if (!box || box.laneId !== laneId || box.serial === boxSerial) return;
+		boxSerial = box.serial;
+		untrack(() => {
+			picked = rows.flatMap((row) =>
+				row.keys
+					.filter((k) => {
+						const at = row.offset + k.t;
+						return at >= box.from - 1e-3 && at <= box.to + 1e-3;
+					})
+					.map((k) => ({ row: row.id, t: k.t })),
+			);
+			anchor = picked[0] ?? null;
+			if (picked.length > 0) holdBoxed(boxId, () => deleteSelected());
+		});
+	});
+	onDestroy(() => dropBoxed(boxId));
 
 	const isPicked = (ref: KeyRef) => selected.some((p) => sameKey(p, ref));
 

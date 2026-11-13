@@ -1,6 +1,7 @@
 /** What every clip lane component does the same way: selection, dragging clips and
  * boundaries, scrubbing, adding and splitting, deleting, and the keyboard. */
 
+import { boxKeys, clearKeyBox, deleteBoxedKeys } from "./key-focus.svelte";
 import { untrack } from "svelte";
 import type { TimelineStackState } from "../editor/timeline-stack.svelte";
 import { isTextEntryTarget } from "../editor/shortcut-target";
@@ -682,6 +683,8 @@ export class ClipLaneController<
 		);
 		host.selectedClipIds = ids;
 		host.selectedClipId = ids[0] ?? null;
+		if (box.laneIds.length === 1) boxKeys(box.laneIds[0], box.from, box.to);
+		else clearKeyBox();
 		this.selectedJoins = host.onJoinClick
 			? lanes.flatMap((l) =>
 					adjacentPairs(l)
@@ -913,10 +916,15 @@ export class ClipLaneController<
 			(this.host.selectedClipIds.length > 0 || this.selectedJoins.length > 0)
 		) {
 			e.preventDefault();
+			clearKeyBox();
 			this.deselect();
 			return;
 		}
 		if (e.key !== "Delete" && e.key !== "Backspace") return;
+		if (deleteBoxedKeys(e)) {
+			e.preventDefault();
+			return;
+		}
 		if (this.host.selectedClipIds.length === 0) return;
 		e.preventDefault();
 		this.deleteSelection();

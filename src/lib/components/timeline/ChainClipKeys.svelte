@@ -12,12 +12,17 @@
 		setChainEaseAt,
 		simplifyChainKeys,
 	} from "../../effects/param-keys";
-	import { CHAIN_OWNER, keyFocus } from "../../timeline/key-focus.svelte";
+	import {
+		CHAIN_OWNER,
+		keyBox,
+		keyFocus,
+	} from "../../timeline/key-focus.svelte";
 	import ClipKeys from "./ClipKeys.svelte";
 
 	/** A selected clip's effect keys on its bar. */
 	interface Props {
 		clip: ChainClip;
+		laneId: string;
 		/** Unselected, the clip only shows that it animates. */
 		selected: boolean;
 		/** Off while the lane's setting rows are open: they show these keys instead. */
@@ -33,6 +38,7 @@
 
 	let {
 		clip,
+		laneId,
 		selected,
 		summary = true,
 		bpm = 0,
@@ -42,6 +48,12 @@
 	}: Props = $props();
 
 	let length = $derived(clip.end - clip.start);
+	let box = $derived.by(() => {
+		const b = keyBox.current;
+		return b?.laneId === laneId
+			? { from: b.from - clip.start, to: b.to - clip.start, serial: b.serial }
+			: null;
+	});
 	let focus = $derived(
 		keyFocus.current?.owner === CHAIN_OWNER ? keyFocus.current : null,
 	);
@@ -69,6 +81,7 @@
 		onSimplify={() => onEdit(simplifyChainKeys)}
 		onRepeat={() => onEdit((e) => repeatChainKeys(e, length))}
 		{focus}
+		{box}
 	/>
 {/if}
 

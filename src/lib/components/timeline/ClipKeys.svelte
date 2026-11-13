@@ -1,7 +1,8 @@
 <script lang="ts">
 	import ContextMenu from "../ui/ContextMenu.svelte";
 	import { Diamond } from "lucide-svelte";
-	import { untrack } from "svelte";
+	import { onDestroy, untrack } from "svelte";
+	import { dropBoxed, holdBoxed } from "../../timeline/key-focus.svelte";
 	import { formatTimeMs } from "../../audio/audio-utils";
 	import type { KeyEase } from "../../keyframes";
 
@@ -31,6 +32,9 @@
 		onRepeat?: () => void;
 		/** A key the panel's arrows stepped to, seconds from `start`: it gets selected. */
 		focus?: { t: number; serial: number } | null;
+		/** A shift-drag box over the lane, seconds from `start`: the keys in it get
+		 * selected, for the next Delete. */
+		box?: { from: number; to: number; serial: number } | null;
 	}
 
 	let {
@@ -49,6 +53,7 @@
 		onSimplify,
 		onRepeat,
 		focus = null,
+		box = null,
 	}: Props = $props();
 
 	/** Within this many pixels of a beat, a dragged key lands on it. */
@@ -82,6 +87,24 @@
 			anchor = hit;
 		});
 	});
+
+	const boxId = Symbol("clip-keys");
+	let boxSerial = 0;
+	$effect(() => {
+		if (!box || box.serial === boxSerial) return;
+		boxSerial = box.serial;
+		const { from, to } = box;
+		untrack(() => {
+			picked = times.filter((t) => t >= from - SAME && t <= to + SAME);
+			anchor = picked[0] ?? null;
+			if (picked.length === 0) return;
+			holdBoxed(boxId, () => {
+				if (selected.length > 0) onDelete(selected);
+				picked = [];
+			});
+		});
+	});
+	onDestroy(() => dropBoxed(boxId));
 
 	let noun = $derived(scope === "clip" ? "Keys" : "Layer keys");
 
