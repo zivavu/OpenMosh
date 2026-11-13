@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.0.5](https://github.com/zivavu/OpenMosh/compare/v1.0.4...v1.0.5) (2026-11-13)
+
+
+### Added
+
+* Animate a media layer's position, size, rotation and opacity ([09e8ac3](https://github.com/zivavu/OpenMosh/commit/09e8ac3a8ec96c5bbbedc7ea0258b6e1d0c3b059))
+* Animate effect sliders with keyframes ([f3a20e3](https://github.com/zivavu/OpenMosh/commit/f3a20e32fd9fdc206a1954db7ff3985768309cc8))
+* Group a layer's placement values to follow one keyframed curve ([f5cd94f](https://github.com/zivavu/OpenMosh/commit/f5cd94f9e6b1b1f791b40adf5719455610427c27))
+* Group effect settings to follow one keyframed curve ([472bcce](https://github.com/zivavu/OpenMosh/commit/472bccee7f03c90d6d5137fb61e5f62cec54674a))
+* Keep a Mask's painting and image in presets ([5340bcf](https://github.com/zivavu/OpenMosh/commit/5340bcf2cfee0af9bfeb00b919e42fdf063e9516))
+* Move, ease and repeat keyframes on the timeline ([424a496](https://github.com/zivavu/OpenMosh/commit/424a496f6257e3df9778b91234bc8f323746e1c6))
+* Record a keyed slider's moves while the song plays ([1c8ca53](https://github.com/zivavu/OpenMosh/commit/1c8ca53d458aee7986ae50eada36e74864779f9b))
+* Select the key the panel's arrows step to on the timeline ([74b423d](https://github.com/zivavu/OpenMosh/commit/74b423d834a89117cbb0cc474577d66d709ea823))
+* Select, delete and simplify keyframes in bulk ([181d1e6](https://github.com/zivavu/OpenMosh/commit/181d1e67b82589f617ef067c92ee445b8c5e4eaf))
+* Shift-drag over a lane to select its keyframes ([ea167fc](https://github.com/zivavu/OpenMosh/commit/ea167fcb362b54e51071ff03e371e1a7301a8a82))
+* Show each animated setting in its own row under its lane ([f788605](https://github.com/zivavu/OpenMosh/commit/f788605d37d5e395c0a905216e38a0c912efe786))
+
+
+### Fixed
+
+* Keep a new project's name when you close the tab right after Saved ([139a587](https://github.com/zivavu/OpenMosh/commit/139a587a78b9bad86dc9cbb657f43646bca35289))
+* List sound added to an editor lane in the song library right away ([8db4b2d](https://github.com/zivavu/OpenMosh/commit/8db4b2d17e490a4b588b672d12cec61d078b6acd))
+
 ## [1.0.4](https://github.com/zivavu/OpenMosh/compare/v1.0.3...v1.0.4) (2026-11-10)
 
 The editor can now save the frame under the playhead as a PNG or JPG. Record's settings have a video quality choice, from Small for sharing in chats to Max for YouTube or editing later; Standard keeps the bitrate exports had before. In the editor you can flip media by dragging Scale X or Y below zero, and remove media from the rail with the trash button on its thumbnail (Ctrl+Z puts it back). Generate takes several generator types at once. Glows no longer turn into a bright wash over a transparent background. A mosh for a PNG or JPG leaves out effects that only show during playback, a new 3D Transform starts facing the camera, and a roll clears the preset's highlight once it changes the chain.
