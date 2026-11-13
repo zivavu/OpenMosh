@@ -65,6 +65,8 @@
 	} from "../../effects/param-groups";
 	import type { KeyLink } from "../../key-groups";
 	import { effectFocus } from "../../effects/effect-focus.svelte";
+	import { CHAIN_OWNER, focusKey } from "../../timeline/key-focus.svelte";
+	import { effectRowId, groupRowId } from "../../timeline/key-rows";
 	import {
 		adjacentKeyTime,
 		clearParamKeys,
@@ -582,9 +584,15 @@
 	function keySeek(index: number, key: string, direction: -1 | 1) {
 		if (keyTime === null) return;
 		const e = effects[index];
-		const keys = e.keyLinks?.[key]?.keys ?? e.keys?.[key];
-		const t = adjacentKeyTime(keys, keyTime, direction);
-		if (t !== null) onKeySeek?.(t);
+		const link = e.keyLinks?.[key];
+		const t = adjacentKeyTime(link?.keys ?? e.keys?.[key], keyTime, direction);
+		if (t === null) return;
+		onKeySeek?.(t);
+		focusKey(
+			CHAIN_OWNER,
+			link ? groupRowId(link.group) : effectRowId(e.instanceId, key),
+			t,
+		);
 	}
 
 	/** Put a slider in a group (null starts a new one), or take it out with "leave". */

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import ContextMenu from "../ui/ContextMenu.svelte";
 	import { Diamond } from "lucide-svelte";
+	import { untrack } from "svelte";
 	import { formatTimeMs } from "../../audio/audio-utils";
 	import {
 		putKeyframe,
@@ -19,6 +20,7 @@
 		type KeyRow,
 		type RowTracks,
 	} from "../../timeline/key-rows";
+	import { CHAIN_OWNER, keyFocus } from "../../timeline/key-focus.svelte";
 
 	/** The rows under a lane, one per animated setting: its value drawn as a line
 	 * and its keys on it. Keys are picked like clips and drag both ways: sideways
@@ -36,6 +38,8 @@
 		/** `coalesceKey` keeps one drag one undo step. */
 		onTracks: (tracks: RowTracks, coalesceKey?: string) => void;
 		onOpenRow?: (row: KeyRow) => void;
+		/** The media lane whose placement rows these are, if any. */
+		laneId?: string;
 	}
 
 	let {
@@ -49,6 +53,7 @@
 		onSeek,
 		onTracks,
 		onOpenRow,
+		laneId,
 	}: Props = $props();
 
 	/** Room above and below the line, so a key at either end stays grabbable. */
@@ -71,6 +76,23 @@
 			),
 		),
 	);
+
+	// A step with the panel's arrows selects the key it lands on.
+	let focusSerial = untrack(() => keyFocus.current?.serial ?? 0);
+	$effect(() => {
+		const focus = keyFocus.current;
+		if (!focus || focus.serial === focusSerial) return;
+		focusSerial = focus.serial;
+		untrack(() => {
+			const row = rows.find((r) => r.id === focus.row);
+			const owner = row?.instanceId ? CHAIN_OWNER : laneId;
+			if (!row || owner !== focus.owner) return;
+			const ref = { row: row.id, t: focus.t };
+			if (!row.keys.some((k) => sameKey(ref, { row: row.id, t: k.t }))) return;
+			picked = [ref];
+			anchor = ref;
+		});
+	});
 
 	const isPicked = (ref: KeyRef) => selected.some((p) => sameKey(p, ref));
 
