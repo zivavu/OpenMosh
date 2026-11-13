@@ -91,7 +91,7 @@ const CLIP_ROWS: ShortcutRow[] = [
 	{
 		keys: ["Shift+Drag"],
 		description:
-			"Box-select the clips it touches, and on media lanes the joins inside it",
+			"Box-select the clips it touches, and on media lanes the joins inside it. Over a single lane it picks the keys inside too; Delete removes those keys first, then the clips",
 	},
 	{ keys: ["Esc"], description: "Deselect" },
 	{

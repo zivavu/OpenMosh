@@ -79,7 +79,7 @@
 	import LaneDeleteDialog from "../timeline/LaneDeleteDialog.svelte";
 	import TransitionPopover from "./TransitionPopover.svelte";
 	import { updateMediaClips } from "../../media/resolve";
-	import { keyFocus } from "../../timeline/key-focus.svelte";
+	import { keyBox, keyFocus } from "../../timeline/key-focus.svelte";
 
 	const DEFAULT_CLIP_LENGTH = 2;
 	const LANE_HEIGHT = 30;
@@ -844,6 +844,13 @@
 						focus={keyFocus.current?.owner === lane.id
 							? { ...keyFocus.current, t: keyFocus.current.t - from }
 							: null}
+						box={keyBox.current?.laneId === lane.id
+							? {
+									...keyBox.current,
+									from: keyBox.current.from - from,
+									to: keyBox.current.to - from,
+								}
+							: null}
 					/>
 				{/if}
 				{#each lane.clips as clip (clip.id)}
@@ -922,6 +929,7 @@
 							{/if}
 							<ChainClipKeys
 								{clip}
+								laneId={lane.id}
 								selected={selectedClipIds.includes(clip.id)}
 								summary={!keyRowsOpen.has(lane.id)}
 								{bpm}

@@ -411,6 +411,7 @@
 							{/if}
 							<ChainClipKeys
 								{clip}
+								laneId={lane.id}
 								selected={selectedClipIds.includes(clip.id)}
 								summary={!keyRowsOpen.has(lane.id)}
 								{bpm}
@@ -437,6 +438,7 @@
 			{#if rows.length > 0}
 				<KeyRows
 					{rows}
+					laneId={lane.id}
 					order={stackIndex(layerOrder, lane.id)}
 					toPct={(t) => vp.toPct(t)}
 					viewStart={vp.viewStart}
