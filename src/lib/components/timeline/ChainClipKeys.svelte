@@ -12,6 +12,7 @@
 		setChainEaseAt,
 		simplifyChainKeys,
 	} from "../../effects/param-keys";
+	import { CHAIN_OWNER, keyFocus } from "../../timeline/key-focus.svelte";
 	import ClipKeys from "./ClipKeys.svelte";
 
 	/** A selected clip's effect keys on its bar. */
@@ -41,6 +42,9 @@
 	}: Props = $props();
 
 	let length = $derived(clip.end - clip.start);
+	let focus = $derived(
+		keyFocus.current?.owner === CHAIN_OWNER ? keyFocus.current : null,
+	);
 </script>
 
 {#if !chainHasKeys(clip.effects)}
@@ -64,6 +68,7 @@
 		onDeleteAll={() => onEdit(clearChainKeys)}
 		onSimplify={() => onEdit(simplifyChainKeys)}
 		onRepeat={() => onEdit((e) => repeatChainKeys(e, length))}
+		{focus}
 	/>
 {/if}
 

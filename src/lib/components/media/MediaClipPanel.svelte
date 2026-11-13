@@ -44,6 +44,8 @@
 	import { keyNear } from "../../keyframes";
 	import type { KeyLink } from "../../key-groups";
 	import { adjacentKeyTime } from "../../effects/param-keys";
+	import { focusKey } from "../../timeline/key-focus.svelte";
+	import { laneGroupRowId, laneRowId } from "../../timeline/key-rows";
 	import {
 		groupPlacement,
 		isPlacementKeyed,
@@ -263,9 +265,14 @@
 	/** The playhead's way to the lane's next key on `key`, or null with none that way. */
 	function stepTo(key: PlacementKey, direction: -1 | 1): (() => void) | null {
 		if (!lane || time === null || !onSeek) return null;
-		const keys = lane.keyLinks?.[key]?.keys ?? lane.keys?.[key];
-		const t = adjacentKeyTime(keys, time, direction);
-		return t === null ? null : () => onSeek(t);
+		const link = lane.keyLinks?.[key];
+		const t = adjacentKeyTime(link?.keys ?? lane.keys?.[key], time, direction);
+		if (t === null) return null;
+		const { id } = lane;
+		return () => {
+			onSeek(t);
+			focusKey(id, link ? laneGroupRowId(link.group) : laneRowId(key), t);
+		};
 	}
 
 	function resetStyle(e: MouseEvent, key: keyof MediaStyle) {

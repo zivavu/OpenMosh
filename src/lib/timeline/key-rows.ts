@@ -64,8 +64,20 @@ const EFFECT_ROW = "fx:";
 const LANE_ROW = "lane:";
 const LANE_GROUP_ROW = "lanegroup:";
 
-function effectRowId(instanceId: string, param: string): string {
+export function effectRowId(instanceId: string, param: string): string {
 	return `${EFFECT_ROW}${instanceId}:${param}`;
+}
+
+export function groupRowId(group: string): string {
+	return `${GROUP_ROW}${group}`;
+}
+
+export function laneRowId(key: PlacementKey): string {
+	return `${LANE_ROW}${key}`;
+}
+
+export function laneGroupRowId(group: string): string {
+	return `${LANE_GROUP_ROW}${group}`;
 }
 
 /** One row per keyed slider in the clip's chain, in chain order. A second copy of
@@ -103,7 +115,7 @@ export function chainKeyRows(
 	}
 	for (const [group, members] of chainGroups(clip.effects)) {
 		rows.push({
-			id: `${GROUP_ROW}${group}`,
+			id: groupRowId(group),
 			label: `Group ${group} · ${members.length} ${members.length === 1 ? "setting" : "settings"}`,
 			color: groupColor(group),
 			keys: members[0].link.keys,
@@ -141,7 +153,7 @@ export function laneKeyRows(lane: MediaLane, firstColor = 0): KeyRow[] {
 		if (!keys?.length) continue;
 		const { label, min, max, step } = PLACEMENT_RANGES[key];
 		rows.push({
-			id: `${LANE_ROW}${key}`,
+			id: laneRowId(key),
 			label: `Layer · ${label}`,
 			color: rowColor(firstColor + rows.length),
 			keys,
@@ -160,7 +172,7 @@ export function laneKeyRows(lane: MediaLane, firstColor = 0): KeyRow[] {
 		a.localeCompare(b),
 	))
 		rows.push({
-			id: `${LANE_GROUP_ROW}${group}`,
+			id: laneGroupRowId(group),
 			label: `Layer group ${group} · ${links.length} ${links.length === 1 ? "value" : "values"}`,
 			color: groupColor(group),
 			keys: links[0].keys,

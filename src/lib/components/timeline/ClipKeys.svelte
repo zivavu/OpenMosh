@@ -1,6 +1,7 @@
 <script lang="ts">
 	import ContextMenu from "../ui/ContextMenu.svelte";
 	import { Diamond } from "lucide-svelte";
+	import { untrack } from "svelte";
 	import { formatTimeMs } from "../../audio/audio-utils";
 	import type { KeyEase } from "../../keyframes";
 
@@ -28,6 +29,8 @@
 		onDeleteAll: () => void;
 		onSimplify: () => void;
 		onRepeat?: () => void;
+		/** A key the panel's arrows stepped to, seconds from `start`: it gets selected. */
+		focus?: { t: number; serial: number } | null;
 	}
 
 	let {
@@ -45,6 +48,7 @@
 		onDeleteAll,
 		onSimplify,
 		onRepeat,
+		focus = null,
 	}: Props = $props();
 
 	/** Within this many pixels of a beat, a dragged key lands on it. */
@@ -64,6 +68,21 @@
 
 	/** The picked keys still there: an undo or an edit elsewhere can take some away. */
 	let selected = $derived(picked.filter((t) => has(times, t)));
+	// Only a step taken while the strip is up selects; a scroll that shifts
+	// `focus.t` doesn't.
+	let focusSerial = untrack(() => focus?.serial ?? 0);
+	$effect(() => {
+		if (!focus || focus.serial === focusSerial) return;
+		focusSerial = focus.serial;
+		untrack(() => {
+			const t = focus!.t;
+			const hit = times.find((x) => Math.abs(x - t) <= SAME);
+			if (hit === undefined) return;
+			picked = [hit];
+			anchor = hit;
+		});
+	});
+
 	let noun = $derived(scope === "clip" ? "Keys" : "Layer keys");
 
 	function pct(t: number): number {
