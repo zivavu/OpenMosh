@@ -1531,7 +1531,7 @@
 	let recordFps = $state(60);
 	/** The export's length, and the slideshow's own while it has no song. */
 	let recordDuration = $state(30);
-	const MAX_LENGTH = 3600;
+	const MAX_LENGTH = 10 * 3600;
 
 	function setLength(length: number) {
 		recordDuration = length;
