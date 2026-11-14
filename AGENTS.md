@@ -151,8 +151,9 @@ Outside CI a run reuses whatever already serves its port, so when my dev server 
   rolls never touch a Mask. Presets keep its painting and image. On a media clip it paints in the
   layer's box.
 - Keyframes (`lib/keyframes.ts`): an effect slider's keys (`EffectInstance.keys`) count
-  seconds from its clip's start and travel with the clip; a split shifts the right half's,
-  a trim doesn't, like the media under it. A media layer's placement keys (`MediaLane.keys`)
+  seconds from its clip's start and travel with the clip. A split or a start trim (shared
+  edges too) shifts them so they hold their timeline place, like the media under it
+  (`chainClipAnchor`); keys before 0 stay saved, hidden. A media layer's placement keys (`MediaLane.keys`)
   belong to the lane, in timeline seconds, shared by every clip on it. Resolvers sample keys
   into copies and never write state, since they run inside `$derived`. A roll drops the keys
   of what it rolls (Lock keeps them), presets keep them, and a param is keyed,

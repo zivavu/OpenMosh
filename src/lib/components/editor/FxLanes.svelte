@@ -11,7 +11,7 @@
 	} from "../../timeline/key-rows";
 	import ChainClipKeys from "../timeline/ChainClipKeys.svelte";
 	import type { EffectInstance } from "../../effects/types";
-	import type { ChainClip } from "../../editor/chain-clip";
+	import { chainClipAnchor, type ChainClip } from "../../editor/chain-clip";
 	import { updateClipsIn } from "../../timeline/clips";
 	import { stackIndex, type LayerRef } from "../../timeline/layer-order";
 	import {
@@ -195,6 +195,7 @@
 			onSelectOnly: () => (selectedLaneId = null),
 			copy: copySelectedChains,
 			paste,
+			sourceAnchor: chainClipAnchor(),
 		},
 		stack,
 	);

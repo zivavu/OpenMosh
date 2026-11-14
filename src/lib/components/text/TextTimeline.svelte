@@ -11,7 +11,7 @@
 	} from "../../timeline/key-rows";
 	import ChainClipKeys from "../timeline/ChainClipKeys.svelte";
 	import type { EffectInstance } from "../../effects/types";
-	import type { ChainClip } from "../../editor/chain-clip";
+	import { chainClipAnchor, type ChainClip } from "../../editor/chain-clip";
 	import { updateClipsIn } from "../../timeline/clips";
 	import LoadFailed from "../ui/LoadFailed.svelte";
 	import { getTimelineStack } from "../../editor/timeline-stack.svelte";
@@ -221,6 +221,7 @@
 			splitClipAt: splitTextClipAt,
 			copy: copySelection,
 			paste: pasteClipboard,
+			sourceAnchor: chainClipAnchor(),
 		},
 		stack,
 	);

@@ -84,7 +84,7 @@ export interface ClipLaneHost<
 	/** What a copied join carries over to where it's pasted. */
 	readJoin?(right: C): unknown;
 	writeJoin?(right: C, data: unknown): C;
-	/** Set where a start trim uncovers or hides the media instead of sliding it. */
+	/** What a moved start edge holds in place (media, keys) instead of sliding it. */
 	sourceAnchor?: SourceAnchor<C>;
 }
 

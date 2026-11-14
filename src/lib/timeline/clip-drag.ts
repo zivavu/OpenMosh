@@ -67,7 +67,7 @@ export function dragClipsStep<C extends TimelineClip, L extends ClipLane<C>>(
 		return { lanes: next, edges: movedEdges(next, ["start", "end"]) };
 	}
 	if (mode === "boundary") {
-		// The left clip's media end holds still, and so, anchored, does the right one's.
+		// The left clip's media end holds still; anchored, so does the right one's content.
 		const at =
 			t + snap([t], new Set([clipId, otherId!, sourceEndOwner(otherId!)]));
 		const next = lanes.map((l) =>
