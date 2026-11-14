@@ -819,7 +819,7 @@
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				class="row"
-				title="Room around the media for its own effects to spread into, as a share of its size on each side. A blur or a glow otherwise stops dead at the media's edge. 100% gives it as much margin as the media itself, and renders the media at a third of the buffer — the sharpness is what buys the room. Double-click to reset."
+				title="Room around the media for its own effects to spread into, as a share of its size on each side. Without it, a blur or a glow stops at the media's edge. 100% gives a margin as big as the media itself. Any bleed adds render time while the layer has effects, and past 50% the media renders softer. Double-click to reset."
 				ondblclick={(e) => resetStyle(e, "bleed")}
 			>
 				<label for="mc-bleed">Bleed</label>

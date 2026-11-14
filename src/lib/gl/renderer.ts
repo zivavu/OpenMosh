@@ -285,6 +285,43 @@ const CLEAR_PIXEL = new Uint8Array([0, 0, 0, 0]);
 const MODEL_BOX_STEP = 16;
 /** A model's texture is at most this many times the frame's longer side. */
 const MODEL_MAX_TEXTURE = 2;
+/** How far a layer's chain buffer grows past the frame to keep its media sharp
+ * inside a bleed margin; a wider bleed renders the media softer from here. */
+const MAX_LAYER_CHAIN_SCALE = 2;
+/** A rotation this small still lands a layer's pixels on the frame's. */
+const UNROTATED = 1e-6;
+/** Chain buffer sets kept for bled layers, one per size in use. */
+const MAX_LAYER_CHAIN_SETS = 3;
+
+interface FxFeedbackPair {
+	textures: [WebGLTexture, WebGLTexture];
+	fbos: [WebGLFramebuffer, WebGLFramebuffer];
+	idx: number;
+	hdr: boolean;
+	/** The size it was made at: a layer's chain can change size under it. */
+	w: number;
+	h: number;
+}
+
+/** What a chain sizes from the frame, held for a layer whose chain runs bigger than
+ * it. Swapped in for that chain alone; the field names mirror the renderer's own. */
+interface LayerChainSet {
+	imgW: number;
+	imgH: number;
+	/** The frame's own `effectFrame`, which effects measure pixels in. */
+	chainFrame: [number, number] | null;
+	ppTextures: [WebGLTexture, WebGLTexture] | null;
+	ppFBOs: [WebGLFramebuffer, WebGLFramebuffer] | null;
+	hdrTextures: [WebGLTexture, WebGLTexture] | null;
+	hdrFBOs: [WebGLFramebuffer, WebGLFramebuffer] | null;
+	hdrW: number;
+	hdrH: number;
+	pyramidLevels: PyramidLevel[];
+	maskBase: { tex: WebGLTexture; fbo: WebGLFramebuffer } | null;
+	/** The media placed for the chain, and where the chain ends. */
+	src: { tex: WebGLTexture; fbo: WebGLFramebuffer };
+	dst: { tex: WebGLTexture; fbo: WebGLFramebuffer };
+}
 
 export class GlRenderer {
 	private gl: WebGL2RenderingContext;
@@ -337,15 +374,7 @@ export class GlRenderer {
 	private transitionPrograms = new Map<string, CompiledProgram>();
 	/** Private history buffers for feedback-reading effects (u_feedback), keyed by
 	 * instanceId: each feeds back its own output, so downstream effects can't loop. */
-	private fxFeedback = new Map<
-		string,
-		{
-			textures: [WebGLTexture, WebGLTexture];
-			fbos: [WebGLFramebuffer, WebGLFramebuffer];
-			idx: number;
-			hdr: boolean;
-		}
-	>();
+	private fxFeedback = new Map<string, FxFeedbackPair>();
 	private passthrough: CompiledProgram;
 	private compiled = new Map<
 		string,
@@ -425,6 +454,10 @@ export class GlRenderer {
 	private blankTex: WebGLTexture | null = null;
 	private mediaScratch: { tex: WebGLTexture; fbo: WebGLFramebuffer } | null =
 		null;
+	/** By size, least recently used first. */
+	private layerChainSets = new Map<string, LayerChainSet>();
+	/** Set while a layer's chain runs at its own size: effects still measure the frame. */
+	private chainFrame: [number, number] | null = null;
 	/** Uploaded (pre-effect) media per media lane, keyed by lane id. */
 	private mediaLayerTextures = new Map<string, OverlayTexture>();
 	/** Targets onto the lanes drawing slides in a slideshow's frame, by lane key. */
@@ -1281,7 +1314,22 @@ export class GlRenderer {
 	) {
 		if (w <= 0 || h <= 0) return;
 		this.leaveModel(key);
-		this.uploadInto(this.layerEntry(key), source, w, h);
+		const entry = this.layerEntry(key);
+		this.uploadInto(entry, source, w, h);
+		this.mipmapLayer(entry.tex);
+	}
+
+	/** Media shown smaller than it is reads its mip levels, so a big photo or a 4K
+	 * frame doesn't alias. A layer drawn to size (a model) turns them off again. */
+	private mipmapLayer(tex: WebGLTexture, on = true) {
+		const gl = this.gl;
+		gl.bindTexture(gl.TEXTURE_2D, tex);
+		if (on) gl.generateMipmap(gl.TEXTURE_2D);
+		gl.texParameteri(
+			gl.TEXTURE_2D,
+			gl.TEXTURE_MIN_FILTER,
+			on ? gl.LINEAR_MIPMAP_LINEAR : gl.LINEAR,
+		);
 	}
 
 	/** A slide drawn into its slideshow's frame, fitted the way the slideshow fit it.
@@ -1337,6 +1385,7 @@ export class GlRenderer {
 		}
 		gl.drawArrays(gl.TRIANGLES, 0, 6);
 		gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+		this.mipmapLayer(entry.tex);
 	}
 
 	get hasAltSource(): boolean {
@@ -1414,7 +1463,7 @@ export class GlRenderer {
 	/** The frame effects measure pixels in: the render's aspect at a fixed short side,
 	 * so a preview and its full-size export match. */
 	private effectFrame(): [number, number] {
-		return effectFrameSize(this.imgW, this.imgH);
+		return this.chainFrame ?? effectFrameSize(this.imgW, this.imgH);
 	}
 
 	resize(width: number, height: number) {
@@ -1433,24 +1482,34 @@ export class GlRenderer {
 	}
 
 	private rescaleFxFeedback(history: typeof this.fxFeedback) {
+		for (const [id, old] of history) this.rescaleFeedbackPair(id, old);
+	}
+
+	/** A feedback history redrawn at the current size, keeping what it held. */
+	private rescaleFeedbackPair(id: string, old: FxFeedbackPair) {
 		const gl = this.gl;
-		for (const [id, old] of history) {
-			const make = () =>
-				old.hdr
-					? this.createHdrTexture(this.imgW, this.imgH, false)
-					: this.createTexture(this.imgW, this.imgH);
-			const textures: [WebGLTexture, WebGLTexture] = [make(), make()];
-			const fbos = this.createFBOPair(textures);
-			const prev = old.textures[old.idx];
-			gl.bindTexture(gl.TEXTURE_2D, prev);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-			this.drawPass(this.passthrough, fbos[0], prev, 1.0, 0);
-			this.drawPass(this.passthrough, fbos[1], prev, 1.0, 0);
-			this.deleteTexturePair(old.textures);
-			this.deleteFBOPair(old.fbos);
-			this.fxFeedback.set(id, { textures, fbos, idx: 0, hdr: old.hdr });
-		}
+		const make = () =>
+			old.hdr
+				? this.createHdrTexture(this.imgW, this.imgH, false)
+				: this.createTexture(this.imgW, this.imgH);
+		const textures: [WebGLTexture, WebGLTexture] = [make(), make()];
+		const fbos = this.createFBOPair(textures);
+		const prev = old.textures[old.idx];
+		gl.bindTexture(gl.TEXTURE_2D, prev);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+		this.drawPass(this.passthrough, fbos[0], prev, 1.0, 0);
+		this.drawPass(this.passthrough, fbos[1], prev, 1.0, 0);
+		this.deleteTexturePair(old.textures);
+		this.deleteFBOPair(old.fbos);
+		this.fxFeedback.set(id, {
+			textures,
+			fbos,
+			idx: 0,
+			hdr: old.hdr,
+			w: this.imgW,
+			h: this.imgH,
+		});
 	}
 
 	render(
@@ -2213,6 +2272,11 @@ export class GlRenderer {
 		hdr = false,
 	) {
 		let pair = this.fxFeedback.get(instanceId);
+		// A layer's chain buffer changed size (its bleed, or the frame).
+		if (pair && (pair.w !== this.imgW || pair.h !== this.imgH)) {
+			this.rescaleFeedbackPair(instanceId, pair);
+			pair = this.fxFeedback.get(instanceId);
+		}
 		if (!pair) {
 			const make = () =>
 				hdr
@@ -2220,7 +2284,7 @@ export class GlRenderer {
 					: this.createTexture(this.imgW, this.imgH);
 			const textures: [WebGLTexture, WebGLTexture] = [make(), make()];
 			const fbos = this.createFBOPair(textures);
-			pair = { textures, fbos, idx: 0, hdr };
+			pair = { textures, fbos, idx: 0, hdr, w: this.imgW, h: this.imgH };
 			this.fxFeedback.set(instanceId, pair);
 			this.drawPass(this.passthrough, fbos[0], seedTex, 1.0, time);
 			this.drawPass(this.passthrough, fbos[1], seedTex, 1.0, time);
@@ -2778,47 +2842,197 @@ export class GlRenderer {
 			this.drawLayerPlacement(entry.tex, box, out.fbo, edit, 0, texSize);
 			return true;
 		}
-		const scratch = this.ensureMediaScratch();
-		if (!scratch) return false;
-		// Chain first, placement second. The chain runs on the media filling the whole
-		// buffer, so an effect's centre or edges are the media's, not the canvas's.
 		const grow = this.bleedFactor(style);
-		this.drawLayerPlacement(
-			entry.tex,
-			this.fullFrameBox(1 / grow),
-			out.fbo,
-			edit,
-			0,
-			texSize,
-		);
+		const grown = { ...box, drawW: box.drawW * grow, drawH: box.drawH * grow };
+		const size = this.layerChainSize(grown, grow);
 		this.chainMediaFill = 1 / grow;
 		this.chainAspect = box.drawW / Math.max(box.drawH, 1);
-		const chained =
-			this.renderChainTo(
-				effects,
-				time,
-				safeDt,
-				scratch.fbo,
-				scratch.tex,
-				false,
-				false,
-				[],
-				out.tex,
-			) ?? scratch.tex;
+		const chained = this.runLayerChain(
+			effects,
+			time,
+			safeDt,
+			size,
+			out,
+			(target) =>
+				this.drawLayerPlacement(
+					entry.tex,
+					this.fullFrameBox(1 / grow),
+					target,
+					edit,
+					0,
+					texSize,
+				),
+		);
 		this.chainMediaFill = 1;
 		this.chainAspect = 0;
+		if (!chained) return false;
 		// Safe to write back into `out`: the chain's result lives in the scratch (or a
 		// feedback buffer), never in the texture it read. Chain buffers are NEAREST.
 		this.setTextureFilter(chained, true);
 		this.drawLayerPlacement(
 			chained,
-			{ ...box, drawW: box.drawW * grow, drawH: box.drawH * grow },
+			size.exact ? this.pixelAligned(grown, size) : grown,
 			out.fbo,
 			undefined,
 			this.edgeFade(style, grow),
 		);
 		this.setTextureFilter(chained, false);
 		return true;
+	}
+
+	/** The chain buffer for a layer placed at `grown` (its box and bleed margin): one
+	 * buffer pixel per frame pixel, so placing the result back resamples nothing.
+	 * Capped at what the frame's own buffer, grown by the bleed, would hold; past it
+	 * (a zoomed-in layer, a wide bleed) the media renders softer, and `exact` is off. */
+	private layerChainSize(
+		grown: LayerBox,
+		grow: number,
+	): { w: number; h: number; exact: boolean } {
+		const scale = Math.min(grow, MAX_LAYER_CHAIN_SCALE);
+		const area = this.imgW * this.imgH * scale * scale;
+		const max = this.maxTextureSize;
+		const w = Math.max(1, grown.drawW);
+		const h = Math.max(1, grown.drawH);
+		const k = Math.min(1, Math.sqrt(area / (w * h)), max / w, max / h);
+		return {
+			w: Math.max(1, Math.round(w * k)),
+			h: Math.max(1, Math.round(h * k)),
+			exact: k === 1 && Math.abs(grown.rot) < UNROTATED,
+		};
+	}
+
+	/** `box` at exactly `size`, its corner moved onto a frame pixel's: a texel lands on
+	 * each pixel, where a half-pixel offset would blend every one with its neighbour. */
+	private pixelAligned(
+		box: LayerBox,
+		size: { w: number; h: number },
+	): LayerBox {
+		const snap = (c: number, len: number, frame: number) =>
+			(Math.round(c * frame - len / 2) + len / 2) / frame;
+		return {
+			...box,
+			drawW: size.w,
+			drawH: size.h,
+			cx: snap(box.cx, size.w, this.imgW),
+			cy: snap(box.cy, size.h, this.imgH),
+		};
+	}
+
+	/** Chain first, placement second: `place` draws the media filling the chain's
+	 * buffer, so an effect's centre or edges are the media's, not the canvas's. The
+	 * buffer is sized to the layer on screen (`layerChainSize`). Null when a buffer
+	 * can't be made. */
+	private runLayerChain(
+		effects: EffectInstance[],
+		time: number,
+		safeDt: number,
+		size: { w: number; h: number },
+		out: { tex: WebGLTexture; fbo: WebGLFramebuffer },
+		place: (target: WebGLFramebuffer) => void,
+	): WebGLTexture | null {
+		const set = this.layerChainSet(size.w, size.h);
+		const src = set?.src ?? out;
+		const dst = set?.dst ?? this.ensureMediaScratch();
+		if (!dst) return null;
+		if (set) this.swapLayerChainSet(set);
+		try {
+			place(src.fbo);
+			return (
+				this.renderChainTo(
+					effects,
+					time,
+					safeDt,
+					dst.fbo,
+					dst.tex,
+					false,
+					false,
+					[],
+					src.tex,
+				) ?? dst.tex
+			);
+		} finally {
+			if (set) this.swapLayerChainSet(set);
+		}
+	}
+
+	/** The buffers for a `w` x `h` chain; null at the frame's own size, which has them. */
+	private layerChainSet(w: number, h: number): LayerChainSet | null {
+		if (w === this.imgW && h === this.imgH) return null;
+		const key = `${w}x${h}`;
+		const held = this.layerChainSets.get(key);
+		if (held) {
+			this.layerChainSets.delete(key);
+			this.layerChainSets.set(key, held);
+			return held;
+		}
+		while (this.layerChainSets.size >= MAX_LAYER_CHAIN_SETS) {
+			const oldest = this.layerChainSets.keys().next().value!;
+			this.deleteLayerChainSet(this.layerChainSets.get(oldest)!);
+			this.layerChainSets.delete(oldest);
+		}
+		const target = () => {
+			const tex = this.createTexture(w, h);
+			return { tex, fbo: this.createRenderTarget(tex)! };
+		};
+		const ppTextures: [WebGLTexture, WebGLTexture] = [
+			this.createTexture(w, h),
+			this.createTexture(w, h),
+		];
+		const set: LayerChainSet = {
+			imgW: w,
+			imgH: h,
+			chainFrame: this.effectFrame(),
+			ppTextures,
+			ppFBOs: this.createFBOPair(ppTextures),
+			hdrTextures: null,
+			hdrFBOs: null,
+			hdrW: 0,
+			hdrH: 0,
+			pyramidLevels: [],
+			maskBase: null,
+			src: target(),
+			dst: target(),
+		};
+		this.layerChainSets.set(key, set);
+		return set;
+	}
+
+	/** Trade the frame-sized chain buffers for `set`'s; a second call trades back. */
+	private swapLayerChainSet(set: LayerChainSet) {
+		[this.imgW, set.imgW] = [set.imgW, this.imgW];
+		[this.imgH, set.imgH] = [set.imgH, this.imgH];
+		[this.chainFrame, set.chainFrame] = [set.chainFrame, this.chainFrame];
+		[this.ppTextures, set.ppTextures] = [set.ppTextures, this.ppTextures];
+		[this.ppFBOs, set.ppFBOs] = [set.ppFBOs, this.ppFBOs];
+		[this.hdrTextures, set.hdrTextures] = [set.hdrTextures, this.hdrTextures];
+		[this.hdrFBOs, set.hdrFBOs] = [set.hdrFBOs, this.hdrFBOs];
+		[this.hdrW, set.hdrW] = [set.hdrW, this.hdrW];
+		[this.hdrH, set.hdrH] = [set.hdrH, this.hdrH];
+		[this.pyramidLevels, set.pyramidLevels] = [
+			set.pyramidLevels,
+			this.pyramidLevels,
+		];
+		[this.maskBase, set.maskBase] = [set.maskBase, this.maskBase];
+	}
+
+	private deleteLayerChainSet(set: LayerChainSet) {
+		const gl = this.gl;
+		this.swapLayerChainSet(set);
+		this.deleteTexturePair(this.ppTextures);
+		this.deleteFBOPair(this.ppFBOs);
+		this.deleteTexturePair(this.hdrTextures);
+		this.deleteFBOPair(this.hdrFBOs);
+		this.deletePyramid();
+		this.deleteMaskBase();
+		this.ppTextures = null;
+		this.ppFBOs = null;
+		this.hdrTextures = null;
+		this.hdrFBOs = null;
+		this.swapLayerChainSet(set);
+		for (const t of [set.src, set.dst]) {
+			gl.deleteTexture(t.tex);
+			gl.deleteFramebuffer(t.fbo);
+		}
 	}
 
 	/** A clip blending in over the one before it. The shader blends colour only, so it
@@ -2905,6 +3119,8 @@ export class GlRenderer {
 			entry.w = w;
 			entry.h = h;
 		}
+		// Drawn into at its own size: whatever mip levels an upload left are stale.
+		this.mipmapLayer(entry.tex, false);
 		return entry;
 	}
 
@@ -3247,6 +3463,9 @@ export class GlRenderer {
 			gl.deleteFramebuffer(this.mediaScratch.fbo);
 			this.mediaScratch = null;
 		}
+		for (const set of this.layerChainSets.values())
+			this.deleteLayerChainSet(set);
+		this.layerChainSets.clear();
 	}
 
 	private clearTextLayerTextures() {
