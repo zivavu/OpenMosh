@@ -116,7 +116,8 @@ export function isKeyEase(raw: unknown): raw is KeyEase {
 }
 
 /** Sorted, de-duplicated and dropped entirely when nothing survives. Bounded by
- * `max` keys, since a damaged save could list any number. */
+ * `max` keys, since a damaged save could list any number. Keys before 0 stay: a
+ * trimmed or split clip's start hides them. */
 export function normalizeTrack<T>(
 	raw: unknown,
 	value: (raw: unknown) => T,
@@ -128,9 +129,12 @@ export function normalizeTrack<T>(
 		const e = entry as Partial<Keyframe<T>> | null;
 		const t = e?.t;
 		if (typeof t !== "number" || !Number.isFinite(t)) continue;
-		out = putKeyframe(out, t, value(e!.v));
-		if (isKeyEase(e!.ease)) keyframeAt(out, Math.max(0, t))!.ease = e!.ease;
+		const key: Keyframe<T> = { t, v: value(e!.v) };
+		if (isKeyEase(e!.ease)) key.ease = e!.ease;
+		out = removeKeyframe(out, t);
+		out.push(key);
 	}
+	out.sort((a, b) => a.t - b.t);
 	return out.length > 0 ? out : undefined;
 }
 

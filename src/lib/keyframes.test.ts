@@ -53,6 +53,27 @@ describe("normalizeTrack", () => {
 		]);
 	});
 
+	it("keeps keys before 0, which a clip's start hides", () => {
+		const raw = [
+			{ t: -2, v: 0 },
+			{ t: -1, v: 1, ease: "smooth" },
+			{ t: 1, v: 2 },
+		];
+		expect(normalizeTrack(raw, Number)).toEqual([
+			{ t: -2, v: 0 },
+			{ t: -1, v: 1, ease: "smooth" },
+			{ t: 1, v: 2 },
+		]);
+	});
+
+	it("keeps the later of two keys at one moment", () => {
+		const raw = [
+			{ t: 1, v: 0 },
+			{ t: 1, v: 5 },
+		];
+		expect(normalizeTrack(raw, Number)).toEqual([{ t: 1, v: 5 }]);
+	});
+
 	it("reads no more than its cap from a crafted save", () => {
 		const raw = Array.from({ length: 5000 }, (_, t) => ({ t, v: t }));
 		expect(normalizeTrack(raw, Number, 100)).toHaveLength(100);
