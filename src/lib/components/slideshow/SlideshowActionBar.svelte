@@ -9,7 +9,6 @@
 		Type,
 	} from "lucide-svelte";
 	import { hasKeyboard } from "../../input-device";
-	import Checkbox from "../ui/Checkbox.svelte";
 	import RecordGroup from "../editor/RecordGroup.svelte";
 	import ResizeSettings from "../ui/ResizeSettings.svelte";
 	import { slideshowShortcutGroups } from "../../editor/shortcut-groups";
@@ -30,7 +29,6 @@
 		recording: boolean;
 		recordFps: number;
 		recordDuration: number;
-		showFps: boolean;
 		sourceFit: SourceFit;
 		fullscreen?: boolean;
 		onToggleFullscreen?: () => void;
@@ -52,7 +50,6 @@
 		recording,
 		recordFps,
 		recordDuration,
-		showFps = $bindable(false),
 		sourceFit = $bindable("contain"),
 		fullscreen = false,
 		onToggleFullscreen,
@@ -142,10 +139,6 @@
 		</div>
 		{#if showOptionsPanel}
 			<div class="bar-pop options-panel">
-				<div class="setting-row">
-					<label for="ss-show-fps">Show FPS</label>
-					<Checkbox id="ss-show-fps" bind:checked={showFps} />
-				</div>
 				<div class="setting-row">
 					<label
 						for="ss-source-fit"

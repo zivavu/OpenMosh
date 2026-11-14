@@ -54,7 +54,7 @@
 	} from "../../media";
 	import type { VideoPreviewPlayer } from "../../video-preview/preview-player.svelte";
 	import { maskPaint, tintedMask } from "../../effects/mask-paint.svelte";
-	import { layerHighlight } from "../../editor/layer-highlight.svelte";
+	import { uiPrefs } from "../../ui-prefs.svelte";
 	import MaskPaintLayer from "./MaskPaintLayer.svelte";
 	import MaskKeyLayer from "./MaskKeyLayer.svelte";
 	import MaskShapeLayer from "./MaskShapeLayer.svelte";
@@ -255,7 +255,7 @@
 
 	/** The trace wanted now: lit, switched on in settings, and no Mask tool on the preview. */
 	const highlightOn = $derived(
-		highlightLit && layerHighlight.value && !maskPaint.target,
+		highlightLit && uiPrefs.layerHighlight && !maskPaint.target,
 	);
 
 	/** Out of the way, so the mosh can be seen. */

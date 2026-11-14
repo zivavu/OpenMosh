@@ -71,7 +71,6 @@
 		type ProjectSongChoice,
 	} from "../../editor/settings";
 	import { linkBand } from "../../editor/link-band.svelte";
-	import { layerHighlight } from "../../editor/layer-highlight.svelte";
 	import {
 		cloneEffectInstance,
 		lanesWithoutHiddenEffects,
@@ -571,7 +570,6 @@
 		smoothing: audioSmoothing,
 		punch: audioPunch,
 	});
-	let showFps = $state(saved.showFps ?? DEFAULT_SETTINGS.showFps);
 	let videoLoop = $state(saved.loopVideo ?? DEFAULT_SETTINGS.loopVideo);
 	let projectSong = $state<ProjectSongChoice>(
 		saved.projectSong ?? DEFAULT_SETTINGS.projectSong,
@@ -730,8 +728,6 @@
 		linkBand.value;
 		audioSmoothing;
 		audioPunch;
-		showFps;
-		layerHighlight.value;
 		const outputVolume = isSequenceMode
 			? mixer.outputVolume
 			: audio.outputVolume;
@@ -749,8 +745,6 @@
 			moshLinkBand: linkBand.value,
 			audioSmoothing,
 			audioPunch,
-			showFps,
-			layerHighlight: layerHighlight.value,
 			outputVolume,
 			loopAudio,
 			loopVideo: videoLoop,
@@ -3123,7 +3117,7 @@
 				bind:naturalHeight
 				bind:fps={currentFps}
 				bind:fullscreen={previewFullscreen}
-				showFps={showFps && !isImageFormat}
+				showFps={uiPrefs.showFps && !isImageFormat}
 				videoEl={isLive
 					? liveVideoEl
 					: isVideo && !singleVideo.player
@@ -3261,7 +3255,6 @@
 					{@render formatPicker()}
 					<OutputSettings
 						editor={isSequenceMode}
-						bind:showFps
 						bind:projectSong
 						bind:sourceFit
 						bind:resizeWidth
