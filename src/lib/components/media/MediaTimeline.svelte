@@ -52,6 +52,7 @@
 		clipSourceId,
 		copyMediaClips,
 		createMediaClip,
+		mediaSourceAnchor,
 		newClipSourceId,
 		newClipSpan,
 		pasteMediaClips,
@@ -324,6 +325,17 @@
 				return src && isTimed(src)
 					? videoSourceEnds(edits[src.id], src.duration, clip, until)
 					: [];
+			},
+			get sourceAnchor() {
+				return mediaSourceAnchor((clip) => {
+					const lane = timeline.lanes.find((l) =>
+						l.clips.some((c) => c.id === clip.id),
+					);
+					const src = lane && clipSource(lane, clip);
+					return src && isTimed(src)
+						? { edit: edits[src.id], length: src.duration }
+						: null;
+				});
 			},
 			readJoin: (clip) => clip.transition,
 			writeJoin: (clip, transition) => ({

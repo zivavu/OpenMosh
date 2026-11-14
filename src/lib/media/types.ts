@@ -11,7 +11,11 @@ import {
 } from "../editor/chain-clip";
 import { cleanEffects } from "../editor/sequence";
 import type { TextOverlayBlendMode } from "../text-overlay";
-import { clipFadeWeight, fitClipsToDuration } from "../timeline/clips";
+import {
+	clipFadeWeight,
+	fitClipsToDuration,
+	type SourceAnchor,
+} from "../timeline/clips";
 import {
 	DEFAULT_LANE_AUDIO,
 	fitAudioLanes,
@@ -25,6 +29,7 @@ import {
 	clipSourcePosition,
 	SPEED_MAX,
 	SPEED_MIN,
+	sourceSpeed,
 	type BounceWalk,
 	type SourceEdit,
 } from "./source-edit";
@@ -214,6 +219,47 @@ function normalizeClipSpeed(raw: unknown): number | undefined {
 /** How strongly the clip's layer shows at `time`, 1 unless a fade is ramping. */
 export function mediaClipWeight(clip: MediaClip, time: number): number {
 	return clipFadeWeight(clip, clip.fadeInSec, clip.fadeOutSec, time);
+}
+
+/** The media a clip plays over time, as its start trim sees it. */
+export interface TimedClipMedia {
+	edit?: SourceEdit;
+	/** The file's length, when known. */
+	length?: number;
+}
+
+/** How a media clip's start trims, as in a DAW: a timed source (a video, a
+ * slideshow's cuts) holds still and the edge uncovers or hides it, back to where its
+ * span begins. Anything else (`timed` null) has no in-point and slides freely. */
+export function mediaSourceAnchor(
+	timed: (clip: MediaClip) => TimedClipMedia | null,
+): SourceAnchor<MediaClip> {
+	return {
+		slack: (c) => {
+			const media = timed(c);
+			if (!media) return Infinity;
+			const rate = sourceSpeed(media.edit);
+			const span = media.edit?.span;
+			// Going left on a backward pass walks the media forward, toward its end.
+			if (c.bounceBack) {
+				const end = span?.end ?? media.length;
+				return end ? Math.max(0, end - c.sourceStart) / rate : 0;
+			}
+			return Math.max(0, c.sourceStart - (span?.start ?? 0)) / rate;
+		},
+		move: (c, step) => {
+			const media = timed(c);
+			if (!media) return c;
+			const rate = sourceSpeed(media.edit);
+			return {
+				...c,
+				sourceStart: Math.max(
+					media.edit?.span?.start ?? 0,
+					c.sourceStart + (c.bounceBack ? -step : step) * rate,
+				),
+			};
+		},
+	};
 }
 
 /** Cut the clip covering `at` into two. The right half picks up the source time
