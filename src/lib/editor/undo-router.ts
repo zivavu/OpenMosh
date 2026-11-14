@@ -46,3 +46,12 @@ export function redoLatest(
 	asOneEdit(() => picked.forEach((s) => s.redo()));
 	return true;
 }
+
+/** Stamp of the edit Ctrl+Z would take back next, or NO_EDIT. */
+export function latestUndoSeq(
+	sources: (UndoSource | null | undefined)[],
+): number {
+	let seq = NO_EDIT;
+	for (const s of sources) if (s && s.undoSeq > seq) seq = s.undoSeq;
+	return seq;
+}

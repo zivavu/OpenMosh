@@ -7,6 +7,7 @@ export {
 	savePreset,
 	updatePreset,
 	deletePreset,
+	restorePreset,
 	isPresetsChange,
 	applyPreset,
 	presetChainKey,

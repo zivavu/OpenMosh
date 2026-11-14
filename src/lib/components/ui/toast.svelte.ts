@@ -5,6 +5,9 @@ export interface ToastAction {
 	run: () => void;
 }
 
+/** How long a toast with an Undo stays up. */
+export const UNDO_TOAST_MS = 8000;
+
 export type ToastType = "error" | "info" | "success";
 
 export interface Toast {
