@@ -372,6 +372,10 @@ describe("normalizeMediaTimeline", () => {
 		expect(a.effects).not.toBe(b.effects);
 	});
 
+	it("starts a new layer without bleed", () => {
+		expect(createMediaLane("Media 1").style.bleed).toBe(0);
+	});
+
 	it("backfills bleed on a layer saved before it existed", () => {
 		const t = normalizeMediaTimeline({
 			enabled: true,

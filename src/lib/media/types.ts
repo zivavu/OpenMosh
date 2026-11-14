@@ -167,10 +167,13 @@ export const DEFAULT_MEDIA_STYLE: MediaStyle = {
 	fit: "contain",
 	opacity: 1,
 	blendMode: "normal",
-	bleed: 0.25,
+	bleed: 0,
 	bleedFade: 0.5,
 	slideFrame: true,
 };
+
+/** What a layer saved before bleed had a setting loaded with, and keeps. */
+const LEGACY_BLEED = 0.25;
 
 export const EMPTY_MEDIA_TIMELINE: MediaTimeline = {
 	enabled: false,
@@ -377,7 +380,11 @@ export function normalizeMediaTimeline(raw: unknown): MediaTimeline {
 			enabled: lane.enabled !== false,
 			z: finiteOr(lane.z, i),
 			sourceId: lane.sourceId ?? null,
-			style: { ...DEFAULT_MEDIA_STYLE, ...(lane.style ?? {}) },
+			style: {
+				...DEFAULT_MEDIA_STYLE,
+				bleed: LEGACY_BLEED,
+				...(lane.style ?? {}),
+			},
 			...withLaneKeys(lane.keys, lane.keyLinks),
 			settings: normalizeLaneSettings(lane.settings),
 			audio: normalizeLaneAudio(lane.audio),
