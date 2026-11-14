@@ -52,6 +52,29 @@
 			<span class="hint">Draw the live spectrum under each audio link.</span>
 		</span>
 	</label>
+	<label class="setting">
+		<Checkbox
+			checked={uiPrefs.showFps}
+			onchange={(e) => (uiPrefs.showFps = e.currentTarget.checked)}
+		/>
+		<span class="text">
+			<span class="name">Show FPS</span>
+			<span class="hint">Show the preview's frame rate in its corner.</span>
+		</span>
+	</label>
+	<label class="setting">
+		<Checkbox
+			checked={uiPrefs.layerHighlight}
+			onchange={(e) => (uiPrefs.layerHighlight = e.currentTarget.checked)}
+		/>
+		<span class="text">
+			<span class="name">Highlight selected layer</span>
+			<span class="hint"
+				>In the editor, outline a layer on the preview when you select it, until
+				the next mosh.</span
+			>
+		</span>
+	</label>
 </PanelModal>
 
 <style>

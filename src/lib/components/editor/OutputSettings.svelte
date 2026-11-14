@@ -1,15 +1,12 @@
 <script lang="ts">
 	import type { ProjectSongChoice } from "../../editor/settings";
-	import { layerHighlight } from "../../editor/layer-highlight.svelte";
 	import type { SourceFit } from "../../gl/renderer";
-	import Checkbox from "../ui/Checkbox.svelte";
 	import ResizeSettings from "../ui/ResizeSettings.svelte";
 	import SettingRow from "./SettingRow.svelte";
 
 	interface Props {
 		/** Editor mode: layer and project settings show too. */
 		editor: boolean;
-		showFps: boolean;
 		projectSong: ProjectSongChoice;
 		sourceFit: SourceFit;
 		resizeWidth: number;
@@ -20,7 +17,6 @@
 
 	let {
 		editor,
-		showFps = $bindable(),
 		projectSong = $bindable(),
 		sourceFit = $bindable(),
 		resizeWidth = $bindable(),
@@ -31,17 +27,7 @@
 </script>
 
 <div class="divider"></div>
-<SettingRow label="Show FPS" for="show-fps">
-	<Checkbox id="show-fps" bind:checked={showFps} />
-</SettingRow>
 {#if editor}
-	<SettingRow
-		label="Highlight selected layer"
-		for="layer-highlight"
-		title="Outline the shape of a layer on the preview when you select it, until the next mosh"
-	>
-		<Checkbox id="layer-highlight" bind:checked={layerHighlight.value} />
-	</SettingRow>
 	<SettingRow
 		label="Project songs"
 		for="project-song"

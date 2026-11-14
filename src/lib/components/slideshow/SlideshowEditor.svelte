@@ -849,7 +849,6 @@
 	let naturalWidth = $state<number | undefined>(undefined);
 	let naturalHeight = $state<number | undefined>(undefined);
 	let currentFps = $state(0);
-	let showFps = $state(loadSettings().showFps ?? DEFAULT_SETTINGS.showFps);
 	// GlCanvas is externally driven here, so the preview loop feeds this counter instead.
 	let frameTimes: number[] = [];
 	let lastFpsUpdate = 0;
@@ -861,9 +860,6 @@
 		frameTimes = frameTimes.filter((t) => t > now - 1000);
 		currentFps = frameTimes.length;
 	}
-	$effect(() => {
-		updateSettings({ showFps });
-	});
 	// Slides rarely share the output aspect, so this one matters here.
 	let sourceFit = $state<SourceFit>(
 		loadSettings().sourceFit ?? DEFAULT_SETTINGS.sourceFit,
@@ -1406,7 +1402,7 @@
 
 			// The video-frame upload is unawaited: the render loop must not stall on the decoder.
 			const nowMs = performance.now();
-			if (showFps) trackFps(nowMs);
+			if (uiPrefs.showFps) trackFps(nowMs);
 			const frame = driver.advance(t);
 			if (frame.effects !== lastAppliedEffects) {
 				lastAppliedEffects = frame.effects;
@@ -2030,7 +2026,7 @@
 				bind:naturalWidth
 				bind:naturalHeight
 				fps={currentFps}
-				{showFps}
+				showFps={uiPrefs.showFps}
 				freezeAnimation={!previewPlaying}
 				suspended={recordingState.recording}
 				externallyDriven
@@ -2058,7 +2054,6 @@
 			onToggleText={toggleTextTimeline}
 			onTogglePreview={togglePreview}
 			onStartRecording={startRecording}
-			bind:showFps
 			bind:sourceFit
 			fullscreen={previewFullscreen}
 			onToggleFullscreen={toggleFullscreen}

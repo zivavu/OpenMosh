@@ -19,6 +19,14 @@ let showSpectrum = $state<boolean>(
 	loadSettings().showSpectrum ?? DEFAULT_SETTINGS.showSpectrum,
 );
 
+let showFps = $state<boolean>(
+	loadSettings().showFps ?? DEFAULT_SETTINGS.showFps,
+);
+
+let layerHighlight = $state<boolean>(
+	loadSettings().layerHighlight ?? DEFAULT_SETTINGS.layerHighlight,
+);
+
 function applyContrast() {
 	if (highContrast) document.documentElement.dataset.contrast = "high";
 	else delete document.documentElement.dataset.contrast;
@@ -60,5 +68,20 @@ export const uiPrefs = {
 	set showSpectrum(on: boolean) {
 		showSpectrum = on;
 		updateSettings({ showSpectrum: on });
+	},
+	get showFps(): boolean {
+		return showFps;
+	},
+	set showFps(on: boolean) {
+		showFps = on;
+		updateSettings({ showFps: on });
+	},
+	/** Whether selecting a layer in the editor traces its edge on the preview. */
+	get layerHighlight(): boolean {
+		return layerHighlight;
+	},
+	set layerHighlight(on: boolean) {
+		layerHighlight = on;
+		updateSettings({ layerHighlight: on });
 	},
 };
