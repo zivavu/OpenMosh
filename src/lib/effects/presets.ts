@@ -164,6 +164,15 @@ export function deletePreset(index: number, seen?: Preset): Preset[] {
 	return presets;
 }
 
+/** Puts a deleted preset back at `index`, renumbered if its name was taken since. */
+export function restorePreset(preset: Preset, index: number): Preset[] {
+	const presets = loadPresets();
+	const name = freeName(preset.name, new Set(presets.map((p) => p.name)));
+	presets.splice(Math.min(index, presets.length), 0, { ...preset, name });
+	writePresets(presets);
+	return presets;
+}
+
 /** True for a storage event that changed the preset list. */
 export function isPresetsChange(key: string | null): boolean {
 	return key === null || key === PRESETS_KEY;

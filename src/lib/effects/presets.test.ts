@@ -16,6 +16,7 @@ import {
 	presetFileName,
 	presetsToFile,
 	PresetStorageFull,
+	restorePreset,
 	savePreset,
 	updatePreset,
 } from "./presets";
@@ -325,6 +326,31 @@ describe("deletePreset", () => {
 		deletePreset(0);
 		expect(deletePreset(0)).toEqual([]);
 		expect(stored()).toEqual([]);
+	});
+});
+
+describe("restorePreset", () => {
+	beforeEach(() => {
+		ls.seedJson(PRESETS_KEY, [
+			{ name: "one", effects: [] },
+			{ name: "three", effects: [] },
+		]);
+		ls.seed(SEEDED_KEY, "1");
+	});
+
+	it("puts it back where it was", () => {
+		restorePreset({ name: "two", effects: [] }, 1);
+		expect(stored().map((p) => p.name)).toEqual(["one", "two", "three"]);
+	});
+
+	it("goes last when the list has shrunk past its place", () => {
+		restorePreset({ name: "two", effects: [] }, 9);
+		expect(stored().map((p) => p.name)).toEqual(["one", "three", "two"]);
+	});
+
+	it("numbers its name when another preset took it meanwhile", () => {
+		restorePreset({ name: "one", effects: [] }, 0);
+		expect(stored().map((p) => p.name)).toEqual(["one (2)", "one", "three"]);
 	});
 });
 

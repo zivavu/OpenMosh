@@ -24,6 +24,7 @@
 		cloneEffectInstance,
 		createEffectInstance,
 		deletePreset,
+		restorePreset,
 		isPresetsChange,
 		importPresets,
 		loadPresets,
@@ -53,7 +54,7 @@
 	import { isMoshable } from "../../editor/mosh";
 	import { keepLockedInPreset } from "../../editor/sequence";
 	import EffectItem from "./EffectItem.svelte";
-	import { showToast } from "./toast.svelte";
+	import { showToast, UNDO_TOAST_MS } from "./toast.svelte";
 	import { ParamTakes } from "../../effects/param-take";
 	import {
 		chainGroupNames,
@@ -259,15 +260,30 @@
 		if (at !== -1) onPresetUpdated?.($state.snapshot(presets[at]) as Preset);
 	}
 
-	function handleDeletePreset(index: number) {
-		const applied =
-			appliedIndex === null || appliedIndex === index
-				? null
-				: presets[appliedIndex].name;
-		presets = deletePreset(index, $state.snapshot(presets[index]) as Preset);
+	/** Keeps the applied highlight on the same preset across a change to the list. */
+	function relist(next: Preset[]) {
+		const applied = appliedIndex === null ? null : presets[appliedIndex]?.name;
+		presets = next;
 		const at =
-			applied === null ? -1 : presets.findIndex((p) => p.name === applied);
+			applied == null ? -1 : presets.findIndex((p) => p.name === applied);
 		appliedIndex = at === -1 ? null : at;
+	}
+
+	function handleDeletePreset(index: number) {
+		const deleted = $state.snapshot(presets[index]) as Preset;
+		if (appliedIndex === index) appliedIndex = null;
+		relist(deletePreset(index, deleted));
+		if (presets.some((p) => p.name === deleted.name)) return;
+		showToast(`Deleted "${deleted.name}"`, "info", UNDO_TOAST_MS, {
+			label: "Undo",
+			run: () => {
+				try {
+					relist(restorePreset(deleted, index));
+				} catch (err) {
+					showToast(err instanceof Error ? err.message : String(err), "error");
+				}
+			},
+		});
 	}
 
 	// Another tab saved, changed or deleted a preset: list what's stored now.

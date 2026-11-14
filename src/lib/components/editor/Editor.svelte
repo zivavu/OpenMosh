@@ -116,6 +116,7 @@
 	} from "../../timeline/snapshot-history.svelte";
 	import { createSpanHistory } from "../../audio/span-history.svelte";
 	import { asOneEdit, PENDING_EDIT } from "../../editor/edit-clock";
+	import { createUndoToast } from "../../editor/undo-toast.svelte";
 	import {
 		redoLatest,
 		undoLatest,
@@ -1337,7 +1338,9 @@
 	/** Empty the pool; clips that drew from it lose their media, deleted from storage too. */
 	function clearSequenceSources() {
 		showClearSourcesConfirm = false;
-		if (clearPool()) pool.forgetRestoreAttempts();
+		if (!clearPool()) return;
+		pool.forgetRestoreAttempts();
+		removalToast.show("Removed all media", poolHistory.undoSeq);
 	}
 
 	/** Clips pointing at a removed source draw nothing; an empty pool shows the placeholder. */
@@ -1928,6 +1931,17 @@
 
 	function redo() {
 		redoLatest(undoSources());
+	}
+
+	const removalToast = createUndoToast(undoSources);
+	$effect(() => removalToast.sync());
+
+	function removeMedia(id: string) {
+		const name = sourceRegistry.get(id)?.name;
+		removeSequenceSource(id);
+		if (name !== undefined) {
+			removalToast.show(`Removed "${name}"`, poolHistory.undoSeq);
+		}
 	}
 
 	function clearEffects() {
@@ -3066,7 +3080,7 @@
 				onAddFiles={(files) => void addSequenceSources(files)}
 				onGenerate={() => (generateOpen = true)}
 				onRecord={() => (webcamOpen = true)}
-				onRemove={removeSequenceSource}
+				onRemove={removeMedia}
 				onReorder={(from, to) => sourceRegistry.reorder(from, to)}
 				onAssign={assignMediaClipSource}
 				onProxyAction={sourceProxyAction}
@@ -3336,7 +3350,7 @@
 				selectedSourceId={railSourceId}
 				onAssign={assignMediaClipSource}
 				onAdd={() => sourceInput?.click()}
-				onRemove={removeSequenceSource}
+				onRemove={removeMedia}
 				onReorder={(from, to) => sourceRegistry.reorder(from, to)}
 				edits={sourceRegistry.edits}
 				onEditChange={editSource}
