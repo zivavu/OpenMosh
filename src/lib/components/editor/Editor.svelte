@@ -2092,7 +2092,7 @@
 	let recordDuration = $state(5);
 	let recordFps = $state(60);
 	/** A ceiling on typos for the editor's project length. */
-	const MAX_PROJECT_LENGTH = 3600;
+	const MAX_PROJECT_LENGTH = 10 * 3600;
 
 	/** Which project the export settings belong to; `keys.storeKey` carries the mode prefix. */
 	let renderKey = $derived(
