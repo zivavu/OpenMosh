@@ -186,17 +186,17 @@ export function moveClipsIn<C extends TimelineClip, L extends ClipLane<C>>(
 	}));
 }
 
-/** Move one edge of every clip in `clipIds` by `delta`. The tightest limit any member
- * meets (a neighbour, the timeline's ends, the shortest clip) holds them all. */
-/** Clips whose media holds still under a start trim, as in a DAW: the edge uncovers
- * or hides it, moving the clip's in-point along. */
+/** What holds still when a clip's start edge moves, as in a DAW: its media and its
+ * keys stay put on the timeline, and the edge uncovers or hides them. */
 export interface SourceAnchor<C> {
 	/** How far the start may move left before the media runs out, in seconds. */
 	slack(clip: C): number;
-	/** The clip's in-point moved for its start moving by `step` seconds. */
+	/** The clip with its contents held in place for its start moving by `step` seconds. */
 	move(clip: C, step: number): C;
 }
 
+/** Move one edge of every clip in `clipIds` by `delta`. The tightest limit any member
+ * meets (a neighbour, the timeline's ends, the shortest clip) holds them all. */
 export function resizeClipsIn<C extends TimelineClip, L extends ClipLane<C>>(
 	lanes: L[],
 	clipIds: string[],
@@ -383,7 +383,7 @@ export function resizeClip<C extends TimelineClip, L extends ClipLane<C>>(
 }
 
 /** Drag the edge shared by two flush clips: both facing edges move to `time`. With
- * an anchor it's a rolling edit: the right clip's media holds still too. */
+ * an anchor it's a rolling edit: what the right clip holds stays put too. */
 export function resizeBoundary<C extends TimelineClip, L extends ClipLane<C>>(
 	lane: L,
 	leftId: string,

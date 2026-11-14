@@ -26,7 +26,7 @@
 		simplifyLaneKeys,
 	} from "../../media/lane-keys";
 	import type { EffectInstance } from "../../effects/types";
-	import type { ChainClip } from "../../editor/chain-clip";
+	import { chainClipAnchor, type ChainClip } from "../../editor/chain-clip";
 	import { updateClipsIn } from "../../timeline/clips";
 	import { Copy, Focus, Volume2, VolumeX } from "lucide-svelte";
 	import type { MixSegment } from "../../mix/plan";
@@ -327,15 +327,17 @@
 					: [];
 			},
 			get sourceAnchor() {
-				return mediaSourceAnchor((clip) => {
-					const lane = timeline.lanes.find((l) =>
-						l.clips.some((c) => c.id === clip.id),
-					);
-					const src = lane && clipSource(lane, clip);
-					return src && isTimed(src)
-						? { edit: edits[src.id], length: src.duration }
-						: null;
-				});
+				return chainClipAnchor(
+					mediaSourceAnchor((clip) => {
+						const lane = timeline.lanes.find((l) =>
+							l.clips.some((c) => c.id === clip.id),
+						);
+						const src = lane && clipSource(lane, clip);
+						return src && isTimed(src)
+							? { edit: edits[src.id], length: src.duration }
+							: null;
+					}),
+				);
 			},
 			readJoin: (clip) => clip.transition,
 			writeJoin: (clip, transition) => ({

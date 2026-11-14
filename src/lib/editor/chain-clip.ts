@@ -13,6 +13,7 @@ import {
 	MIN_CLIP_LENGTH,
 	sortClips,
 	type ClipLane,
+	type SourceAnchor,
 	type TimelineClip,
 } from "../timeline/clips";
 import { chainAtKeyTime, shiftChainKeys } from "../effects/param-keys";
@@ -47,6 +48,20 @@ export interface ChainClip extends TimelineClip {
 	intervalBeats?: number;
 	/** "interval" mode: base seed for per-tick rolls. */
 	seed?: number;
+}
+
+/** A chain clip's start edge moving holds its keys in place on the timeline, the way
+ * `media` holds a timed source. Keys it uncovers come back; hidden ones are kept. */
+export function chainClipAnchor<C extends ChainClip>(
+	media?: SourceAnchor<C>,
+): SourceAnchor<C> {
+	return {
+		slack: (c) => media?.slack(c) ?? Infinity,
+		move: (c, step) => {
+			const moved = media ? media.move(c, step) : c;
+			return { ...moved, effects: shiftChainKeys(moved.effects, -step) };
+		},
+	};
 }
 
 /** 0-based re-roll tick index inside an interval clip. */
