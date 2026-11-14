@@ -382,20 +382,25 @@ export function resizeClip<C extends TimelineClip, L extends ClipLane<C>>(
 	return replaceClip(lane, { ...clip, end });
 }
 
-/** Drag the edge shared by two flush clips: both facing edges move to `time`. */
+/** Drag the edge shared by two flush clips: both facing edges move to `time`. With
+ * an anchor it's a rolling edit: the right clip's media holds still too. */
 export function resizeBoundary<C extends TimelineClip, L extends ClipLane<C>>(
 	lane: L,
 	leftId: string,
 	rightId: string,
 	time: number,
+	anchor?: SourceAnchor<C>,
 ): L {
 	const left = lane.clips.find((c) => c.id === leftId);
 	const right = lane.clips.find((c) => c.id === rightId);
 	if (!left || !right) return lane;
-	const t = Math.max(
+	const floor = Math.max(
 		left.start + MIN_CLIP_LENGTH,
-		Math.min(time, right.end - MIN_CLIP_LENGTH),
+		anchor ? right.start - anchor.slack(right) : -Infinity,
 	);
+	const t = Math.max(floor, Math.min(time, right.end - MIN_CLIP_LENGTH));
+	const moved = { ...right, start: t };
+	const nextRight = anchor ? anchor.move(moved, t - right.start) : moved;
 	return {
 		...lane,
 		clips: sortClips(
@@ -403,7 +408,7 @@ export function resizeBoundary<C extends TimelineClip, L extends ClipLane<C>>(
 				c.id === left.id
 					? { ...left, end: t }
 					: c.id === right.id
-						? { ...right, start: t }
+						? nextRight
 						: c,
 			),
 		),
