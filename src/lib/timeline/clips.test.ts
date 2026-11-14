@@ -585,6 +585,41 @@ describe("resizeBoundary", () => {
 		expect(resizeBoundary(lane, "a", "elsewhere", 5)).toBe(lane);
 		expect(resizeBoundary(lane, "elsewhere", "b", 5)).toBe(lane);
 	});
+
+	describe("with a source anchor", () => {
+		type Shot = TimelineClip & { sourceStart: number };
+		const anchor: SourceAnchor<Shot> = {
+			slack: (c) => c.sourceStart,
+			move: (c, step) => ({ ...c, sourceStart: c.sourceStart + step }),
+		};
+		const shots = (): ClipLane<Shot> => ({
+			clips: [
+				{ id: "a", start: 0, end: 4, sourceStart: 0 },
+				{ id: "b", start: 4, end: 8, sourceStart: 2 },
+			],
+		});
+		const b = (l: ClipLane<Shot>) => l.clips.find((c) => c.id === "b")!;
+
+		it("hides the right clip's front when the edge moves right", () => {
+			expect(b(resizeBoundary(shots(), "a", "b", 5, anchor))).toMatchObject({
+				start: 5,
+				sourceStart: 3,
+			});
+		});
+
+		it("uncovers it when the edge moves left", () => {
+			expect(b(resizeBoundary(shots(), "a", "b", 3, anchor))).toMatchObject({
+				start: 3,
+				sourceStart: 1,
+			});
+		});
+
+		it("stops where the right clip's media begins", () => {
+			const next = resizeBoundary(shots(), "a", "b", 0.5, anchor);
+			expect(b(next)).toMatchObject({ start: 2, sourceStart: 0 });
+			expect(next.clips[0].end).toBe(2);
+		});
+	});
 });
 
 describe("addClip", () => {
