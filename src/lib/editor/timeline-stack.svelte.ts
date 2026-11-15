@@ -558,6 +558,14 @@ export class TimelineStackState {
 			.map(({ id }) => id);
 	}
 
+	/** Svelte action for the stack's root: Ctrl+wheel between lanes zooms too. */
+	root = (node: HTMLElement) => {
+		const detach = this.vp.attachModifierWheel(node, () => {
+			this.followPlayhead = false;
+		});
+		return { destroy: detach };
+	};
+
 	/** Svelte action for a lane's track element; registers it as the axis geometry. */
 	lane = (node: HTMLElement | SVGElement, laneId?: string) => {
 		const el = node as HTMLElement;
