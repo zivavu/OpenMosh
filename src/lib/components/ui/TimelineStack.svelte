@@ -210,6 +210,10 @@
 		});
 	});
 
+	function stackRoot(node: HTMLElement) {
+		return stack.root(node);
+	}
+
 	function laneTrack(node: HTMLElement) {
 		return stack.lane(node);
 	}
@@ -322,6 +326,7 @@
 
 <div
 	class="tl-stack"
+	use:stackRoot
 	style:max-height={height === null ? null : `min(${height}px, var(--tl-cap))`}
 >
 	<div class="tl-toolbar">

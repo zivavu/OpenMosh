@@ -134,33 +134,53 @@ export class TimelineViewport {
 			const gesture = wheelGesture(e, plainWheelScrolls());
 			// Left to the browser, which scrolls the lane list.
 			if (gesture === "scroll") return;
-			e.preventDefault();
-			e.stopPropagation();
-			if (this.#getDuration() <= 0) return;
-			const r = el.getBoundingClientRect();
-			const cursorFrac = Math.max(
-				0,
-				Math.min(1, (e.clientX - r.left) / r.width),
-			);
-			if (gesture === "pan") {
-				onPan?.();
-				// Some browsers report Shift+wheel on the horizontal axis.
-				this.panView(
-					e.shiftKey
-						? this.viewDuration * 0.25 * Math.sign(e.deltaY || e.deltaX)
-						: (e.deltaX / 200) * this.viewDuration,
-				);
-			} else {
-				// Pin the playhead while zooming when it's on screen.
-				this.zoomView(
-					ZOOM_STEP ** wheelZoomNotches(e.deltaY, e.deltaMode),
-					this.anchorFrac() ?? cursorFrac,
-				);
-			}
+			this.#applyWheel(e, gesture, el.getBoundingClientRect(), onPan);
 		};
 		el.addEventListener("wheel", handleWheel as EventListener, {
 			passive: false,
 		});
 		return () => el.removeEventListener("wheel", handleWheel as EventListener);
+	}
+
+	/** Ctrl/Cmd+wheel anywhere in `el` (gaps, headers, toolbar) runs the timeline's
+	 * gesture against the lane axis, so it never falls through to the browser's page zoom. */
+	attachModifierWheel(
+		el: HTMLElement,
+		onPan: (() => void) | null = null,
+	): () => void {
+		const handleWheel = (e: WheelEvent) => {
+			if (e.defaultPrevented || !(e.ctrlKey || e.metaKey)) return;
+			const r = this.#getRect() ?? el.getBoundingClientRect();
+			this.#applyWheel(e, wheelGesture(e, false), r, onPan);
+		};
+		el.addEventListener("wheel", handleWheel, { passive: false });
+		return () => el.removeEventListener("wheel", handleWheel);
+	}
+
+	#applyWheel(
+		e: WheelEvent,
+		gesture: "pan" | "zoom" | "scroll",
+		r: DOMRect,
+		onPan: (() => void) | null,
+	): void {
+		e.preventDefault();
+		e.stopPropagation();
+		if (this.#getDuration() <= 0) return;
+		const cursorFrac = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+		if (gesture === "pan") {
+			onPan?.();
+			// Some browsers report Shift+wheel on the horizontal axis.
+			this.panView(
+				e.shiftKey
+					? this.viewDuration * 0.25 * Math.sign(e.deltaY || e.deltaX)
+					: (e.deltaX / 200) * this.viewDuration,
+			);
+		} else {
+			// Pin the playhead while zooming when it's on screen.
+			this.zoomView(
+				ZOOM_STEP ** wheelZoomNotches(e.deltaY, e.deltaMode),
+				this.anchorFrac() ?? cursorFrac,
+			);
+		}
 	}
 }
