@@ -1,9 +1,6 @@
-import { showToast } from "../components/ui/toast.svelte";
 import {
 	decodeAudioTrackToBuffer,
 	openAudioTrack,
-	SoundTooLongError,
-	soundTooLongMessage,
 	type FrameQueue,
 } from "../video/decode";
 import { openVideoFrameSource } from "../video/frame-source";
@@ -105,11 +102,8 @@ export class VideoPreviewPlayer {
 				if (player.#disposed || !buffer) return;
 				player.#audioBuffer = buffer;
 				if (player.playing) player.#startAudio();
-			} catch (e) {
+			} catch {
 				// Silent preview; export decodes audio separately
-				if (e instanceof SoundTooLongError && !player.#disposed) {
-					showToast(soundTooLongMessage(file.name), "info", 8000);
-				}
 			} finally {
 				audio.input.dispose();
 			}
