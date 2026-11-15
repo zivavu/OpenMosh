@@ -1,13 +1,7 @@
 /** Decoded sound per source, shared by the live mixer, the export and the waveforms. */
 
 import { getDecodedAudioBuffer } from "../audio/audio-buffer-cache";
-import { showToast } from "../components/ui/toast.svelte";
-import {
-	decodeAudioTrackToBuffer,
-	openAudioTrack,
-	SoundTooLongError,
-	soundTooLongMessage,
-} from "../video/decode";
+import { decodeAudioTrackToBuffer, openAudioTrack } from "../video/decode";
 
 /** Waveform resolution: loudest sample per this slice of a second. */
 export const PEAKS_PER_SEC = 100;
@@ -32,11 +26,7 @@ async function decodeSourceAudio(file: File): Promise<AudioBuffer | null> {
 		}
 	};
 	const viaBrowser = () => getDecodedAudioBuffer(file).catch(() => null);
-	// Too long for one buffer: the browser's decode would hold it whole too.
-	const orNull = (e: unknown) => {
-		if (e instanceof SoundTooLongError) throw e;
-		return null;
-	};
+	const orNull = () => null;
 	if (file.type.startsWith("audio/")) {
 		return (await viaBrowser()) ?? (await viaMediabunny().catch(orNull));
 	}
@@ -170,20 +160,16 @@ export class SourceAudioBank {
 
 	async #decode(id: string): Promise<AudioBuffer | null> {
 		let entry: Entry | null = { state: "none" };
-		let file: File | null = null;
 		try {
-			file = await this.#resolve(id);
+			const file = await this.#resolve(id);
 			// Not there yet (still coming back from storage): asked again later.
 			if (!file) entry = null;
 			const buffer = file ? await this.#decodeFile(file) : null;
 			if (buffer && buffer.length > 0) {
 				entry = { state: "ready", buffer, peaks: computePeaks(buffer) };
 			}
-		} catch (e) {
-			// Otherwise undecodable is the same as silent here.
-			if (e instanceof SoundTooLongError && file) {
-				showToast(soundTooLongMessage(file.name), "info", 8000);
-			}
+		} catch {
+			// Undecodable is the same as silent here.
 		} finally {
 			this.#release();
 		}
