@@ -10,6 +10,7 @@
 		type RowTracks,
 	} from "../../timeline/key-rows";
 	import ChainClipKeys from "../timeline/ChainClipKeys.svelte";
+	import { pasteKeysOnto } from "../../timeline/key-clipboard";
 	import type { EffectInstance } from "../../effects/types";
 	import { chainClipAnchor, type ChainClip } from "../../editor/chain-clip";
 	import { updateClipsIn } from "../../timeline/clips";
@@ -195,6 +196,15 @@
 			onSelectOnly: () => (selectedLaneId = null),
 			copy: copySelectedChains,
 			paste,
+			pasteKeys: (at) => {
+				const clip = lanes
+					.flatMap((l) => l.clips)
+					.find((c) => c.id === selectedClipId);
+				if (!clip) return false;
+				const pasted = pasteKeysOnto(clip, at);
+				if (pasted) editClipKeys(clip.id, () => pasted.clip.effects);
+				return true;
+			},
 			sourceAnchor: chainClipAnchor(),
 		},
 		stack,

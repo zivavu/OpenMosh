@@ -57,6 +57,7 @@
 	import { draggedTrackId } from "../../editor/source-drag.svelte";
 	import { generateId } from "../../effects/types";
 	import { clipKeyTime } from "../../effects/param-keys";
+	import { adjacentMoment, keyMoments } from "../../editor/key-jump";
 	import AudioLanes from "../timeline/AudioLanes.svelte";
 	import { editorShortcutGroups } from "../../editor/shortcut-groups";
 	import { createKeyboardHandler } from "../../editor/keyboard";
@@ -2074,7 +2075,40 @@
 		splitAtPlayhead: () =>
 			timelineAxis?.activeLaneSplitAt?.(timelineAxis.currentTime),
 		zoomTimeline: (inward) => timelineAxis?.vp.zoomStep(inward),
+		stepKey: (direction) => {
+			if (isSequenceMode) stepKey(direction);
+		},
 	});
+
+	/** The playhead to the selected clips' previous or next key; with none selected,
+	 * any clip's or layer's. */
+	function stepKey(direction: -1 | 1) {
+		const picked = [
+			fxState.selectedClip,
+			textState.selectedClip,
+			mediaState.selectedClip,
+		].filter((c) => c !== null);
+		const media = mediaState.timeline.lanes;
+		const clips =
+			picked.length > 0
+				? picked
+				: [
+						...fxState.lanes.flatMap((l) => l.clips),
+						...textState.timeline.lanes.flatMap((l) => l.clips),
+						...media.flatMap((l) => l.clips),
+					];
+		const lanes = mediaState.selectedLane
+			? [mediaState.selectedLane]
+			: picked.length > 0
+				? []
+				: media;
+		const t = adjacentMoment(
+			keyMoments(clips, lanes),
+			clock.masterTime(),
+			direction,
+		);
+		if (t !== null) clock.seek(t);
+	}
 
 	function save() {
 		if (!canvasEl) return;

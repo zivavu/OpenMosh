@@ -1,11 +1,16 @@
 <script lang="ts">
 	import ContextMenu from "../ui/ContextMenu.svelte";
 	import KeyGlyph from "./KeyGlyph.svelte";
-	import { EASE_HEADING, EASE_OPTIONS } from "../../timeline/key-eases";
+	import {
+		EASE_HEADING,
+		EASE_OPTIONS,
+		repeatsFor,
+	} from "../../timeline/key-eases";
 	import { onDestroy, untrack } from "svelte";
 	import { dropBoxed, holdBoxed } from "../../timeline/key-focus.svelte";
 	import { formatTimeMs } from "../../audio/audio-utils";
-	import type { KeyEase } from "../../keyframes";
+	import { NUDGE_SEC, type KeyEase } from "../../keyframes";
+	import { copyKeys, type CopiedKey } from "../../timeline/key-clipboard";
 	import { CLICK_PX, FinePointer, isFine, PLAIN } from "../../fine-drag";
 	import DragReadout from "./DragReadout.svelte";
 
@@ -33,6 +38,10 @@
 		onDeleteAll: () => void;
 		onSimplify: () => void;
 		onRepeat?: () => void;
+		/** The keys at these moments laid down again every `period` seconds. */
+		onRepeatEvery?: (times: number[], period: number) => void;
+		/** The keys at these moments, for the clipboard. */
+		onCopy?: (times: number[]) => CopiedKey[];
 		/** A key the panel's arrows stepped to, seconds from `start`: it gets selected. */
 		focus?: { t: number; serial: number } | null;
 		/** A shift-drag box over the lane, seconds from `start`: the keys in it get
@@ -55,6 +64,8 @@
 		onDeleteAll,
 		onSimplify,
 		onRepeat,
+		onCopy,
+		onRepeatEvery,
 		focus = null,
 		box = null,
 	}: Props = $props();
@@ -100,10 +111,14 @@
 			picked = times.filter((t) => t >= from - SAME && t <= to + SAME);
 			anchor = picked[0] ?? null;
 			if (picked.length === 0) return;
-			holdBoxed(boxId, () => {
-				if (selected.length > 0) onDelete(selected);
-				picked = [];
-			});
+			holdBoxed(
+				boxId,
+				() => {
+					if (selected.length > 0) onDelete(selected);
+					picked = [];
+				},
+				() => onCopy?.(selected) ?? [],
+			);
 		});
 	});
 	onDestroy(() => dropBoxed(boxId));
@@ -226,7 +241,20 @@
 	}
 
 	function onKeydown(e: KeyboardEvent, t: number) {
-		if (e.key === "Delete" || e.key === "Backspace") {
+		const these = has(selected, t) ? selected : [t];
+		if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c" && onCopy) {
+			e.preventDefault();
+			e.stopPropagation();
+			copyKeys(onCopy(these));
+		} else if (
+			(e.key === "ArrowLeft" || e.key === "ArrowRight") &&
+			!e.ctrlKey &&
+			!e.metaKey
+		) {
+			e.preventDefault();
+			e.stopPropagation();
+			nudge(these, e.key === "ArrowLeft" ? -1 : 1, e.shiftKey);
+		} else if (e.key === "Delete" || e.key === "Backspace") {
 			e.preventDefault();
 			e.stopPropagation();
 			onDelete(has(selected, t) ? selected : [t]);
@@ -240,6 +268,18 @@
 			e.stopPropagation();
 			onSeek(start + t);
 		}
+	}
+
+	/** The keys a frame along, or a beat with `beat` while there is one. */
+	function nudge(these: number[], direction: -1 | 1, beat: boolean) {
+		const size = beat && beatSec > 0 ? beatSec : NUDGE_SEC;
+		const lo = Math.min(...these);
+		const hi = Math.max(...these);
+		const delta = Math.min(Math.max(direction * size, -lo), length - hi);
+		if (Math.abs(delta) < 1e-4) return;
+		onMove(these, delta, `keys-nudge:${++dragSerial}`);
+		picked = these.map((x) => x + delta);
+		if (anchor !== null) anchor += delta;
 	}
 
 	function pick(action: () => void) {
@@ -320,7 +360,11 @@
 					picked = [];
 				})}>Delete every key on this {scope}</button
 		>
-		{#if times.length > 2 || (onRepeat && times.length > 1)}
+		{@const repeats =
+			onRepeatEvery && selected.length > 0
+				? repeatsFor(Math.max(...selected) - Math.min(...selected), beatSec)
+				: []}
+		{#if times.length > 2 || (onRepeat && times.length > 1) || repeats.length > 0}
 			<hr />
 		{/if}
 		{#if times.length > 2}
@@ -339,6 +383,15 @@
 				onclick={() => pick(onRepeat)}>Repeat to the {scope}'s end</button
 			>
 		{/if}
+		{#each repeats as option (option.beats)}
+			<button
+				type="button"
+				role="menuitem"
+				onclick={() =>
+					pick(() => onRepeatEvery?.(selected, option.beats * beatSec))}
+				>{option.label}</button
+			>
+		{/each}
 	</ContextMenu>
 {/if}
 

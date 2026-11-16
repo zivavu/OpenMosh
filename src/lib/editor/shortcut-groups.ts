@@ -190,6 +190,24 @@ const CLIP_ROWS: ShortcutRow[] = [
 	},
 	{ keys: ["Delete on a key"], description: "Delete the selected keys" },
 	{
+		keys: ["← → on a key"],
+		description: "Nudge the selected keys a frame; with Shift, a beat",
+	},
+	{
+		keys: ["↑ ↓ on a key in a setting row"],
+		description: "Nudge their value a step; with Shift, ten steps",
+	},
+	{
+		keys: ["Ctrl/Cmd+C on a key"],
+		description:
+			"Copy the selected keys; Ctrl/Cmd+V pastes them at the playhead on the selected clip",
+	},
+	{
+		keys: ["J", "K"],
+		description:
+			"Move the playhead to the previous or next key of the selected clip, or of any clip",
+	},
+	{
 		keys: ["Drag a key in a setting row"],
 		description: "Move it in time and value; Shift keeps it to one direction",
 	},
@@ -204,7 +222,7 @@ const CLIP_ROWS: ShortcutRow[] = [
 	{
 		keys: ["Right-click a key"],
 		description:
-			"Ease the selected keys, delete them or every key, simplify, or repeat to the end",
+			"Ease the selected keys, type their value, delete them, simplify, or repeat them on the beat",
 	},
 ];
 

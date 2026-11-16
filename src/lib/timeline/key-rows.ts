@@ -20,6 +20,7 @@ import {
 	type PlacementKey,
 } from "../media/lane-keys";
 import type { MediaLane } from "../media/types";
+import type { KeyTarget } from "./key-clipboard";
 
 export interface KeyRow {
 	id: string;
@@ -37,6 +38,8 @@ export interface KeyRow {
 	to: number;
 	/** The effect to open in the panel when the row's name is clicked. */
 	instanceId?: string;
+	/** What the row's keys are of, for copying them. */
+	target?: KeyTarget;
 }
 
 export type RowTracks = Map<string, Keyframe<number>[]>;
@@ -115,6 +118,12 @@ export function chainKeyRows(
 				from: clip.start,
 				to: clip.end,
 				instanceId: effect.instanceId,
+				target: {
+					kind: "fx",
+					defId: effect.defId,
+					nth: copy - 1,
+					param: param.key,
+				},
 			});
 		}
 	}
@@ -131,6 +140,7 @@ export function chainKeyRows(
 			from: clip.start,
 			to: clip.end,
 			instanceId: members[0].instanceId,
+			target: { kind: "fxgroup", group },
 		});
 	}
 	return rows;
@@ -168,6 +178,7 @@ export function laneKeyRows(lane: MediaLane, firstColor = 0): KeyRow[] {
 			offset: 0,
 			from: 0,
 			to: Infinity,
+			target: { kind: "lane", key },
 		});
 	}
 	const groups = new Map<string, KeyLink[]>();
@@ -187,6 +198,7 @@ export function laneKeyRows(lane: MediaLane, firstColor = 0): KeyRow[] {
 			offset: 0,
 			from: 0,
 			to: Infinity,
+			target: { kind: "lanegroup", group },
 		});
 	return rows;
 }

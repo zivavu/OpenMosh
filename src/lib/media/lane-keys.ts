@@ -9,6 +9,7 @@ import {
 	putKeyframe,
 	removeKeyframe,
 	repeatKeys,
+	repeatKeysEvery,
 	sampleNumbers,
 	removeKeysAtTimes,
 	setEaseAtTimes,
@@ -329,6 +330,16 @@ export function repeatLaneKeys(lane: MediaLane, end: number): MediaLane {
 	const first = times[0];
 	const span = times[times.length - 1] - first;
 	return mapTracks(lane, (keys) => repeatKeys(keys, first, span, end));
+}
+
+/** The keys at `times` laid down again every `period` seconds up to `end`. */
+export function repeatLaneKeysEvery(
+	lane: MediaLane,
+	times: readonly number[],
+	period: number,
+	end: number,
+): MediaLane {
+	return mapTracks(lane, (keys) => repeatKeysEvery(keys, times, period, end));
 }
 
 /** Finite values only, opacity held to 0..1; a lane with no track left has none. */

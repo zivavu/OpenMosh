@@ -9,6 +9,7 @@
 		moveChainKeys,
 		removeChainKeysAt,
 		repeatChainKeys,
+		repeatChainKeysEvery,
 		setChainEaseAt,
 		simplifyChainKeys,
 	} from "../../effects/param-keys";
@@ -18,6 +19,7 @@
 		keyFocus,
 	} from "../../timeline/key-focus.svelte";
 	import ClipKeys from "./ClipKeys.svelte";
+	import { chainKeysAt } from "../../timeline/key-clipboard";
 
 	/** A selected clip's effect keys on its bar. */
 	interface Props {
@@ -80,6 +82,9 @@
 		onDeleteAll={() => onEdit(clearChainKeys)}
 		onSimplify={() => onEdit(simplifyChainKeys)}
 		onRepeat={() => onEdit((e) => repeatChainKeys(e, length))}
+		onCopy={(times) => chainKeysAt(clip.effects, times, clip.start)}
+		onRepeatEvery={(times, period) =>
+			onEdit((e) => repeatChainKeysEvery(e, times, period, length))}
 		{focus}
 		{box}
 	/>

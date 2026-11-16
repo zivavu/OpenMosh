@@ -22,6 +22,8 @@ export interface KeyboardActions {
 	/** S: cut the clip under the playhead on the lane last touched. */
 	splitAtPlayhead: () => void;
 	zoomTimeline: (inward: boolean) => void;
+	/** J/K: the playhead to the previous or next key. */
+	stepKey?: (direction: -1 | 1) => void;
 }
 
 export function createKeyboardHandler(
@@ -87,6 +89,15 @@ export function createKeyboardHandler(
 		} else if (key === "r" && !mod && !e.altKey && !e.shiftKey) {
 			e.preventDefault();
 			actions.toggleRepeat();
+		} else if (
+			(key === "j" || key === "k") &&
+			actions.stepKey &&
+			!mod &&
+			!e.altKey &&
+			!e.shiftKey
+		) {
+			e.preventDefault();
+			actions.stepKey(key === "j" ? -1 : 1);
 		} else if (key === "s" && !mod && !e.altKey && !e.shiftKey) {
 			e.preventDefault();
 			actions.splitAtPlayhead();
