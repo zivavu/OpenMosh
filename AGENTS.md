@@ -160,6 +160,9 @@ Outside CI a run reuses whatever already serves its port, so when my dev server 
   grouped or audio-linked, never two at once. Grouped settings (`lib/key-groups.ts`)
   follow one 0..1 curve, each in its own range. Every member carries the curve, so a
   chain or lane stays whole when copied; edits write it to all of them.
+- Ctrl/Cmd+drag moves anything at a tenth of the pointer's speed. `lib/fine-range.ts` does it
+  for every range input app-wide; a new drag reads its pointer through `FinePointer`
+  (`lib/fine-drag.ts`). Ctrl+click on a clip still splits it, on release.
 - Code-split only what sits behind an `{#if}` that starts false, via `lib/lazy.ts`. Inline
   controls stay eager.
 - `Editor.svelte` wires; editor logic lives in `lib/editor/` as a class or factory taking a
