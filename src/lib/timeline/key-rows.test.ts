@@ -8,6 +8,7 @@ import {
 	dragKeys,
 	laneKeyRows,
 	pickRange,
+	setRowKey,
 	withChainTracks,
 	withLaneTracks,
 } from "./key-rows";
@@ -127,5 +128,31 @@ describe("pickRange", () => {
 			{ row: rows[0].id, t: 0 },
 			{ row: rows[1].id, t: 1 },
 		]);
+	});
+});
+
+describe("setRowKey", () => {
+	it("moves a key to a typed time and value, in timeline seconds", () => {
+		const [row] = chainKeyRows(clip());
+		expect(setRowKey(row, 2, 11, 8)).toEqual([
+			{ t: 0, v: 4 },
+			{ t: 1, v: 8 },
+		]);
+	});
+
+	it("holds a typed time to the clip and a value to the slider", () => {
+		const [row] = chainKeyRows(clip());
+		const keys = setRowKey(row, 2, 99, 9999);
+		expect(keys[keys.length - 1]).toEqual({ t: 4, v: row.max });
+	});
+
+	it("keeps the key's ease", () => {
+		const [row] = chainKeyRows(clip());
+		row.keys = [{ t: 0, v: 4, ease: "hold" }, row.keys[1]];
+		expect(setRowKey(row, 0, 10.5, 5)[0]).toEqual({
+			t: 0.5,
+			v: 5,
+			ease: "hold",
+		});
 	});
 });

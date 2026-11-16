@@ -1,10 +1,14 @@
 <script lang="ts">
 	import ContextMenu from "../ui/ContextMenu.svelte";
-	import { Diamond } from "lucide-svelte";
+	import { ChevronsUpDown, Diamond } from "lucide-svelte";
+	import DragReadout from "./DragReadout.svelte";
+	import KeyEditPopover from "./KeyEditPopover.svelte";
+	import { tallKeyRows } from "../../timeline/key-row-size.svelte";
 	import { onDestroy, untrack } from "svelte";
 	import { formatTimeMs } from "../../audio/audio-utils";
 	import { CLICK_PX, FinePointer, isFine, PLAIN } from "../../fine-drag";
 	import {
+		keyframeAt,
 		putKeyframe,
 		removeKeysAtTimes,
 		sampleNumbers,
@@ -17,6 +21,7 @@
 		pickRange,
 		rowValue,
 		sameKey,
+		setRowKey,
 		type KeyRef,
 		type KeyRow,
 		type RowTracks,
@@ -71,6 +76,13 @@
 	let anchor: KeyRef | null = null;
 	let menu = $state<{ x: number; y: number; row: string } | null>(null);
 	let dragSerial = 0;
+	let readout = $state<{ x: number; y: number; text: string } | null>(null);
+	/** A key being typed into, by its row and time. */
+	let typing = $state<{ x: number; y: number; ref: KeyRef } | null>(null);
+
+	function valueText(row: KeyRow, v: number): string {
+		return v.toFixed(row.step >= 1 ? 0 : 2);
+	}
 
 	/** The picked keys still there: an undo or an edit elsewhere can take some away. */
 	let selected = $derived(
@@ -221,11 +233,21 @@
 			const result = dragKeys(start, from, dt, -dy / span);
 			onTracks(result.tracks, coalesceKey);
 			picked = result.picked;
+			const held = keyframeAt(
+				result.tracks.get(row.id),
+				Math.max(0, t + result.dt),
+			);
+			readout = held && {
+				x: ev.clientX,
+				y: ev.clientY,
+				text: `${valueText(row, held.v)} · ${formatTimeMs(row.offset + held.t)}`,
+			};
 		};
 		const up = () => {
 			target.removeEventListener("pointermove", move);
 			target.removeEventListener("pointerup", up);
 			target.removeEventListener("pointercancel", up);
+			readout = null;
 			if (moved) return;
 			if (ctrlPress) {
 				select(ref, e);
@@ -238,6 +260,12 @@
 		target.addEventListener("pointermove", move);
 		target.addEventListener("pointerup", up);
 		target.addEventListener("pointercancel", up);
+	}
+
+	function openTyping(e: MouseEvent, ref: KeyRef) {
+		picked = [ref];
+		anchor = ref;
+		typing = { x: e.clientX, y: e.clientY, ref };
 	}
 
 	/** A click on the row's open space moves the playhead there. */
@@ -342,7 +370,12 @@
 </script>
 
 {#each rows as row (row.id)}
-	<div class="tl-row key-row" style="order: {order}; --row-color: {row.color}">
+	{@const tall = tallKeyRows.has(row.id)}
+	<div
+		class="tl-row key-row"
+		class:tall
+		style="order: {order}; --row-color: {row.color}"
+	>
 		<div class="tl-gutter key-gutter">
 			<span class="swatch"></span>
 			<button
@@ -353,6 +386,18 @@
 					: row.label}
 				onclick={() => onOpenRow?.(row)}>{row.label}</button
 			>
+			<button
+				type="button"
+				class="row-size"
+				class:on={tall}
+				aria-pressed={tall}
+				title={tall ? "Make the row short again" : "Make the row taller, for finer values"}
+				aria-label={tall ? `Shorten ${row.label}` : `Make ${row.label} taller`}
+				onclick={() =>
+					tall ? tallKeyRows.delete(row.id) : tallKeyRows.add(row.id)}
+			>
+				<ChevronsUpDown size={11} />
+			</button>
 		</div>
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
@@ -384,7 +429,10 @@
 						onpointerdown={(e) => onKeyDown(e, row, k.t)}
 						oncontextmenu={(e) => openMenu(e, row, k.t)}
 						onkeydown={(e) => onKeyKeydown(e, row, k.t)}
-						ondblclick={(e) => e.stopPropagation()}
+						ondblclick={(e) => {
+							e.stopPropagation();
+							openTyping(e, { row: row.id, t: k.t });
+						}}
 					>
 						<Diamond size={9} />
 					</button>
@@ -393,6 +441,37 @@
 		</div>
 	</div>
 {/each}
+
+{#if readout}
+	<DragReadout {...readout} />
+{/if}
+
+{#if typing}
+	{@const ref = typing.ref}
+	{@const row = rows.find((r) => r.id === ref.row)}
+	{@const key = row && keyframeAt(row.keys, ref.t)}
+	{#if row && key}
+		<KeyEditPopover
+			x={typing.x}
+			y={typing.y}
+			label={row.label}
+			time={row.offset + key.t}
+			value={key.v}
+			onCommit={(time, value) => {
+				const keys = setRowKey(row, key.t, time, value);
+				if (keys === row.keys) return;
+				onTracks(new Map([[row.id, keys]]));
+				const moved = Math.max(
+					0,
+					Math.min(Math.max(time, row.from), row.to) - row.offset,
+				);
+				picked = [{ row: row.id, t: moved }];
+				anchor = picked[0];
+			}}
+			onClose={() => (typing = null)}
+		/>
+	{/if}
+{/if}
 
 {#if menu}
 	<!-- Fixed, so the lane's own overflow can't clip it. -->
@@ -412,6 +491,17 @@
 			>
 		{/each}
 		<hr />
+		{#if selected.length === 1}
+			<button
+				type="button"
+				role="menuitem"
+				onclick={() => {
+					const at = menu!;
+					menu = null;
+					typing = { x: at.x, y: at.y, ref: selected[0] };
+				}}>Type its time and value…</button
+			>
+		{/if}
 		<button
 			type="button"
 			role="menuitem"
@@ -457,6 +547,34 @@
 <style>
 	.key-row {
 		height: 30px;
+	}
+
+	.key-row.tall {
+		height: 120px;
+	}
+
+	.row-size {
+		display: inline-flex;
+		flex-shrink: 0;
+		margin-left: auto;
+		padding: 0.1rem;
+		color: var(--text-3);
+		background: none;
+		border: none;
+		border-radius: var(--r-1);
+		cursor: pointer;
+		opacity: 0;
+	}
+
+	.key-gutter:hover .row-size,
+	.row-size:focus-visible,
+	.row-size.on {
+		opacity: 1;
+	}
+
+	.row-size:hover,
+	.row-size.on {
+		color: var(--text);
 	}
 
 	.key-gutter {

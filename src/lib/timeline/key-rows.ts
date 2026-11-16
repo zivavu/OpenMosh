@@ -1,7 +1,12 @@
 /** The rows that open under a lane, one per animated setting: what they show, and
  * how an edit made on one goes back to the clip or the lane it belongs to. */
 
-import { keyframeAt, putKeyframe, type Keyframe } from "../keyframes";
+import {
+	keyframeAt,
+	putKeyframe,
+	removeKeyframe,
+	type Keyframe,
+} from "../keyframes";
 import { getDefinition } from "../effects/hydrate";
 import { setParamTrack } from "../effects/param-keys";
 import { setChainGroupCurve } from "../effects/param-groups";
@@ -250,6 +255,22 @@ export function rowValue(row: KeyRow, v: number): number {
 	return Math.min(row.max, Math.max(row.min, snapped));
 }
 
+/** The row's key at `t` moved to timeline time `at` with value `v`, each held to
+ * the row: its span and its range. The key keeps its ease. */
+export function setRowKey(
+	row: KeyRow,
+	t: number,
+	at: number,
+	v: number,
+): Keyframe<number>[] {
+	const k = keyframeAt(row.keys, t);
+	if (!k) return row.keys;
+	const to = Math.max(0, Math.min(Math.max(at, row.from), row.to) - row.offset);
+	const out = putKeyframe(removeKeyframe(row.keys, k.t), to, rowValue(row, v));
+	if (k.ease) keyframeAt(out, to)!.ease = k.ease;
+	return out;
+}
+
 /** The picked keys moved `dt` seconds and `dn` of each row's height, from the rows
  * as they were when the drag began. The whole selection stops at the first span
  * edge any of it meets, so keys keep their spacing. */
@@ -258,7 +279,7 @@ export function dragKeys(
 	picked: KeyRef[],
 	dt: number,
 	dn: number,
-): { tracks: RowTracks; picked: KeyRef[] } {
+): { tracks: RowTracks; picked: KeyRef[]; dt: number } {
 	let lo = -Infinity;
 	let hi = Infinity;
 	for (const p of picked) {
@@ -286,7 +307,7 @@ export function dragKeys(
 		}
 		tracks.set(row.id, out);
 	}
-	return { tracks, picked: moved };
+	return { tracks, picked: moved, dt: step };
 }
 
 /** Every key between two picks: the rows from one to the other, the times between. */

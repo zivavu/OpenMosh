@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from "svelte";
+	import { toBody } from "../../actions/to-body";
 
 	/** A right-click menu at the pointer. It lives on the page's body, so a panel
 	 * that clips or makes its own frame for fixed children can't cut it off, and it
@@ -9,9 +10,12 @@
 		y: number;
 		onClose: () => void;
 		children: Snippet;
+		/** A small form rather than a list of choices. */
+		role?: "menu" | "dialog";
+		label?: string;
 	}
 
-	let { x, y, onClose, children }: Props = $props();
+	let { x, y, onClose, children, role = "menu", label }: Props = $props();
 
 	/** Room kept between the menu and the window's edge. */
 	const MARGIN = 8;
@@ -26,11 +30,6 @@
 		left = Math.max(MARGIN, Math.min(x, window.innerWidth - width - MARGIN));
 		top = Math.max(MARGIN, Math.min(y, window.innerHeight - height - MARGIN));
 	});
-
-	function toBody(node: HTMLElement) {
-		document.body.appendChild(node);
-		return { destroy: () => node.remove() };
-	}
 
 	$effect(() => {
 		const close = (e: Event) => {
@@ -52,7 +51,8 @@
 	bind:this={el}
 	use:toBody
 	class="context-menu"
-	role="menu"
+	{role}
+	aria-label={label}
 	tabindex="-1"
 	style="left: {left}px; top: {top}px"
 	onpointerdown={(e) => e.stopPropagation()}
