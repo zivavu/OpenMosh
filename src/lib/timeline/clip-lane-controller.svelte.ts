@@ -8,6 +8,7 @@ import {
 	deleteBoxedKeys,
 } from "./key-focus.svelte";
 import { copiedKeys } from "./key-clipboard";
+import { snapToKeyGrid } from "./key-grid.svelte";
 import { untrack } from "svelte";
 import type { TimelineStackState } from "../editor/timeline-stack.svelte";
 import { isTextEntryTarget } from "../editor/shortcut-target";
@@ -961,7 +962,7 @@ export class ClipLaneController<
 					(copyBoxedKeys(e) || this.host.copy() || this.#copyJoins())) ||
 				(key === "v" &&
 					(copiedKeys()
-						? !!this.host.pasteKeys?.(this.stack.currentTime)
+						? !!this.host.pasteKeys?.(snapToKeyGrid(this.stack.currentTime))
 						: this.#armJoinPaste() || this.host.paste()))
 			) {
 				e.preventDefault();

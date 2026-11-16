@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { setLaneStyleAt } from "../../media/lane-keys";
+	import { movesAnimated, setLaneStyleMoved } from "../../media/lane-keys";
 	import { PlacementTakes } from "../../media/placement-take";
 	import LoadFailed from "../ui/LoadFailed.svelte";
 	import { onMount, tick, untrack } from "svelte";
@@ -58,7 +58,12 @@
 	import { generateId } from "../../effects/types";
 	import { clipKeyTime } from "../../effects/param-keys";
 	import { adjacentMoment, keyMoments } from "../../editor/key-jump";
+	import {
+		setKeyGridTempo,
+		snapToKeyGrid,
+	} from "../../timeline/key-grid.svelte";
 	import AudioLanes from "../timeline/AudioLanes.svelte";
+	import KeyGridControl from "../timeline/KeyGridControl.svelte";
 	import { editorShortcutGroups } from "../../editor/shortcut-groups";
 	import { createKeyboardHandler } from "../../editor/keyboard";
 	import { clearEffects as clearEffectsFn } from "../../editor/mosh";
@@ -2080,6 +2085,12 @@
 		},
 	});
 
+	// Keys snap to the editor's tempo; outside the editor there's no grid.
+	$effect(() => {
+		setKeyGridTempo(isSequenceMode ? tempo.bpm : 0, tempo.beatOffset);
+		return () => setKeyGridTempo(0, 0);
+	});
+
 	/** The playhead to the selected clips' previous or next key; with none selected,
 	 * any clip's or layer's. */
 	function stepKey(direction: -1 | 1) {
@@ -3231,11 +3242,18 @@
 				onLayerStyleChange={(id, style) => {
 					// The drag's start already marked it for undo.
 					if (placementTakes.edit(id, style, false)) return;
+					const lane = mediaState.timeline.lanes.find((l) => l.id === id);
+					// A keyed value lands on the beat grid while it's on, the playhead with it.
+					const at =
+						lane && movesAnimated(lane, style, previewTime)
+							? snapToKeyGrid(previewTime)
+							: previewTime;
 					mediaState.timeline = updateMediaLaneIn(
 						mediaState.timeline,
 						id,
-						(l) => setLaneStyleAt(l, style, previewTime),
+						(l) => setLaneStyleMoved(l, style, previewTime, at),
 					);
+					if (at !== previewTime && !clock.playing()) clock.seek(at);
 				}}
 			/>
 		</div>
@@ -3497,6 +3515,10 @@
 						videoSpeed={videoIsMaster ? singleVideo.speed : null}
 						onSpeedChange={(s) => (singleVideo.speed = s)}
 					/>
+					{#if isSequenceMode}
+						<div class="tl-tool-sep"></div>
+						<KeyGridControl />
+					{/if}
 				{/snippet}
 				<!-- Read bottom to top: the transports at the foot are the inputs. -->
 				<div class="tl-layers" bind:this={timelineSplit.laneListEl}>
@@ -3893,6 +3915,12 @@
 					onAllBands={setFxClipsBand}
 					keyTime={fxKeyAt?.time ?? null}
 					keyOutside={fxKeyAt?.outside ?? false}
+					snapKeyTime={(t) => {
+						const clip = fxState.selectedClip;
+						return clip
+							? snapToKeyGrid(clip.start + t, clip.start, clip.end) - clip.start
+							: t;
+					}}
 					playing={clock.playing()}
 					onKeySeek={(t) =>
 						fxState.selectedClip && clock.seek(fxState.selectedClip.start + t)}

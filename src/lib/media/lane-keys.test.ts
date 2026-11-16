@@ -14,10 +14,12 @@ import {
 	ungroupPlacement,
 	laneKeyTimes,
 	laneStyleAt,
+	movesAnimated,
 	normalizeLaneKeys,
 	removeLaneKeysAt,
 	repeatLaneKeys,
 	setLaneStyleAt,
+	setLaneStyleMoved,
 	simplifyLaneKeys,
 	toggleLaneKey,
 } from "./lane-keys";
@@ -164,5 +166,32 @@ describe("layer placement groups", () => {
 			lanes: [JSON.parse(JSON.stringify(grouped))],
 		}).lanes;
 		expect(read.keyLinks).toEqual(grouped.keyLinks);
+	});
+});
+
+describe("setLaneStyleMoved", () => {
+	// X keyed at 0s (its default, 0.5) and at 4s (1).
+	const keyed = () =>
+		setLaneStyleAt(
+			toggleLaneKey(lane(), "x", 0, false),
+			{ ...DEFAULT_MEDIA_STYLE, x: 1 },
+			4,
+		);
+
+	it("keys only what moved, at the other time", () => {
+		const l = keyed();
+		const style = { ...laneStyleAt(l, 1), x: 0.9 };
+		expect(movesAnimated(l, style, 1)).toBe(true);
+		const next = setLaneStyleMoved(l, style, 1, 2);
+		expect(next.keys!.x).toEqual([
+			{ t: 0, v: DEFAULT_MEDIA_STYLE.x },
+			{ t: 2, v: 0.9 },
+			{ t: 4, v: 1 },
+		]);
+	});
+
+	it("says nothing moved when only unkeyed values change", () => {
+		const l = keyed();
+		expect(movesAnimated(l, { ...laneStyleAt(l, 1), y: 0.3 }, 1)).toBe(false);
 	});
 });

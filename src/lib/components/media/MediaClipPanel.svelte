@@ -40,6 +40,7 @@
 	import ClipChainSection from "../timeline/ClipChainSection.svelte";
 	import KeyDiamond from "../ui/KeyDiamond.svelte";
 	import { keyState, type KeyState } from "../../key-state";
+	import { snapToKeyGrid } from "../../timeline/key-grid.svelte";
 	import DualRangeSlider from "../ui/DualRangeSlider.svelte";
 	import { groupColor } from "../../timeline/key-rows";
 	import { keyNear } from "../../keyframes";
@@ -50,6 +51,8 @@
 	import {
 		groupPlacement,
 		isPlacementKeyed,
+		movesAnimated,
+		setLaneStyleMoved,
 		laneGroupNames,
 		PLACEMENT_RANGES,
 		setPlacementGroupRange,
@@ -210,13 +213,27 @@
 		const next = { ...shown, [key]: value };
 		if (onPlacementTake?.(lane.id, next)) return;
 		onBeforeEdit?.(coalesceKey);
-		onLaneChange(setLaneStyleAt(lane, next, time));
+		if (time === null || !movesAnimated(lane, next, time)) {
+			onLaneChange(setLaneStyleAt(lane, next, time));
+			return;
+		}
+		onLaneChange(setLaneStyleMoved(lane, next, time, keyAt!));
+		followKey();
+	}
+
+	/** Where a placement key set now lands: the playhead, or the grid line nearest it. */
+	let keyAt = $derived(time === null ? null : snapToKeyGrid(time));
+
+	/** A key that landed off the playhead brings it along, so the panel reads it. */
+	function followKey() {
+		if (keyAt !== null && keyAt !== time && !playing) onSeek?.(keyAt);
 	}
 
 	function toggleKey(key: PlacementKey, clear: boolean) {
-		if (!lane || time === null) return;
+		if (!lane || time === null || keyAt === null) return;
 		onBeforeEdit?.();
-		onLaneChange(toggleLaneKey(lane, key, time, clear));
+		onLaneChange(toggleLaneKey(lane, key, clear ? time : keyAt, clear));
+		if (!clear) followKey();
 	}
 
 	function groupKey(key: PlacementKey, group: string | null | "leave") {
@@ -225,7 +242,7 @@
 		onLaneChange(
 			group === "leave"
 				? ungroupPlacement(lane, key)
-				: groupPlacement(lane, key, group, time),
+				: groupPlacement(lane, key, group, keyAt ?? time),
 		);
 	}
 
@@ -412,7 +429,9 @@
 		<KeyDiamond
 			{label}
 			keyed={isPlacementKeyed(lane, key) || !!link}
-			here={link ? !!keyNear(link.keys, time) : !!laneKeyAt(lane, key, time)}
+			here={link
+				? !!keyNear(link.keys, keyAt ?? time)
+				: !!laneKeyAt(lane, key, keyAt ?? time)}
 			startHint={PLACEMENT_KEY_HINT}
 			onToggle={(clear) => toggleKey(key, clear)}
 			prev={stepTo(key, -1)}
