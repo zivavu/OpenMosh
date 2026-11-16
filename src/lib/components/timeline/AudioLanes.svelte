@@ -210,6 +210,23 @@
 		);
 	}
 
+	/** The lanes the selected clips sit on, whose Drives switch the bar sets. */
+	let selectedLanes = $derived(
+		lanes.filter((l) => l.clips.some((c) => selectedClipIds.includes(c.id))),
+	);
+	let allDrive = $derived(
+		selectedLanes.length > 0 && selectedLanes.every((l) => l.drives),
+	);
+	let laneNoun = $derived(
+		selectedLanes.length > 1 ? "these clips' lanes" : "this clip's lane",
+	);
+
+	function setDrives(drives: boolean) {
+		const ids = new Set(selectedLanes.map((l) => l.id));
+		onBeforeEdit?.();
+		onChange(lanes.map((l) => (ids.has(l.id) ? { ...l, drives } : l)));
+	}
+
 	function segmentsOf(laneId: string): MixSegment[] {
 		return plan.filter((s) => s.laneId === laneId);
 	}
@@ -389,19 +406,6 @@
 						<Mic size={12} />
 					</button>
 				{/if}
-				{#snippet trailing()}
-					<button
-						class="lane-drives"
-						class:on={lane.drives}
-						aria-pressed={lane.drives}
-						title={lane.drives
-							? "Drives the effects: audio links follow this lane. Click to stop."
-							: "Doesn't drive the effects. Click to let audio links follow this lane."}
-						onclick={() => ctrl.setLane(lane.id, "drives", !lane.drives)}
-					>
-						<Activity size={12} />
-					</button>
-				{/snippet}
 			</ClipLaneGutter>
 
 			<div
@@ -540,6 +544,17 @@
 					<Metronome size={12} /> BPM source
 				</button>
 			{/if}
+			<button
+				class="tl-tool-btn drives"
+				class:active={allDrive}
+				aria-pressed={allDrive}
+				title={allDrive
+					? `Effects react to the sound on ${laneNoun}. Click to stop.`
+					: `Let the sound on ${laneNoun} drive the audio links, so effects react to it`}
+				onclick={() => setDrives(!allDrive)}
+			>
+				<Activity size={12} /> Drives FX
+			</button>
 			<div class="tl-tool-sep"></div>
 			{#each [["Fade in", "fadeInSec", commonFadeIn], ["Fade out", "fadeOutSec", commonFadeOut]] as const as [label, key, value] (key)}
 				<span class="tl-tool-label">{label}</span>
@@ -631,15 +646,9 @@
 		opacity: 0.6;
 	}
 
-	.audio-row .lane-drives {
-		color: var(--text-4);
-	}
-
-	.lane-drives:hover {
-		color: var(--text);
-	}
-
-	.lane-drives.on {
+	/* Violet, as the effects it drives. */
+	.tl-tool-btn.drives.active {
+		border-color: var(--mosh-dim);
 		color: var(--mosh);
 	}
 
