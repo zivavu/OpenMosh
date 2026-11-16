@@ -198,6 +198,10 @@ const CLIP_ROWS: ShortcutRow[] = [
 		description: "Add a key there; how high you click sets its value",
 	},
 	{
+		keys: ["Dbl-click a key in a setting row"],
+		description: "Type its time and value",
+	},
+	{
 		keys: ["Right-click a key"],
 		description:
 			"Ease the selected keys, delete them or every key, simplify, or repeat to the end",

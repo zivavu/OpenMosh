@@ -6,6 +6,7 @@
 	import { formatTimeMs } from "../../audio/audio-utils";
 	import type { KeyEase } from "../../keyframes";
 	import { CLICK_PX, FinePointer, isFine, PLAIN } from "../../fine-drag";
+	import DragReadout from "./DragReadout.svelte";
 
 	/** The keys along a selected clip's bar, or a lane's: click, Shift-click or
 	 * Ctrl-click to select them, drag to move the selection, Delete to remove it,
@@ -69,6 +70,7 @@
 	let picked = $state<number[]>([]);
 	let anchor: number | null = null;
 	let dragSerial = 0;
+	let readout = $state<{ x: number; y: number; text: string } | null>(null);
 
 	/** The picked keys still there: an undo or an edit elsewhere can take some away. */
 	let selected = $derived(picked.filter((t) => has(times, t)));
@@ -186,11 +188,17 @@
 			picked = moving;
 			if (anchor !== null) anchor += step;
 			applied = delta;
+			readout = {
+				x: ev.clientX,
+				y: ev.clientY,
+				text: formatTimeMs(start + t + delta),
+			};
 		};
 		const up = () => {
 			target.removeEventListener("pointermove", move);
 			target.removeEventListener("pointerup", up);
 			target.removeEventListener("pointercancel", up);
+			readout = null;
 			if (moved) return;
 			if (ctrlPress) {
 				select(t, e);
@@ -275,6 +283,10 @@
 		{/if}
 	{/each}
 </div>
+
+{#if readout}
+	<DragReadout {...readout} />
+{/if}
 
 {#if menu}
 	<!-- Fixed, so the lane's own overflow can't clip it. -->
