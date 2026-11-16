@@ -121,6 +121,8 @@
 		rolledScope?: "all" | "moshable";
 		/** Seconds into the clip that holds this chain; null where sliders can't be keyed. */
 		keyTime?: number | null;
+		/** The playhead is off the clip: sliders show its nearest edge and key nothing. */
+		keyOutside?: boolean;
 		/** Move the playhead to this many seconds into the clip. */
 		onKeySeek?: (clipTime: number) => void;
 		/** The song is playing: a keyed slider held now records a pass. */
@@ -147,6 +149,7 @@
 		rolledScope = "all",
 		headless = false,
 		keyTime = null,
+		keyOutside = false,
 		onKeySeek,
 		playing = false,
 	}: Props = $props();
@@ -160,7 +163,7 @@
 			appliedIndex = null;
 			onUserEdit?.();
 		},
-		time: () => keyTime,
+		time: () => (keyOutside ? null : keyTime),
 		playing: () => playing,
 	});
 	onDestroy(() => takes.dispose());
@@ -551,6 +554,9 @@
 		history?: ParamHistory,
 	) {
 		if (typeof value === "number" && takes.edit(index, key, value)) return;
+		const animated =
+			isKeyed(effects[index], key) || isGrouped(effects[index], key);
+		if (keyOutside && animated) return;
 		if (history === "new") onBeforeUserEdit?.();
 		else if (history !== "none") {
 			onBeforeUserEdit?.(`param:${effects[index].instanceId}:${key}`);
@@ -578,7 +584,7 @@
 
 	/** Start animating a param, key it at the playhead, or take the key there away. */
 	function keyToggle(index: number, key: string, clear: boolean) {
-		if (keyTime === null) return;
+		if (keyTime === null || keyOutside) return;
 		const effect = effects[index];
 		onBeforeUserEdit?.();
 		if (isGrouped(effect, key)) {
@@ -617,7 +623,7 @@
 		key: string,
 		group: string | null | "leave",
 	) {
-		if (keyTime === null) return;
+		if (keyTime === null || (keyOutside && group !== "leave")) return;
 		onBeforeUserEdit?.();
 		effects =
 			group === "leave"
@@ -1172,6 +1178,7 @@
 					onTouchDragStart={(e) => handleTouchDragStart(i, e)}
 					effectIndex={i}
 					{keyTime}
+					{keyOutside}
 					onKeyToggle={(key, clear) => keyToggle(i, key, clear)}
 					{groups}
 					onGroup={keyTime !== null

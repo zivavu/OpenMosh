@@ -56,6 +56,7 @@
 	import { trackIdOf, trackSourceId, type AudioClip } from "../../mix/types";
 	import { draggedTrackId } from "../../editor/source-drag.svelte";
 	import { generateId } from "../../effects/types";
+	import { clipKeyTime } from "../../effects/param-keys";
 	import AudioLanes from "../timeline/AudioLanes.svelte";
 	import { editorShortcutGroups } from "../../editor/shortcut-groups";
 	import { createKeyboardHandler } from "../../editor/keyboard";
@@ -1183,11 +1184,9 @@
 	$effect(() => () => placementTakes.dispose());
 
 	/** The playhead inside the selected fx clip, where its sliders key. */
-	let fxKeyTime = $derived.by(() => {
+	let fxKeyAt = $derived.by(() => {
 		const clip = fxState.selectedClip;
-		if (!clip) return null;
-		const t = clock.masterTime() - clip.start;
-		return Math.min(Math.max(t, 0), clip.end - clip.start);
+		return clip ? clipKeyTime(clock.masterTime(), clip) : null;
 	});
 
 	/** The same effects flat, for the panel-facing chain and the audio tick. */
@@ -3855,7 +3854,8 @@
 					}}
 					onBeforeUserEdit={panelBeforeEdit}
 					onAllBands={setFxClipsBand}
-					keyTime={fxKeyTime}
+					keyTime={fxKeyAt?.time ?? null}
+					keyOutside={fxKeyAt?.outside ?? false}
 					playing={clock.playing()}
 					onKeySeek={(t) =>
 						fxState.selectedClip && clock.seek(fxState.selectedClip.start + t)}
