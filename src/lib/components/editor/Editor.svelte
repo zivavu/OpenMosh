@@ -58,6 +58,7 @@
 	import { generateId } from "../../effects/types";
 	import { clipKeyTime } from "../../effects/param-keys";
 	import { adjacentMoment, keyMoments } from "../../editor/key-jump";
+	import { panelEmpty } from "../../editor/panel-empty";
 	import {
 		setKeyGridTempo,
 		snapToKeyGrid,
@@ -1589,14 +1590,42 @@
 		return fxState.selectedClip?.effects ?? effects;
 	}
 
-	/** Sequence mode only: with nothing selected the rack has no chain to edit. */
+	/** The audio lanes holding the selected audio clips. */
+	let selectedAudioLanes = $derived.by(() =>
+		(mediaState.timeline.audioLanes ?? []).filter((l) =>
+			l.clips.some((c) => selectedAudioClipIds.includes(c.id)),
+		),
+	);
+
+	/** Sequence mode only: with nothing selected, or only sound, the rack has no
+	 * chain to edit. */
 	let panelNoTarget = $derived.by(() => {
 		if (!isSequenceMode || fxState.selectedClip) return null;
+		const empty = panelEmpty({
+			clips: selectedAudioClipIds.length,
+			driving: selectedAudioLanes.filter((l) => l.drives).length,
+			lanes: selectedAudioLanes.length,
+		});
 		return {
-			title: "Nothing selected",
-			hint: "Click a media clip or an FX clip on the timeline to edit its chain.",
+			title: empty.title,
+			hint: empty.hint,
+			action:
+				empty.action === "drive"
+					? { label: "Turn on Drives FX", onClick: driveSelectedAudio }
+					: undefined,
 		};
 	});
+
+	function driveSelectedAudio() {
+		const ids = new Set(selectedAudioLanes.map((l) => l.id));
+		mediaState.pushHistory();
+		mediaState.set({
+			...mediaState.timeline,
+			audioLanes: (mediaState.timeline.audioLanes ?? []).map((l) =>
+				ids.has(l.id) ? { ...l, drives: true } : l,
+			),
+		});
+	}
 
 	let panelNote = $derived(
 		[
