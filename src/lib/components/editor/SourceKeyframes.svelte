@@ -44,17 +44,27 @@
 		return track.keys.some((t) => Math.abs(t - currentTime) <= KEY_NEAR);
 	}
 
-	function onTrackClick(e: MouseEvent, track: KeyTrackView) {
+	function trackTime(e: MouseEvent): number | null {
 		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-		if (rect.width <= 0) return;
-		const t = ((e.clientX - rect.left) / rect.width) * duration;
-		// Ctrl-click drops a key where it was clicked.
+		if (rect.width <= 0) return null;
+		return ((e.clientX - rect.left) / rect.width) * duration;
+	}
+
+	function addAt(e: MouseEvent, track: KeyTrackView) {
+		const t = trackTime(e);
+		if (t === null || (track.blocked && !track.on)) return;
+		onAdd(track.id, t);
+	}
+
+	/** A click seeks; a double-click drops a key there, as on the timeline's setting
+	 * rows. Ctrl-click does too. */
+	function onTrackClick(e: MouseEvent, track: KeyTrackView) {
 		if (e.ctrlKey || e.metaKey) {
-			if (track.blocked && !track.on) return;
-			onAdd(track.id, t);
+			addAt(e, track);
 			return;
 		}
-		onSeek(t);
+		const t = trackTime(e);
+		if (t !== null) onSeek(t);
 	}
 </script>
 
@@ -69,7 +79,7 @@
 				title={track.blocked && !track.on
 					? track.blocked
 					: track.on
-						? `Stop animating ${track.label.toLowerCase()} — it keeps the value under the playhead`
+						? `Stop animating ${track.label.toLowerCase()}. It keeps the value under the playhead.`
 						: `Animate ${track.label.toLowerCase()} over the clip, starting from a key here`}
 			>
 				<span class="key-dot"></span>
@@ -78,7 +88,11 @@
 
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<!-- svelte-ignore a11y_click_events_have_key_events -->
-			<div class="key-track" onclick={(e) => onTrackClick(e, track)}>
+			<div
+				class="key-track"
+				onclick={(e) => onTrackClick(e, track)}
+				ondblclick={(e) => addAt(e, track)}
+			>
 				<div class="key-line"></div>
 				{#each track.keys as t (t)}
 					<!-- svelte-ignore a11y_consider_explicit_label -->
@@ -90,7 +104,8 @@
 							e.stopPropagation();
 							onSeek(t);
 						}}
-						title="{t.toFixed(2)}s — click to jump here"
+						ondblclick={(e) => e.stopPropagation()}
+						title="Key at {t.toFixed(2)}s. Click to jump to it."
 					>
 						<Diamond size={8} fill="currentColor" />
 					</button>
@@ -102,7 +117,7 @@
 				class="key-btn"
 				disabled={!track.on || keyAtPlayhead(track)}
 				onclick={() => onAdd(track.id)}
-				title="Hold {track.label.toLowerCase()} here — adds a key at the playhead with the value it already has"
+				title="Add a {track.label.toLowerCase()} key at the playhead, holding the value it has there"
 				aria-label="Add {track.label} key"
 			>
 				<Plus size={10} />

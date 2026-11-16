@@ -6,6 +6,7 @@ import { toggleLaneKey } from "../media/lane-keys";
 import {
 	chainKeyRows,
 	dragKeys,
+	keyedAt,
 	laneKeyRows,
 	pickRange,
 	setRowKey,
@@ -154,5 +155,14 @@ describe("setRowKey", () => {
 			v: 5,
 			ease: "hold",
 		});
+	});
+});
+
+describe("keyedAt", () => {
+	it("names the rows with a key at a moment", () => {
+		const rows = chainKeyRows(clip());
+		expect(keyedAt(rows, 0)).toBe("Posterize · Levels");
+		expect(keyedAt(rows, 1)).toBe("Posterize 2 · Levels");
+		expect(keyedAt(rows, 3)).toBe("");
 	});
 });

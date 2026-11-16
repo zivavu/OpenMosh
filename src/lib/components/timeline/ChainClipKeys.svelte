@@ -20,6 +20,7 @@
 	} from "../../timeline/key-focus.svelte";
 	import ClipKeys from "./ClipKeys.svelte";
 	import { chainKeysAt } from "../../timeline/key-clipboard";
+	import { chainKeyRows, keyedAt } from "../../timeline/key-rows";
 
 	/** A selected clip's effect keys on its bar. */
 	interface Props {
@@ -83,6 +84,7 @@
 		onSimplify={() => onEdit(simplifyChainKeys)}
 		onRepeat={() => onEdit((e) => repeatChainKeys(e, length))}
 		onCopy={(times) => chainKeysAt(clip.effects, times, clip.start)}
+		describe={(t) => keyedAt(chainKeyRows(clip), t)}
 		onRepeatEvery={(times, period) =>
 			onEdit((e) => repeatChainKeysEvery(e, times, period, length))}
 		{focus}

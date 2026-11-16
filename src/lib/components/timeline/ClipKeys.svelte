@@ -4,6 +4,7 @@
 	import {
 		EASE_HEADING,
 		EASE_OPTIONS,
+		easeLabel,
 		repeatsFor,
 	} from "../../timeline/key-eases";
 	import { onDestroy, untrack } from "svelte";
@@ -40,6 +41,8 @@
 		onRepeat?: () => void;
 		/** The keys at these moments laid down again every `period` seconds. */
 		onRepeatEvery?: (times: number[], period: number) => void;
+		/** What has a key at this moment, for its tooltip. */
+		describe?: (t: number) => string;
 		/** The keys at these moments, for the clipboard. */
 		onCopy?: (times: number[]) => CopiedKey[];
 		/** A key the panel's arrows stepped to, seconds from `start`: it gets selected. */
@@ -65,6 +68,7 @@
 		onSimplify,
 		onRepeat,
 		onCopy,
+		describe,
 		onRepeatEvery,
 		focus = null,
 		box = null,
@@ -270,6 +274,16 @@
 		}
 	}
 
+	function keyTitle(t: number): string {
+		const ease = easeAt(t);
+		const what = describe?.(t);
+		return (
+			`${noun} at ${formatTimeMs(start + t)}` +
+			(what ? `: ${what}` : "") +
+			(ease ? `. To the next key: ${easeLabel(ease)}` : "")
+		);
+	}
+
 	/** The keys a frame along, or a beat with `beat` while there is one. */
 	function nudge(these: number[], direction: -1 | 1, beat: boolean) {
 		const size = beat && beatSec > 0 ? beatSec : NUDGE_SEC;
@@ -302,9 +316,7 @@
 				class="clip-key"
 				class:picked={has(selected, t)}
 				style="left: {pct(t)}%"
-				title="{noun} at {formatTimeMs(
-					start + t,
-				)}. Click to select one and jump to it. Shift-click selects a range and Ctrl-click adds one. Drag to move the selection; right-click for more."
+				title={keyTitle(t)}
 				aria-label="{noun} at {formatTimeMs(start + t)}"
 				aria-pressed={has(selected, t)}
 				onpointerdown={(e) => onPointerDown(e, t)}

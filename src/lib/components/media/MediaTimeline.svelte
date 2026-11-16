@@ -6,6 +6,7 @@
 	import {
 		chainKeyRows,
 		laneKeyRows,
+		keyedAt,
 		touchesLane,
 		withChainTracks,
 		withLaneTracks,
@@ -886,6 +887,7 @@
 									Math.max(...l.clips.map((c) => c.end)),
 								),
 							)}
+						describe={(t) => keyedAt(laneKeyRows(lane), from + t)}
 						onCopy={(times) =>
 							laneKeysAt(
 								lane,

@@ -5,6 +5,7 @@ import {
 	keyframeAt,
 	putKeyframe,
 	removeKeyframe,
+	SAME_MOMENT,
 	type Keyframe,
 } from "../keyframes";
 import { getDefinition } from "../effects/hydrate";
@@ -201,6 +202,14 @@ export function laneKeyRows(lane: MediaLane, firstColor = 0): KeyRow[] {
 			target: { kind: "lanegroup", group },
 		});
 	return rows;
+}
+
+/** The rows with a key at `t`, in their own seconds, named and comma-separated. */
+export function keyedAt(rows: KeyRow[], t: number): string {
+	return rows
+		.filter((r) => r.keys.some((k) => Math.abs(k.t - t) <= SAME_MOMENT))
+		.map((r) => r.label)
+		.join(", ");
 }
 
 /** The chain with edited rows written back; a row emptied stops its slider animating. */
