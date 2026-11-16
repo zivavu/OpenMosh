@@ -6,17 +6,21 @@
 		EASE_HEADING,
 		EASE_OPTIONS,
 		easeLabel,
+		repeatsFor,
 	} from "../../timeline/key-eases";
 	import DragReadout from "./DragReadout.svelte";
 	import KeyEditPopover from "./KeyEditPopover.svelte";
 	import { tallKeyRows } from "../../timeline/key-row-size.svelte";
 	import { onDestroy, untrack } from "svelte";
 	import { formatTimeMs } from "../../audio/audio-utils";
+	import { copyKeys, rowKeysAt } from "../../timeline/key-clipboard";
 	import { CLICK_PX, FinePointer, isFine, PLAIN } from "../../fine-drag";
 	import {
 		keyframeAt,
+		NUDGE_SEC,
 		putKeyframe,
 		removeKeysAtTimes,
+		repeatKeysEvery,
 		sampleNumbers,
 		setEaseAtTimes,
 		simplifyKeys,
@@ -134,7 +138,12 @@
 					.map((k) => ({ row: row.id, t: k.t })),
 			);
 			anchor = picked[0] ?? null;
-			if (picked.length > 0) holdBoxed(boxId, () => deleteSelected());
+			if (picked.length > 0)
+				holdBoxed(
+					boxId,
+					() => deleteSelected(),
+					() => rowKeysAt(rows, selected),
+				);
 		});
 	});
 	onDestroy(() => dropBoxed(boxId));
@@ -325,7 +334,30 @@
 
 	function onKeyKeydown(e: KeyboardEvent, row: KeyRow, t: number) {
 		const ref = { row: row.id, t };
-		if (e.key === "Delete" || e.key === "Backspace") {
+		const these = isPicked(ref) ? selected : [ref];
+		const mod = e.ctrlKey || e.metaKey;
+		if (mod && e.key.toLowerCase() === "c") {
+			e.preventDefault();
+			e.stopPropagation();
+			copyKeys(rowKeysAt(rows, these));
+		} else if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && !mod) {
+			e.preventDefault();
+			e.stopPropagation();
+			const size = e.shiftKey && bpm > 0 ? 60 / bpm : NUDGE_SEC;
+			const result = dragKeys(
+				rows,
+				these,
+				(e.key === "ArrowLeft" ? -1 : 1) * size,
+				0,
+			);
+			if (result.dt === 0) return;
+			onTracks(result.tracks, `key-rows-nudge:${++dragSerial}`);
+			picked = result.picked;
+		} else if ((e.key === "ArrowUp" || e.key === "ArrowDown") && !mod) {
+			e.preventDefault();
+			e.stopPropagation();
+			nudgeValues(these, e.key === "ArrowUp" ? 1 : -1, e.shiftKey);
+		} else if (e.key === "Delete" || e.key === "Backspace") {
 			e.preventDefault();
 			e.stopPropagation();
 			deleteSelected(isPicked(ref) ? selected : [ref]);
@@ -334,6 +366,44 @@
 			e.stopPropagation();
 			picked = [];
 		}
+	}
+
+	/** A picked key's place on the timeline. */
+	function keyAt(ref: KeyRef): number {
+		return (rows.find((r) => r.id === ref.row)?.offset ?? 0) + ref.t;
+	}
+
+	/** The picked keys laid down again every `period` seconds, to the end of their
+	 * clip, or of the view for a layer's rows. */
+	function repeatSelected(period: number) {
+		const tracks: RowTracks = new Map();
+		for (const row of rows) {
+			const times = selected.filter((p) => p.row === row.id).map((p) => p.t);
+			if (times.length === 0) continue;
+			const end = (Number.isFinite(row.to) ? row.to : viewEnd) - row.offset;
+			tracks.set(row.id, repeatKeysEvery(row.keys, times, period, end));
+		}
+		if (tracks.size > 0) onTracks(tracks);
+	}
+
+	/** The keys a step of their slider up or down; ten with `big`. */
+	function nudgeValues(these: KeyRef[], direction: -1 | 1, big: boolean) {
+		const tracks: RowTracks = new Map();
+		for (const row of rows) {
+			const times = these.filter((p) => p.row === row.id).map((p) => p.t);
+			if (times.length === 0) continue;
+			const step = row.step > 0 ? row.step : (row.max - row.min) / 100;
+			const by = direction * step * (big ? 10 : 1);
+			tracks.set(
+				row.id,
+				row.keys.map((k) =>
+					times.some((x) => Math.abs(x - k.t) <= 1e-3)
+						? { ...k, v: rowValue(row, k.v + by) }
+						: k,
+				),
+			);
+		}
+		if (tracks.size > 0) onTracks(tracks, `key-rows-nudge:${++dragSerial}`);
 	}
 
 	function openMenu(e: MouseEvent, row: KeyRow, t: number) {
@@ -546,6 +616,19 @@
 					),
 				)}>Simplify keys</button
 		>
+		{@const span =
+			selected.length > 0
+				? Math.max(...selected.map((p) => keyAt(p))) -
+					Math.min(...selected.map((p) => keyAt(p)))
+				: 0}
+		{#each selected.length > 0 && bpm > 0 ? repeatsFor(span, 60 / bpm) : [] as option (option.beats)}
+			<button
+				type="button"
+				role="menuitem"
+				onclick={() => pick(() => repeatSelected(option.beats * (60 / bpm)))}
+				>{option.label}</button
+			>
+		{/each}
 	</ContextMenu>
 {/if}
 

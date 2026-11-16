@@ -10,6 +10,7 @@ import {
 	putKeyframe,
 	removeKeyframe,
 	repeatKeys,
+	repeatKeysEvery,
 	sampleNumbers,
 	removeKeysAtTimes,
 	setEaseAtTimes,
@@ -312,6 +313,18 @@ export function repeatChainKeys(
 	const first = times[0];
 	const span = times[times.length - 1] - first;
 	return mapKeys(effects, (keys) => repeatKeys(keys, first, span, length));
+}
+
+/** The keys at `times` laid down again every `period` seconds up to `length`. */
+export function repeatChainKeysEvery(
+	effects: EffectInstance[],
+	times: readonly number[],
+	period: number,
+	length: number,
+): EffectInstance[] {
+	return mapKeys(effects, (keys) =>
+		repeatKeysEvery(keys, times, period, length),
+	);
 }
 
 /** Every key gone from the effects a roll replaces. */

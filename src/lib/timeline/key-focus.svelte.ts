@@ -1,4 +1,5 @@
 import { asOneEdit } from "../editor/edit-clock";
+import { copyKeys, type CopiedKey } from "./key-clipboard";
 
 /** The key a panel's previous/next arrow just stepped to, so the timeline selects it. */
 export interface KeyFocus {
@@ -33,8 +34,11 @@ export interface KeyBox {
 
 export const keyBox = $state<{ current: KeyBox | null }>({ current: null });
 
-/** What each view picked from the box, as the way to delete it. */
-const boxed = new Map<symbol, () => void>();
+/** What each view picked from the box: the way to delete it, and a copy of it. */
+const boxed = new Map<
+	symbol,
+	{ remove: () => void; copy?: () => CopiedKey[] }
+>();
 let tookEvent: Event | null = null;
 
 function disarm() {
@@ -50,8 +54,12 @@ export function boxKeys(laneId: string, from: number, to: number) {
 	addEventListener("pointerdown", disarm, true);
 }
 
-export function holdBoxed(id: symbol, remove: () => void) {
-	if (keyBox.current) boxed.set(id, remove);
+export function holdBoxed(
+	id: symbol,
+	remove: () => void,
+	copy?: () => CopiedKey[],
+) {
+	if (keyBox.current) boxed.set(id, { remove, copy });
 }
 
 export function dropBoxed(id: symbol) {
@@ -63,10 +71,19 @@ export function dropBoxed(id: symbol) {
 export function deleteBoxedKeys(e: Event): boolean {
 	if (tookEvent === e) return true;
 	if (boxed.size === 0) return false;
-	const removes = [...boxed.values()];
+	const views = [...boxed.values()];
 	disarm();
 	tookEvent = e;
-	asOneEdit(() => removes.forEach((remove) => remove()));
+	asOneEdit(() => views.forEach((view) => view.remove()));
+	return true;
+}
+
+/** Copy the boxed keys, if any are waiting. True when `e` was spent on them. */
+export function copyBoxedKeys(e: Event): boolean {
+	if (tookEvent === e) return true;
+	const keys = [...boxed.values()].flatMap((view) => view.copy?.() ?? []);
+	if (!copyKeys(keys)) return false;
+	tookEvent = e;
 	return true;
 }
 

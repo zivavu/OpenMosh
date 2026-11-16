@@ -22,6 +22,9 @@ export interface Keyframe<T> {
 /** Two keys are the same key within this many seconds. */
 const KEY_EPSILON = 1e-3;
 
+/** How far an arrow key nudges a key in time: a frame at 30fps. */
+export const NUDGE_SEC = 1 / 30;
+
 /** How close the playhead must be to count as sitting on a key, for the editing UI. */
 export const KEY_NEAR = 0.02;
 
@@ -267,6 +270,31 @@ export function repeatKeys<T>(
 			if (k.ease) keyframeAt(out, t)!.ease = k.ease;
 		}
 	}
+	return out;
+}
+
+/** The keys at `times` laid down again every `period` seconds, up to `end`. */
+export function repeatKeysEvery<T>(
+	keys: Keyframe<T>[],
+	times: readonly number[],
+	period: number,
+	end: number,
+): Keyframe<T>[] {
+	if (period <= SAME_MOMENT) return keys;
+	const run = keys.filter((k) => hasTime(times, k.t));
+	if (run.length === 0) return keys;
+	// Bounded however short the period: a crafted clip can't make this spin.
+	const cycles = Math.min(Math.floor((end - run[0].t) / period), 1000);
+	let out = keys;
+	for (let n = 1; n <= cycles; n++)
+		for (const k of run) {
+			const t = k.t + n * period;
+			if (t > end + SAME_MOMENT) break;
+			out = putKeyframe(out, t, k.v);
+			const placed = keyframeAt(out, t)!;
+			if (k.ease) placed.ease = k.ease;
+			else delete placed.ease;
+		}
 	return out;
 }
 

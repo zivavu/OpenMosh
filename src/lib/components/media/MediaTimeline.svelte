@@ -13,6 +13,7 @@
 		type RowTracks,
 	} from "../../timeline/key-rows";
 	import ChainClipKeys from "../timeline/ChainClipKeys.svelte";
+	import { laneKeysAt, pasteKeysOnto } from "../../timeline/key-clipboard";
 	import ClipKeys from "../timeline/ClipKeys.svelte";
 	import {
 		hasLaneKeys,
@@ -22,6 +23,7 @@
 		clearLaneKeys,
 		removeLaneKeysAt,
 		repeatLaneKeys,
+		repeatLaneKeysEvery,
 		setLaneEaseAt,
 		simplifyLaneKeys,
 	} from "../../media/lane-keys";
@@ -319,6 +321,30 @@
 			},
 			copy: copySelection,
 			paste: pasteClipboard,
+			pasteKeys: (at) => {
+				const lane = timeline.lanes.find((l) =>
+					l.clips.some((c) => c.id === selectedClipId),
+				);
+				const clip = lane?.clips.find((c) => c.id === selectedClipId);
+				if (!lane || !clip) return false;
+				const pasted = pasteKeysOnto(clip, at, lane);
+				if (!pasted) return true;
+				onBeforeEdit?.();
+				onChange({
+					...timeline,
+					lanes: timeline.lanes.map((l) =>
+						l.id !== lane.id
+							? l
+							: {
+									...(pasted.lane ?? l),
+									clips: l.clips.map((c) =>
+										c.id === clip.id ? pasted.clip : c,
+									),
+								},
+					),
+				});
+				return true;
+			},
 			onJoinClick: (ids, anchor) => (joinPopover = { ids, anchor }),
 			sourceEnds: (clip, lane, until) => {
 				const src = clipSource(lane, clip);
@@ -851,6 +877,20 @@
 							)}
 						onDeleteAll={() => editLane(lane.id, clearLaneKeys)}
 						onSimplify={() => editLane(lane.id, simplifyLaneKeys)}
+						onRepeatEvery={(times, period) =>
+							editLane(lane.id, (l) =>
+								repeatLaneKeysEvery(
+									l,
+									times.map((t) => from + t),
+									period,
+									Math.max(...l.clips.map((c) => c.end)),
+								),
+							)}
+						onCopy={(times) =>
+							laneKeysAt(
+								lane,
+								times.map((t) => from + t),
+							)}
 						onRepeat={() =>
 							editLane(lane.id, (l) =>
 								repeatLaneKeys(l, Math.max(...l.clips.map((c) => c.end))),

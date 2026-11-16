@@ -6,6 +6,7 @@ import {
 	keyNear,
 	normalizeTrack,
 	putKeyframe,
+	repeatKeysEvery,
 	sampleNumbers,
 	type Keyframe,
 } from "./keyframes";
@@ -109,5 +110,29 @@ describe("eased", () => {
 	it("reads every ease back from a save, and drops one it doesn't know", () => {
 		for (const ease of KEY_EASES) expect(isKeyEase(ease)).toBe(true);
 		expect(isKeyEase("elastic")).toBe(false);
+	});
+});
+
+describe("repeatKeysEvery", () => {
+	const keys = [
+		{ t: 1, v: 0, ease: "out" as const },
+		{ t: 1.25, v: 1 },
+		{ t: 3, v: 7 },
+	];
+
+	it("lays the picked keys down again every period up to the end", () => {
+		expect(repeatKeysEvery(keys, [1, 1.25], 0.5, 2.3).map((k) => k.t)).toEqual([
+			1, 1.25, 1.5, 1.75, 2, 2.25, 3,
+		]);
+	});
+
+	it("carries each key's value and ease", () => {
+		const out = repeatKeysEvery(keys, [1], 1, 2);
+		expect(out.find((k) => k.t === 2)).toEqual({ t: 2, v: 0, ease: "out" });
+	});
+
+	it("does nothing with no period or nothing picked", () => {
+		expect(repeatKeysEvery(keys, [1], 0, 9)).toBe(keys);
+		expect(repeatKeysEvery(keys, [5], 1, 9)).toBe(keys);
 	});
 });

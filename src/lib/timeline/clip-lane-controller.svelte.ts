@@ -1,7 +1,13 @@
 /** What every clip lane component does the same way: selection, dragging clips and
  * boundaries, scrubbing, adding and splitting, deleting, and the keyboard. */
 
-import { boxKeys, clearKeyBox, deleteBoxedKeys } from "./key-focus.svelte";
+import {
+	boxKeys,
+	clearKeyBox,
+	copyBoxedKeys,
+	deleteBoxedKeys,
+} from "./key-focus.svelte";
+import { copiedKeys } from "./key-clipboard";
 import { untrack } from "svelte";
 import type { TimelineStackState } from "../editor/timeline-stack.svelte";
 import { isTextEntryTarget } from "../editor/shortcut-target";
@@ -76,6 +82,9 @@ export interface ClipLaneHost<
 	/** Ctrl+C / Ctrl+V; true when handled. */
 	copy(): boolean;
 	paste(): boolean;
+	/** Paste copied keys onto the selected clip at `at`, timeline seconds. False
+	 * when nothing here takes them. */
+	pasteKeys?(at: number): boolean;
 	/** Joins carry something to edit (a transition): clicking one calls this with the
 	 * joins it edits, named by the clip to their right, and a box selects them too. */
 	onJoinClick?(rightIds: string[], anchor: DOMRect): void;
@@ -945,10 +954,15 @@ export class ClipLaneController<
 		if (isModalKeyboardOpen()) return;
 		if (e.ctrlKey || e.metaKey) {
 			const key = e.key.toLowerCase();
-			// Clips come first; joins copy when they're all that's picked.
+			// Boxed keys first, then clips; joins copy when they're all that's picked.
+			// Copied keys paste at the playhead while they're the latest copy.
 			if (
-				(key === "c" && (this.host.copy() || this.#copyJoins())) ||
-				(key === "v" && (this.#armJoinPaste() || this.host.paste()))
+				(key === "c" &&
+					(copyBoxedKeys(e) || this.host.copy() || this.#copyJoins())) ||
+				(key === "v" &&
+					(copiedKeys()
+						? !!this.host.pasteKeys?.(this.stack.currentTime)
+						: this.#armJoinPaste() || this.host.paste()))
 			) {
 				e.preventDefault();
 				e.stopPropagation();
