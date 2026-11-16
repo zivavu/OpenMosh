@@ -402,7 +402,7 @@
 		padding: 2px 4px;
 		border: 1px solid var(--line);
 		border-radius: var(--r-1);
-		color: var(--text-4);
+		color: var(--text-3);
 		background: none;
 		white-space: nowrap;
 	}
@@ -494,7 +494,7 @@
 		font-size: 0.58rem;
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
-		color: var(--text-3);
+		color: var(--text-2);
 		background: none;
 		border: 1px solid var(--line);
 		border-radius: var(--r-pill);
@@ -506,7 +506,7 @@
 	}
 
 	.band-btn:hover {
-		color: var(--text-2);
+		color: var(--text);
 		border-color: var(--line-strong);
 	}
 

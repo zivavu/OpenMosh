@@ -114,14 +114,13 @@
 		font-size: 0.78rem;
 	}
 
+	/* Reads as the host panel's own row labels, at its own width: the field and both
+	   buttons need the rest of a sidebar's row. */
 	.config-row label {
 		flex-shrink: 0;
-		font-family: var(--font-mono);
-		font-size: 0.62rem;
-		font-weight: 500;
-		letter-spacing: 0.09em;
-		text-transform: uppercase;
-		color: var(--text-3);
+		font-size: 0.76rem;
+		color: var(--text-2);
+		user-select: none;
 	}
 
 	.detect-wrap {
