@@ -62,7 +62,7 @@
 	} from "../../media/lane-keys";
 
 	const PLACEMENT_KEY_HINT =
-		"Animate this on the whole layer, whichever clip is playing. A key goes here with its current value; move the playhead, then the value, to add more. Once it's animated, holding it while the song plays records your moves.";
+		"Animate this on the whole layer, whichever clip is playing. A key goes here with the value it has now; move the playhead and the value to add more. Hold it while the song plays to record your moves.";
 	import ClipPanel from "../timeline/ClipPanel.svelte";
 	import FadeRows from "../timeline/FadeRows.svelte";
 	import TransitionRows from "./TransitionRows.svelte";
