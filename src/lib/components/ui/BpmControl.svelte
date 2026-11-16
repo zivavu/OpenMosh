@@ -22,6 +22,14 @@
 		id = "bpm",
 	}: Props = $props();
 
+	let detectHint = $derived(
+		bpmDetecting
+			? "Listening for the beat"
+			: hasTrack && onDetectBpm
+				? "Measure the BPM from the music"
+				: "Add music to detect its BPM. You can type the BPM or tap it in instead.",
+	);
+
 	const MIN_BPM = 20;
 	const MAX_BPM = 300;
 	/** Where the steppers start from when no tempo has been set yet. */
@@ -73,20 +81,27 @@
 		downTitle="Slower (shift for half a beat)"
 		onChange={onBpmChange}
 	/>
+	<!-- The hint sits on a wrapper: a disabled button doesn't always get the hover. -->
+	<span class="detect-wrap" title={detectHint}>
+		<button
+			class="detect-btn detect-auto"
+			class:detecting={bpmDetecting}
+			onclick={onDetectBpm}
+			disabled={bpmDetecting || !hasTrack || !onDetectBpm}
+		>
+			{#if bpmDetecting}
+				<span class="detect-lamp"></span>
+				Detecting
+			{:else}
+				Detect
+			{/if}
+		</button>
+	</span>
 	<button
-		class="detect-btn detect-auto"
-		class:detecting={bpmDetecting}
-		onclick={onDetectBpm}
-		disabled={bpmDetecting || !hasTrack || !onDetectBpm}
+		class="detect-btn"
+		title="Tap along to the beat to set the BPM"
+		onclick={handleTap}
 	>
-		{#if bpmDetecting}
-			<span class="detect-lamp"></span>
-			Detecting
-		{:else}
-			Detect
-		{/if}
-	</button>
-	<button class="detect-btn" onclick={handleTap}>
 		Tap{tapTimes.length >= 2 ? ` (${tapTimes.length})` : ""}
 	</button>
 </div>
@@ -107,6 +122,10 @@
 		letter-spacing: 0.09em;
 		text-transform: uppercase;
 		color: var(--text-3);
+	}
+
+	.detect-wrap {
+		display: inline-flex;
 	}
 
 	.detect-btn {
