@@ -111,7 +111,11 @@
 		/** Shown over the list, e.g. what an edit reaches in a multi-selection. */
 		note?: string | null;
 		/** Set when `effects` is not a chain the user can edit; the rack shows this instead. */
-		noTarget?: { title: string; hint: string } | null;
+		noTarget?: {
+			title: string;
+			hint: string;
+			action?: { label: string; onClick: () => void };
+		} | null;
 		/** Set when something else decides which effects are on, e.g. the slideshow's
 		 * random and smooth modes. The switches stand down. */
 		rolledNote?: string | null;
@@ -1147,6 +1151,11 @@
 			<div class="list-empty">
 				<p class="empty-title">{noTarget.title}</p>
 				<p class="empty-hint">{noTarget.hint}</p>
+				{#if noTarget.action}
+					<button class="empty-action" onclick={noTarget.action.onClick}
+						>{noTarget.action.label}</button
+					>
+				{/if}
 			</div>
 		</div>
 	{:else}
