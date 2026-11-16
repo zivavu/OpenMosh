@@ -322,7 +322,7 @@
 
 	const KEY_OUTSIDE_HINT = "Move the playhead into the clip to key this.";
 	const KEY_START_HINT =
-		"Animate this setting. A key goes here with its current value; move the playhead, then the slider, to add more. Once it's animated, holding the slider while the song plays records your moves.";
+		"Animate this setting. A key goes here with the value it has now; move the playhead and the slider to add more. Hold an animated slider while the song plays to record your moves.";
 	const LOAD_MASK_HINT =
 		"White areas get the effects and black areas don't. A cutout with a transparent background works too: the effects go on the part that's left.";
 

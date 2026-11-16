@@ -2,8 +2,10 @@
 	import ContextMenu from "./ContextMenu.svelte";
 	import { ChevronLeft, ChevronRight, Diamond } from "lucide-svelte";
 
-	/** A slider's keyframe switch: hidden until its row is hovered, unless the value
-	 * is animated. With a previous/next pair once there are keys to step between. */
+	/** A slider's keyframe switch: a click adds or removes the key at the playhead,
+	 * a right-click stops the animation or groups it. Faint until its row is
+	 * hovered, unless the value is animated. With a previous/next pair once there
+	 * are keys to step between. */
 	interface Props {
 		/** The setting's name, for screen readers. */
 		label: string;
@@ -37,21 +39,27 @@
 		group = null,
 	}: Props = $props();
 
+	const STOP_LABEL = "Stop animating, keep this value";
+	const REMOVE_HINT = "Remove the key here.";
+	const ADD_HINT = "Add a key here with the value shown.";
+	const MENU_HINT = " Right-click to stop animating or group it.";
+	const GROUP_HINT =
+		"In group {g}. It follows the group's keys within its own range.";
+
 	let menuAt = $state<{ x: number; y: number } | null>(null);
 
+	let items = $derived([
+		...(keyed && !blocked
+			? [{ label: STOP_LABEL, onSelect: () => onToggle(true) }]
+			: []),
+		...menu,
+	]);
+
 	function openMenu(e: MouseEvent) {
-		if (menu.length === 0) return;
+		if (items.length === 0) return;
 		e.preventDefault();
 		menuAt = { x: e.clientX, y: e.clientY };
 	}
-
-	const REMOVE_HINT =
-		"Remove the key here. Shift-click stops the animation and keeps the value on screen.";
-	const MENU_HINT = " Right-click to group it with other settings.";
-	const GROUP_HINT =
-		"In group {g}. It follows the group's keys within its own range.";
-	const ADD_HINT =
-		"Key the value shown here. Shift-click stops the animation and keeps the value on screen.";
 </script>
 
 <span class="key-diamond" class:keyed>
@@ -82,8 +90,7 @@
 		aria-pressed={keyed}
 		aria-disabled={!!blocked}
 		title={blocked ??
-			(!keyed ? startHint : here ? REMOVE_HINT : ADD_HINT) +
-				(menu.length > 0 ? MENU_HINT : "")}
+			(!keyed ? startHint : (here ? REMOVE_HINT : ADD_HINT) + MENU_HINT)}
 		aria-label={!keyed
 			? `Animate ${label}`
 			: here
@@ -113,7 +120,7 @@
 
 {#if menuAt}
 	<ContextMenu x={menuAt.x} y={menuAt.y} onClose={() => (menuAt = null)}>
-		{#each menu as item (item.label)}
+		{#each items as item (item.label)}
 			<button
 				type="button"
 				role="menuitem"
@@ -149,11 +156,11 @@
 		display: inline-flex;
 		align-items: center;
 		flex-shrink: 0;
-		opacity: 0;
+		opacity: 0.3;
 		transition: opacity var(--t-fast);
 	}
 
-	/* Out of the way until its row is hovered, and for good once the value animates. */
+	/* Faint until its row is hovered, and lit for good once the value animates. */
 	:global(.param-row:hover) .key-diamond,
 	:global(.row:hover) .key-diamond,
 	.key-diamond:focus-within,
