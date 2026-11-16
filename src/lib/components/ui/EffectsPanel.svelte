@@ -1760,13 +1760,13 @@
 		font-weight: 600;
 		letter-spacing: 0.14em;
 		text-transform: uppercase;
-		color: var(--text-2);
+		color: var(--text);
 	}
 
 	.empty-hint {
 		font-size: 0.72rem;
 		line-height: 1.5;
-		color: var(--text-3);
+		color: var(--text-2);
 		max-width: 24ch;
 	}
 
