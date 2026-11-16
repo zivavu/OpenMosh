@@ -220,7 +220,7 @@
 		padding: 0.5rem 0.6rem 0.6rem;
 		background: none;
 		border: none;
-		color: var(--text-4);
+		color: var(--text-2);
 		font-family: var(--font-mono);
 		font-size: 0.62rem;
 		font-weight: 600;
@@ -252,7 +252,7 @@
 	}
 
 	.tab-btn:hover:not(.active) {
-		color: var(--text-2);
+		color: var(--text);
 	}
 
 	.tab-content {
