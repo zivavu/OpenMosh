@@ -1,6 +1,12 @@
 <script lang="ts">
 	import ContextMenu from "../ui/ContextMenu.svelte";
-	import { ChevronsUpDown, Diamond } from "lucide-svelte";
+	import { ChevronsUpDown } from "lucide-svelte";
+	import KeyGlyph from "./KeyGlyph.svelte";
+	import {
+		EASE_HEADING,
+		EASE_OPTIONS,
+		easeLabel,
+	} from "../../timeline/key-eases";
 	import DragReadout from "./DragReadout.svelte";
 	import KeyEditPopover from "./KeyEditPopover.svelte";
 	import { tallKeyRows } from "../../timeline/key-row-size.svelte";
@@ -14,7 +20,6 @@
 		sampleNumbers,
 		setEaseAtTimes,
 		simplifyKeys,
-		type KeyEase,
 	} from "../../keyframes";
 	import {
 		dragKeys,
@@ -208,7 +213,9 @@
 		const move = (ev: PointerEvent) => {
 			pointer.move(ev);
 			if (!moved) {
-				if (Math.hypot(ev.clientX - e.clientX, ev.clientY - e.clientY) < CLICK_PX)
+				if (
+					Math.hypot(ev.clientX - e.clientX, ev.clientY - e.clientY) < CLICK_PX
+				)
 					return;
 				moved = true;
 				if (!isPicked(ref)) select(ref, PLAIN);
@@ -361,12 +368,6 @@
 		if (menu) ids.add(menu.row);
 		return rows.filter((r) => ids.has(r.id));
 	}
-
-	const EASES: { ease: KeyEase | undefined; label: string }[] = [
-		{ ease: undefined, label: "Linear" },
-		{ ease: "smooth", label: "Smooth" },
-		{ ease: "hold", label: "Hold until the next key" },
-	];
 </script>
 
 {#each rows as row (row.id)}
@@ -391,7 +392,9 @@
 				class="row-size"
 				class:on={tall}
 				aria-pressed={tall}
-				title={tall ? "Make the row short again" : "Make the row taller, for finer values"}
+				title={tall
+					? "Make the row short again"
+					: "Make the row taller, for finer values"}
 				aria-label={tall ? `Shorten ${row.label}` : `Make ${row.label} taller`}
 				onclick={() =>
 					tall ? tallKeyRows.delete(row.id) : tallKeyRows.add(row.id)}
@@ -420,10 +423,11 @@
 						type="button"
 						class="row-key"
 						class:picked={isPicked({ row: row.id, t: k.t })}
-						class:hold={k.ease === "hold"}
 						style="left: {toPct(at)}%; top: calc({PAD}px + (100% - {PAD *
 							2}px) * {1 - norm(row, k.v)})"
-						title="{row.label}: {k.v.toFixed(2)} at {formatTimeMs(at)}"
+						title="{row.label}: {valueText(row, k.v)} at {formatTimeMs(
+							at,
+						)}{k.ease ? `. To the next key: ${easeLabel(k.ease)}` : ''}"
 						aria-label="{row.label} key at {formatTimeMs(at)}"
 						aria-pressed={isPicked({ row: row.id, t: k.t })}
 						onpointerdown={(e) => onKeyDown(e, row, k.t)}
@@ -434,7 +438,7 @@
 							openTyping(e, { row: row.id, t: k.t });
 						}}
 					>
-						<Diamond size={9} />
+						<KeyGlyph ease={k.ease} />
 					</button>
 				{/if}
 			{/each}
@@ -476,7 +480,8 @@
 {#if menu}
 	<!-- Fixed, so the lane's own overflow can't clip it. -->
 	<ContextMenu x={menu.x} y={menu.y} onClose={() => (menu = null)}>
-		{#each EASES as option (option.label)}
+		<span class="menu-label">{EASE_HEADING}</span>
+		{#each EASE_OPTIONS as option (option.label)}
 			<button
 				type="button"
 				role="menuitemradio"
@@ -657,10 +662,6 @@
 	.row-key :global(svg) {
 		fill: currentColor;
 		filter: drop-shadow(0 0 1px var(--ink));
-	}
-
-	.row-key.hold :global(svg) {
-		fill: var(--ink);
 	}
 
 	.row-key.picked {

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import ContextMenu from "../ui/ContextMenu.svelte";
-	import { Diamond } from "lucide-svelte";
+	import KeyGlyph from "./KeyGlyph.svelte";
+	import { EASE_HEADING, EASE_OPTIONS } from "../../timeline/key-eases";
 	import { onDestroy, untrack } from "svelte";
 	import { dropBoxed, holdBoxed } from "../../timeline/key-focus.svelte";
 	import { formatTimeMs } from "../../audio/audio-utils";
@@ -251,12 +252,6 @@
 		const eases = selected.map(easeAt);
 		return eases.every((x) => x === eases[0]) ? eases[0] : "mixed";
 	});
-
-	const EASES: { ease: KeyEase | undefined; label: string }[] = [
-		{ ease: undefined, label: "Linear" },
-		{ ease: "smooth", label: "Smooth" },
-		{ ease: "hold", label: "Hold until the next key" },
-	];
 </script>
 
 <div class="clip-keys" class:top={scope === "layer"} bind:this={strip}>
@@ -265,7 +260,6 @@
 			<button
 				type="button"
 				class="clip-key"
-				class:hold={easeAt(t) === "hold"}
 				class:picked={has(selected, t)}
 				style="left: {pct(t)}%"
 				title="{noun} at {formatTimeMs(
@@ -278,7 +272,7 @@
 				onkeydown={(e) => onKeydown(e, t)}
 				ondblclick={(e) => e.stopPropagation()}
 			>
-				<Diamond size={9} />
+				<KeyGlyph ease={easeAt(t)} />
 			</button>
 		{/if}
 	{/each}
@@ -291,7 +285,8 @@
 {#if menu}
 	<!-- Fixed, so the lane's own overflow can't clip it. -->
 	<ContextMenu x={menu.x} y={menu.y} onClose={() => (menu = null)}>
-		{#each EASES as option (option.label)}
+		<span class="menu-label">{EASE_HEADING}</span>
+		{#each EASE_OPTIONS as option (option.label)}
 			<button
 				type="button"
 				role="menuitemradio"
@@ -388,10 +383,6 @@
 	.clip-key :global(svg) {
 		fill: currentColor;
 		filter: drop-shadow(0 0 1px var(--ink));
-	}
-
-	.clip-key.hold :global(svg) {
-		fill: var(--ink);
 	}
 
 	.clip-key.picked {

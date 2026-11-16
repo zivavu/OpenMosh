@@ -1,7 +1,17 @@
 /** Keyed values over time, shared by source edits, effect params and layer placement. */
 
-/** How the value travels from a key to the next one. Absent means linear. */
-export type KeyEase = "smooth" | "hold";
+/** How the value travels from a key to the next one. Absent means linear. "in"
+ * starts slow and speeds up into the next key; "out" starts fast and settles. */
+export const KEY_EASES = [
+	"smooth",
+	"in",
+	"out",
+	"overshoot",
+	"bounce",
+	"hold",
+] as const;
+
+export type KeyEase = (typeof KEY_EASES)[number];
 
 export interface Keyframe<T> {
 	t: number;
@@ -19,10 +29,36 @@ export function lerp(a: number, b: number, k: number): number {
 	return a + (b - a) * k;
 }
 
-function eased(ease: KeyEase | undefined, k: number): number {
-	if (ease === "hold") return 0;
-	if (ease === "smooth") return k * k * (3 - 2 * k);
-	return k;
+/** How far along a key's stretch the value is, `k` of the way through in time.
+ * Overshoot runs past 1 before it settles; the rest stay in 0..1. */
+export function eased(ease: KeyEase | undefined, k: number): number {
+	switch (ease) {
+		case "hold":
+			return 0;
+		case "smooth":
+			return k * k * (3 - 2 * k);
+		case "in":
+			return k * k * k;
+		case "out":
+			return 1 - (1 - k) ** 3;
+		case "overshoot": {
+			const c = 1.70158;
+			return 1 + (c + 1) * (k - 1) ** 3 + c * (k - 1) ** 2;
+		}
+		case "bounce":
+			return bounce(k);
+		default:
+			return k;
+	}
+}
+
+function bounce(k: number): number {
+	const n = 7.5625;
+	const d = 2.75;
+	if (k < 1 / d) return n * k * k;
+	if (k < 2 / d) return n * (k -= 1.5 / d) * k + 0.75;
+	if (k < 2.5 / d) return n * (k -= 2.25 / d) * k + 0.9375;
+	return n * (k -= 2.625 / d) * k + 0.984375;
 }
 
 /** The keys either side of `time` and how far along between them, eased. A time
@@ -112,7 +148,7 @@ export function keyNear<T>(
 }
 
 export function isKeyEase(raw: unknown): raw is KeyEase {
-	return raw === "smooth" || raw === "hold";
+	return (KEY_EASES as readonly unknown[]).includes(raw);
 }
 
 /** Sorted, de-duplicated and dropped entirely when nothing survives. Bounded by
