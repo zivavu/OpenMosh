@@ -3,6 +3,7 @@ import "./app.css";
 // Must be listening before Chrome fires beforeinstallprompt.
 import "./lib/install-prompt";
 import "./lib/select-arrows";
+import "./lib/fine-range";
 import App from "./App.svelte";
 import { showToast } from "./lib/components/ui/toast.svelte";
 import { clearStaleExports } from "./lib/export-files";

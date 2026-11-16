@@ -3,6 +3,7 @@
 	import { Diamond } from "lucide-svelte";
 	import { onDestroy, untrack } from "svelte";
 	import { formatTimeMs } from "../../audio/audio-utils";
+	import { CLICK_PX, FinePointer, isFine, PLAIN } from "../../fine-drag";
 	import {
 		putKeyframe,
 		removeKeysAtTimes,
@@ -64,7 +65,6 @@
 
 	/** Room above and below the line, so a key at either end stays grabbable. */
 	const PAD = 5;
-	const CLICK_PX = 3;
 	const SNAP_PX = 6;
 
 	let picked = $state<KeyRef[]>([]);
@@ -173,11 +173,13 @@
 		// Held off by preventDefault; Delete needs it to land here.
 		target.focus({ preventScroll: true });
 		const ref = { row: row.id, t };
-		if (e.shiftKey || e.ctrlKey || e.metaKey) {
+		if (e.shiftKey) {
 			select(ref, e);
 			return;
 		}
-		if (!isPicked(ref)) select(ref, e);
+		// Ctrl: a click adds or drops the key, a drag moves slowly.
+		const ctrlPress = isFine(e);
+		if (!ctrlPress && !isPicked(ref)) select(ref, e);
 		const track = target.parentElement!.getBoundingClientRect();
 		const secPerPx = track.width > 0 ? (viewEnd - viewStart) / track.width : 0;
 		const span = Math.max(1, track.height - PAD * 2);
@@ -185,18 +187,23 @@
 			...r,
 			keys: r.keys.map((k) => ({ ...k })),
 		}));
-		const from = [...selected];
-		const x0 = e.clientX;
-		const y0 = e.clientY;
+		let from: KeyRef[] = [];
+		const pointer = new FinePointer(e);
 		const coalesceKey = `key-rows:${++dragSerial}`;
 		let moved = false;
 		target.setPointerCapture(e.pointerId);
 
 		const move = (ev: PointerEvent) => {
-			let dx = ev.clientX - x0;
-			let dy = ev.clientY - y0;
-			if (!moved && Math.hypot(dx, dy) < CLICK_PX) return;
-			moved = true;
+			pointer.move(ev);
+			if (!moved) {
+				if (Math.hypot(ev.clientX - e.clientX, ev.clientY - e.clientY) < CLICK_PX)
+					return;
+				moved = true;
+				if (!isPicked(ref)) select(ref, PLAIN);
+				from = [...selected];
+			}
+			let dx = pointer.x - e.clientX;
+			let dy = pointer.y - e.clientY;
 			// Shift holds the drag to whichever way it went further.
 			if (ev.shiftKey) {
 				if (Math.abs(dx) > Math.abs(dy)) dy = 0;
@@ -220,6 +227,10 @@
 			target.removeEventListener("pointerup", up);
 			target.removeEventListener("pointercancel", up);
 			if (moved) return;
+			if (ctrlPress) {
+				select(ref, e);
+				return;
+			}
 			picked = [ref];
 			anchor = ref;
 			onSeek(row.offset + t);
