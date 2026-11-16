@@ -27,6 +27,8 @@ export interface ParamTakeHost {
 	/** Seconds into the clip; null where nothing can be keyed. */
 	time(): number | null;
 	playing(): boolean;
+	/** The slider a pass is writing, as it starts, and null once it ends. */
+	onRecording?(param: { id: string; key: string } | null): void;
 }
 
 interface Pass {
@@ -100,10 +102,13 @@ export class ParamTakes {
 				host.afterEdit();
 			},
 			onEnd: () => {
-				if (this.#pass?.take === take) this.#pass = null;
+				if (this.#pass?.take !== take) return;
+				this.#pass = null;
+				host.onRecording?.(null);
 			},
 		});
 		this.#pass = { id, key, take };
+		host.onRecording?.({ id, key });
 	}
 
 	dispose() {

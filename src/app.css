@@ -119,6 +119,7 @@
 	--rec-dim: #7d3430;
 	--start: #f0b568; /* the static playhead: where playback starts from */
 	--start-dim: #8a6a3f;
+	--key: #f2d15c; /* a keyframe at the playhead */
 
 	/* The sidebar. Every panel that can take it over has to agree on this. */
 	--sidebar-w: 340px;
@@ -575,6 +576,39 @@ input[type="range"]:hover:not(:disabled)::-moz-range-thumb {
 		width: 14px;
 		height: 20px;
 	}
+}
+
+/* An animated slider's thumb and read-out say where the playhead sits in its keys. */
+[data-key-state="animated"] {
+	--slider-thumb: var(--live);
+}
+
+[data-key-state="on-key"] {
+	--slider-thumb: var(--key);
+}
+
+[data-key-state="grouped"] {
+	--slider-thumb: var(--group);
+}
+
+[data-key-state="recording"] {
+	--slider-thumb: var(--rec);
+}
+
+[data-key-state]
+	input[type="range"]:hover:not(:disabled)::-webkit-slider-thumb {
+	background: var(--slider-thumb);
+	filter: brightness(1.25);
+}
+
+[data-key-state] input[type="range"]:hover:not(:disabled)::-moz-range-thumb {
+	background: var(--slider-thumb);
+	filter: brightness(1.25);
+}
+
+/* Doubled to outrank a panel's own read-out colour. */
+[data-key-state][data-key-state] :is(.val, .param-value) {
+	color: var(--slider-thumb);
 }
 
 /* A typed field shows the value itself, so the row's read-out would repeat it. */

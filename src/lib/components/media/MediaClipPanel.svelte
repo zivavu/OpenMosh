@@ -39,6 +39,7 @@
 	} from "../../value-field";
 	import ClipChainSection from "../timeline/ClipChainSection.svelte";
 	import KeyDiamond from "../ui/KeyDiamond.svelte";
+	import { keyState, type KeyState } from "../../key-state";
 	import DualRangeSlider from "../ui/DualRangeSlider.svelte";
 	import { groupColor } from "../../timeline/key-rows";
 	import { keyNear } from "../../keyframes";
@@ -117,6 +118,8 @@
 		playing?: boolean;
 		/** A keyed placement held through playback; false when it isn't one. */
 		onPlacementTake?: (laneId: string, style: MediaStyle) => boolean;
+		/** A pass is recording this lane's placement. */
+		recording?: boolean;
 	}
 
 	let {
@@ -147,6 +150,7 @@
 		onSeek,
 		playing = false,
 		onPlacementTake,
+		recording = false,
 	}: Props = $props();
 
 	// This chain runs on the lane's media, so a Mask paints over its box.
@@ -261,6 +265,23 @@
 		"Inverted: when the group is high, this sits at the bottom of its range";
 	const GROUP_LEAVE_HINT =
 		"Leave the group and keep the motion as keys of its own";
+
+	function rowKeyState(key: PlacementKey): KeyState | undefined {
+		if (!lane || time === null) return undefined;
+		const link = lane.keyLinks?.[key];
+		const keyed = isPlacementKeyed(lane, key) || !!link;
+		return keyState({
+			keyed,
+			here: link ? !!keyNear(link.keys, time) : !!laneKeyAt(lane, key, time),
+			grouped: !!link,
+			recording,
+		});
+	}
+
+	function rowGroupColor(key: PlacementKey): string | undefined {
+		const link = lane?.keyLinks?.[key];
+		return link ? groupColor(link.group) : undefined;
+	}
 
 	/** The playhead's way to the lane's next key on `key`, or null with none that way. */
 	function stepTo(key: PlacementKey, direction: -1 | 1): (() => void) | null {
@@ -756,6 +777,8 @@
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				class="row"
+				data-key-state={rowKeyState("scale")}
+				style:--group={rowGroupColor("scale")}
 				title="Size of the media on top of whatever the fit gave it. 100% is the fitted size. Dragging a corner handle on the preview moves this. Double-click to reset."
 				ondblclick={(e) => resetStyle(e, "scale")}
 			>
@@ -777,6 +800,8 @@
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				class="row"
+				data-key-state={rowKeyState("scaleX")}
+				style:--group={rowGroupColor("scaleX")}
 				title="Stretch across, on top of the scale. Below 0% mirrors it. Dragging a side handle on the preview moves this; drag it past the far side to flip. Double-click to reset."
 				ondblclick={(e) => resetStyle(e, "scaleX")}
 			>
@@ -798,6 +823,8 @@
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				class="row"
+				data-key-state={rowKeyState("scaleY")}
+				style:--group={rowGroupColor("scaleY")}
 				title="Stretch down, on top of the scale. Below 0% mirrors it. Dragging a top or bottom handle on the preview moves this; drag it past the far side to flip. Double-click to reset."
 				ondblclick={(e) => resetStyle(e, "scaleY")}
 			>
@@ -860,6 +887,8 @@
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				class="row"
+				data-key-state={rowKeyState("x")}
+				style:--group={rowGroupColor("x")}
 				title="Where the media's centre sits across the frame — 0 at the left edge, 100 at the right. Past either takes it off screen. Dragging it on the preview moves this too. Double-click to reset."
 				ondblclick={(e) => resetStyle(e, "x")}
 			>
@@ -881,6 +910,8 @@
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				class="row"
+				data-key-state={rowKeyState("y")}
+				style:--group={rowGroupColor("y")}
 				title="Where the media's centre sits down the frame — 0 at the top edge, 100 at the bottom. Past either takes it off screen. Double-click to reset."
 				ondblclick={(e) => resetStyle(e, "y")}
 			>
@@ -902,6 +933,8 @@
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				class="row"
+				data-key-state={rowKeyState("rotation")}
+				style:--group={rowGroupColor("rotation")}
 				title="Turns the media around its own centre, in degrees. Double-click to reset."
 				ondblclick={(e) => resetStyle(e, "rotation")}
 			>
@@ -927,6 +960,8 @@
 				onStyle={(key, value, coalesceKey) =>
 					setStyle(key, value as never, coalesceKey)}
 				onReset={resetStyle}
+				opacityKeyState={rowKeyState("opacity")}
+				opacityGroupColor={rowGroupColor("opacity")}
 			>
 				{#snippet opacityKey()}
 					{@render keyDiamond("opacity", "Opacity")}

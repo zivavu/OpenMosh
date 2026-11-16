@@ -28,6 +28,8 @@ export interface PlacementTakeHost {
 	/** Timeline seconds. */
 	time(): number;
 	playing(): boolean;
+	/** The lane a pass is writing, as it starts, and null once it ends. */
+	onRecording?(laneId: string | null): void;
 }
 
 /** A take's name for a group's curve, apart from the placement values. */
@@ -132,10 +134,13 @@ export class PlacementTakes {
 					return rest;
 				}),
 			onEnd: () => {
-				if (this.#pass?.take === take) this.#pass = null;
+				if (this.#pass?.take !== take) return;
+				this.#pass = null;
+				host.onRecording?.(null);
 			},
 		});
 		this.#pass = { laneId, take };
+		host.onRecording?.(laneId);
 	}
 
 	dispose() {
