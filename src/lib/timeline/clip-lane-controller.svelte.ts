@@ -15,6 +15,7 @@ import {
 	type ClipDrag,
 } from "./clip-drag";
 import { asOneEdit } from "../editor/edit-clock";
+import { CLICK_PX, FinePointer } from "../fine-drag";
 import { sourceEndOwner, type SnapPoint } from "./snap";
 import {
 	addClip,
@@ -125,6 +126,16 @@ export class ClipLaneController<
 		laneId: string;
 		clipId: string | null;
 	} | null = null;
+	/** A Ctrl press on a clip: a drag from it moves slowly, a release splits. */
+	#ctrlPress: {
+		laneId: string;
+		clipId: string;
+		mode: ClipEdgeMode;
+		x: number;
+		time: number;
+	} | null = null;
+	/** The pointer as the current drag sees it: slowed while Ctrl is held. */
+	#pointer: FinePointer | null = null;
 	/** A join pressed but not yet dragged: releasing it there is a click. */
 	#joinPress: { rightId: string; anchor: DOMRect } | null = null;
 	/** Undo key a join drag records on its first move, so a click adds no step. */
@@ -425,9 +436,18 @@ export class ClipLaneController<
 			return;
 		}
 
-		// Ctrl+Click cuts at the cursor, on the edge handles too.
+		// Ctrl+Click cuts at the cursor, on the edge handles too; Ctrl+Drag moves slowly.
 		if (e.ctrlKey || e.metaKey) {
-			this.splitAt(laneId, this.timeAt(e.clientX));
+			this.#ctrlPress = {
+				laneId,
+				clipId,
+				mode,
+				x: e.clientX,
+				time: this.timeAt(e.clientX),
+			};
+			this.#pointer = new FinePointer(e);
+			(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+			this.#endOnRelease();
 			return;
 		}
 
@@ -437,6 +457,19 @@ export class ClipLaneController<
 			return;
 		}
 
+		if (!this.#startClipDrag(laneId, clipId, mode, e.clientX)) return;
+		this.#pointer = new FinePointer(e);
+		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+		this.#endOnRelease();
+	}
+
+	#startClipDrag(
+		laneId: string,
+		clipId: string,
+		mode: ClipEdgeMode,
+		clientX: number,
+	): boolean {
+		const host = this.host;
 		// A plain click on something already selected keeps it so it can be dragged; an
 		// edge of a multi-selection trims the whole selection.
 		const selected = host.selectedClipIds.includes(clipId);
@@ -448,18 +481,17 @@ export class ClipLaneController<
 		}
 
 		const clip = this.laneOf(laneId)?.clips.find((c) => c.id === clipId);
-		if (!clip) return;
+		if (!clip) return false;
 		this.drag = {
 			laneId,
 			clipId,
 			mode,
-			grabOffset: this.timeAt(e.clientX) - clip.start,
+			grabOffset: this.timeAt(clientX) - clip.start,
 		};
 		this.stack.beginDrag();
 		// One undo entry per gesture, taken once it moves: a click alone isn't an edit.
 		this.#pendingEditKey = `${host.kind}-${mode}-${clipId}-${++this.#gestures}`;
-		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-		this.#endOnRelease();
+		return true;
 	}
 
 	/** A clip changing rows re-renders and loses pointer capture, so the release can
@@ -506,6 +538,7 @@ export class ClipLaneController<
 				...joinDeltaLimits(this.host.lanes, group),
 			};
 			this.#joinPress = { rightId, anchor: target.getBoundingClientRect() };
+			this.#pointer = new FinePointer(e);
 			this.#pendingEditKey = `${this.host.kind}-joins-${rightId}-${++this.#gestures}`;
 			target.setPointerCapture(e.pointerId);
 			this.#endOnRelease();
@@ -520,6 +553,7 @@ export class ClipLaneController<
 		};
 		// Without it the view won't scroll when the boundary reaches its edge.
 		this.stack.beginDrag();
+		this.#pointer = new FinePointer(e);
 		this.#joinPress = joins
 			? { rightId, anchor: target.getBoundingClientRect() }
 			: null;
@@ -696,10 +730,20 @@ export class ClipLaneController<
 
 	onPointerMove(e: PointerEvent): void {
 		// A release nothing heard: no button is down any more.
-		if (e.buttons === 0 && (this.drag || this.#joinGroup)) {
+		if (e.buttons === 0 && (this.drag || this.#joinGroup || this.#ctrlPress)) {
 			this.onPointerUp(e);
 			return;
 		}
+		const press = this.#ctrlPress;
+		if (press) {
+			if (Math.abs(e.clientX - press.x) < CLICK_PX) return;
+			this.#ctrlPress = null;
+			if (!this.#startClipDrag(press.laneId, press.clipId, press.mode, press.x))
+				return;
+			this.#clickOnUp = null;
+		}
+		// Where the drag sees the pointer; edge scrolls go by where it really is.
+		const x = this.#pointer?.move(e).x ?? e.clientX;
 		if (this.pastingJoins) {
 			const over = this.stack.laneIdAt(e.clientY);
 			if (over && this.laneOf(over)) {
@@ -714,7 +758,7 @@ export class ClipLaneController<
 				this.host.onBeforeEdit?.(this.#pendingEditKey);
 				this.#pendingEditKey = null;
 			}
-			const raw = this.timeAt(e.clientX) - moving.anchor;
+			const raw = this.timeAt(x) - moving.anchor;
 			const own = new Set(
 				moving.joins.flatMap((j) => [
 					j.leftId,
@@ -766,7 +810,7 @@ export class ClipLaneController<
 			? this.host.selectedClipIds
 			: [clipId];
 		// Past the project's start the pointer leaves the track, so read it unclamped there.
-		const pointer = this.stack.vp.clientXToTimeUnclamped(e.clientX);
+		const pointer = this.stack.vp.clientXToTimeUnclamped(x);
 		// Mirrors growing at the end: past the start, the project grows there instead.
 		const front = frontGrowth(
 			this.host.lanes,
@@ -777,7 +821,7 @@ export class ClipLaneController<
 			drag.mode === "start" ? this.host.sourceAnchor?.slack : undefined,
 		);
 		this.stack.growFrontTo(front);
-		const t = front > 0 ? pointer : this.stack.dragTime(e.clientX);
+		const t = front > 0 ? pointer : this.stack.dragTime(x);
 		const limit = this.stack.dragLimit;
 		const lanes = this.host.lanes;
 		// A move that crossed into another row of this kind carries the clips over, if they
@@ -849,6 +893,14 @@ export class ClipLaneController<
 	onPointerUp(e: PointerEvent): void {
 		if (this.#boxStart) {
 			this.#endBox();
+			(e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+			return;
+		}
+		this.#pointer = null;
+		const ctrlPress = this.#ctrlPress;
+		this.#ctrlPress = null;
+		if (ctrlPress) {
+			this.splitAt(ctrlPress.laneId, ctrlPress.time);
 			(e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
 			return;
 		}

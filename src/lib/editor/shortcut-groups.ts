@@ -36,6 +36,11 @@ const FULLSCREEN: ShortcutRow = {
 	description: "Fullscreen preview; Esc leaves it",
 };
 
+const SLOW_SLIDER: ShortcutRow = {
+	keys: ["Ctrl/Cmd+Drag a slider"],
+	description: "Move it slowly, for small changes",
+};
+
 /** The shared axis: every lane is the ruler, and the view is one viewport. */
 const timelineGroup = (wheelScrollsLanes: boolean): ShortcutGroup => ({
 	title: "Timeline",
@@ -111,6 +116,10 @@ const CLIP_ROWS: ShortcutRow[] = [
 			"Move the selection; media and FX clips can cross to another lane",
 	},
 	{ keys: ["Drag an edge"], description: "Trim one clip" },
+	{
+		keys: ["Ctrl/Cmd+Drag"],
+		description: "Move or trim slowly, for fine placement",
+	},
 	{ keys: ["Drag a boundary"], description: "Trim both clips it joins" },
 	{
 		keys: ["Alt+Drag"],
@@ -174,6 +183,10 @@ const CLIP_ROWS: ShortcutRow[] = [
 		keys: ["Drag a key"],
 		description:
 			"Move the selected keys; they snap to beats unless Alt is held",
+	},
+	{
+		keys: ["Ctrl/Cmd+Drag a key"],
+		description: "Move the selected keys slowly",
 	},
 	{ keys: ["Delete on a key"], description: "Delete the selected keys" },
 	{
@@ -241,6 +254,7 @@ export function editorShortcutGroups(opts: {
 								description: "Bake the current frame as the new source",
 							},
 						]),
+				SLOW_SLIDER,
 				...UNDO,
 				SAVE_FRAME,
 				SAVE_PROJECT,
@@ -267,6 +281,7 @@ export function slideshowShortcutGroups(opts: {
 				{ keys: ["Esc"], description: "Stop the preview" },
 				FULLSCREEN,
 				MOSH,
+				SLOW_SLIDER,
 				...UNDO,
 				SAVE_FRAME,
 				SAVE_PROJECT,

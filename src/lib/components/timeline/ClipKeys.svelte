@@ -5,6 +5,7 @@
 	import { dropBoxed, holdBoxed } from "../../timeline/key-focus.svelte";
 	import { formatTimeMs } from "../../audio/audio-utils";
 	import type { KeyEase } from "../../keyframes";
+	import { CLICK_PX, FinePointer, isFine, PLAIN } from "../../fine-drag";
 
 	/** The keys along a selected clip's bar, or a lane's: click, Shift-click or
 	 * Ctrl-click to select them, drag to move the selection, Delete to remove it,
@@ -58,8 +59,6 @@
 
 	/** Within this many pixels of a beat, a dragged key lands on it. */
 	const SNAP_PX = 6;
-	/** Movement under this is a click. */
-	const CLICK_PX = 3;
 	const SAME = 1e-3;
 
 	const has = (list: readonly number[], t: number) =>
@@ -141,27 +140,36 @@
 		const target = e.currentTarget as HTMLElement;
 		// Held off by preventDefault; Delete needs it to land here, not on the clip.
 		target.focus({ preventScroll: true });
-		if (e.shiftKey || e.ctrlKey || e.metaKey) {
+		if (e.shiftKey) {
 			select(t, e);
 			return;
 		}
-		if (!has(selected, t)) select(t, e);
+		// Ctrl: a click adds or drops the key, a drag moves slowly.
+		const ctrlPress = isFine(e);
+		if (!ctrlPress && !has(selected, t)) select(t, e);
 		target.setPointerCapture(e.pointerId);
 		const width = strip.getBoundingClientRect().width;
 		const secPerPx = width > 0 ? length / width : 0;
-		const x0 = e.clientX;
+		const pointer = new FinePointer(e);
+		const x0 = pointer.x;
 		const coalesceKey = `keys-drag:${++dragSerial}`;
-		let moving = [...selected];
-		const lo = Math.min(...moving);
-		const hi = Math.max(...moving);
+		let moving: number[] = [];
+		let lo = 0;
+		let hi = 0;
 		let applied = 0;
 		let moved = false;
 
 		const move = (ev: PointerEvent) => {
-			const dx = ev.clientX - x0;
-			if (!moved && Math.abs(dx) < CLICK_PX) return;
-			moved = true;
-			let delta = dx * secPerPx;
+			pointer.move(ev);
+			if (!moved) {
+				if (Math.abs(ev.clientX - e.clientX) < CLICK_PX) return;
+				moved = true;
+				if (!has(selected, t)) select(t, PLAIN);
+				moving = [...selected];
+				lo = Math.min(...moving);
+				hi = Math.max(...moving);
+			}
+			let delta = (pointer.x - x0) * secPerPx;
 			if (beatSec > 0 && !ev.altKey) {
 				const abs = start + t + delta;
 				const beat =
@@ -184,6 +192,10 @@
 			target.removeEventListener("pointerup", up);
 			target.removeEventListener("pointercancel", up);
 			if (moved) return;
+			if (ctrlPress) {
+				select(t, e);
+				return;
+			}
 			// A plain click on one of several picked keys narrows to it.
 			picked = [t];
 			anchor = t;
