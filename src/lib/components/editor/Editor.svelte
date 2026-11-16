@@ -1169,7 +1169,9 @@
 	);
 
 	// A layer's keyed placement, held through playback, records a pass.
+	let recordingLaneId = $state<string | null>(null);
 	const placementTakes = new PlacementTakes({
+		onRecording: (id) => (recordingLaneId = id),
 		lane: (id) => mediaState.timeline.lanes.find((l) => l.id === id) ?? null,
 		setLane: (id, edit) =>
 			void (mediaState.timeline = updateMediaLaneIn(
@@ -3751,6 +3753,7 @@
 				onSeek={clock.seek}
 				playing={clock.playing()}
 				onPlacementTake={(id, style) => placementTakes.edit(id, style)}
+				recording={recordingLaneId === mediaState.selectedLane?.id}
 				sources={poolSources}
 				onLaneChange={mediaState.updateLane}
 				onClipChange={mediaState.updateClip}

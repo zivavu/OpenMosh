@@ -39,6 +39,7 @@
 	import DualRangeSlider from "./DualRangeSlider.svelte";
 	import RangeSlider from "./RangeSlider.svelte";
 	import KeyDiamond from "./KeyDiamond.svelte";
+	import { keyState } from "../../key-state";
 	import type { FieldDisplay } from "../../value-field";
 	import SpectrumDisplay from "./SpectrumDisplay.svelte";
 	import {
@@ -145,6 +146,8 @@
 		keyTime?: number | null;
 		/** The playhead is off the clip: keyed sliders and the diamonds wait. */
 		keyOutside?: boolean;
+		/** The slider a recorded pass is writing on this effect, if any. */
+		recordingKey?: string | null;
 		/** Key the param at the playhead, or remove the key there; `clear` stops animating it. */
 		onKeyToggle?: (paramKey: string, clear: boolean) => void;
 		onKeySeek?: (paramKey: string, direction: -1 | 1) => void;
@@ -187,6 +190,7 @@
 		onTouchDragStart,
 		keyTime = null,
 		keyOutside = false,
+		recordingKey = null,
 		onKeyToggle,
 		onKeySeek,
 		groups = [],
@@ -613,6 +617,19 @@
 								<div
 									class="param-range-wrap"
 									title={waiting ? KEY_OUTSIDE_HINT : undefined}
+									data-key-state={keyTime === null
+										? undefined
+										: keyState({
+												keyed,
+												here: keyLink
+													? !!keyNear(keyLink.keys, keyTime)
+													: !!keyAtTime(effect, param.key, keyTime),
+												grouped: !!keyLink,
+												recording: recordingKey === param.key,
+											})}
+									style:--group={keyLink
+										? groupColor(keyLink.group)
+										: undefined}
 								>
 									<RangeSlider
 										id="{effect.instanceId}-{param.key}"

@@ -3,6 +3,7 @@
 	import { BLEND_MODES, type TextOverlayBlendMode } from "../../text-overlay";
 	import RangeSlider from "../ui/RangeSlider.svelte";
 	import { percent } from "../../value-field";
+	import type { KeyState } from "../../key-state";
 
 	/** How a layer meets the frame: opacity and blend, the tail every layer
 	 * kind's panel ends on. */
@@ -19,14 +20,29 @@
 		onReset: (e: MouseEvent, key: "opacity" | "blendMode") => void;
 		/** Anything to put after the opacity read-out, such as its keyframe switch. */
 		opacityKey?: Snippet;
+		/** Where the opacity sits in its keys, for its thumb colour. */
+		opacityKeyState?: KeyState;
+		/** The group colour its thumb takes while grouped. */
+		opacityGroupColor?: string;
 	}
 
-	let { style, noun, idPrefix, onStyle, onReset, opacityKey }: Props = $props();
+	let {
+		style,
+		noun,
+		idPrefix,
+		onStyle,
+		onReset,
+		opacityKey,
+		opacityKeyState,
+		opacityGroupColor,
+	}: Props = $props();
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
 	class="row"
+	data-key-state={opacityKeyState}
+	style:--group={opacityGroupColor}
 	title="How much of {noun} shows, against what is under it. Double-click to reset."
 	ondblclick={(e) => onReset(e, "opacity")}
 >

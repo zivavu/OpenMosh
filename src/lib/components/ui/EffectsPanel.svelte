@@ -154,6 +154,7 @@
 		playing = false,
 	}: Props = $props();
 
+	let recording = $state<{ id: string; key: string } | null>(null);
 	const takes = new ParamTakes({
 		effects: () => effects,
 		replace: (i, effect) => (effects[i] = effect),
@@ -165,6 +166,7 @@
 		},
 		time: () => (keyOutside ? null : keyTime),
 		playing: () => playing,
+		onRecording: (param) => (recording = param),
 	});
 	onDestroy(() => takes.dispose());
 
@@ -1179,6 +1181,9 @@
 					effectIndex={i}
 					{keyTime}
 					{keyOutside}
+					recordingKey={recording?.id === effect.instanceId
+						? recording.key
+						: null}
 					onKeyToggle={(key, clear) => keyToggle(i, key, clear)}
 					{groups}
 					onGroup={keyTime !== null
