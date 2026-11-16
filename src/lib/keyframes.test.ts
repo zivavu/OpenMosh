@@ -1,5 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import {
+	eased,
+	isKeyEase,
+	KEY_EASES,
 	keyNear,
 	normalizeTrack,
 	putKeyframe,
@@ -77,5 +80,34 @@ describe("normalizeTrack", () => {
 	it("reads no more than its cap from a crafted save", () => {
 		const raw = Array.from({ length: 5000 }, (_, t) => ({ t, v: t }));
 		expect(normalizeTrack(raw, Number, 100)).toHaveLength(100);
+	});
+});
+
+describe("eased", () => {
+	it("starts and ends every curve on its keys", () => {
+		for (const ease of KEY_EASES.filter((e) => e !== "hold")) {
+			expect(eased(ease, 0)).toBeCloseTo(0);
+			expect(eased(ease, 1)).toBeCloseTo(1);
+		}
+	});
+
+	it("speeds up into the next key with in, and settles with out", () => {
+		expect(eased("in", 0.5)).toBeLessThan(0.5);
+		expect(eased("out", 0.5)).toBeGreaterThan(0.5);
+	});
+
+	it("runs past the next key's value on an overshoot, and never on a bounce", () => {
+		const along = Array.from({ length: 101 }, (_, i) => i / 100);
+		expect(
+			Math.max(...along.map((k) => eased("overshoot", k))),
+		).toBeGreaterThan(1);
+		expect(
+			Math.max(...along.map((k) => eased("bounce", k))),
+		).toBeLessThanOrEqual(1);
+	});
+
+	it("reads every ease back from a save, and drops one it doesn't know", () => {
+		for (const ease of KEY_EASES) expect(isKeyEase(ease)).toBe(true);
+		expect(isKeyEase("elastic")).toBe(false);
 	});
 });

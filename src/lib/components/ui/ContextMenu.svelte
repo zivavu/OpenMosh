@@ -101,6 +101,13 @@
 		color: var(--rec);
 	}
 
+	.context-menu :global(.menu-label) {
+		padding: 0.2rem 0.5rem 0.1rem;
+		font-size: 0.62rem;
+		color: var(--text-3);
+		white-space: nowrap;
+	}
+
 	.context-menu :global(hr) {
 		width: 100%;
 		margin: 0.2rem 0;
