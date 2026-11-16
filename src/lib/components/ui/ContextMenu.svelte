@@ -32,16 +32,26 @@
 	});
 
 	$effect(() => {
-		const close = (e: Event) => {
-			if (e instanceof KeyboardEvent && e.key !== "Escape") return;
-			onClose();
+		const inside = (e: Event) => !!el?.contains(e.target as Node);
+		// Captured, so a press or an Esc on a clip or a key that stops its own event
+		// still closes it. Inside, Esc is left to the menu's own fields first.
+		const pressed = (e: PointerEvent) => {
+			if (!inside(e)) onClose();
 		};
-		window.addEventListener("pointerdown", close);
-		window.addEventListener("keydown", close);
+		const escOutside = (e: KeyboardEvent) => {
+			if (e.key === "Escape" && !inside(e)) onClose();
+		};
+		const escInside = (e: KeyboardEvent) => {
+			if (e.key === "Escape" && inside(e)) onClose();
+		};
+		window.addEventListener("pointerdown", pressed, { capture: true });
+		window.addEventListener("keydown", escOutside, { capture: true });
+		window.addEventListener("keydown", escInside);
 		window.addEventListener("resize", onClose);
 		return () => {
-			window.removeEventListener("pointerdown", close);
-			window.removeEventListener("keydown", close);
+			window.removeEventListener("pointerdown", pressed, { capture: true });
+			window.removeEventListener("keydown", escOutside, { capture: true });
+			window.removeEventListener("keydown", escInside);
 			window.removeEventListener("resize", onClose);
 		};
 	});
