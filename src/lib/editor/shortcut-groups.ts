@@ -183,7 +183,7 @@ const CLIP_ROWS: ShortcutRow[] = [
 	{
 		keys: ["Drag a key"],
 		description:
-			"Move the selected keys; they snap to beats unless Alt is held",
+			"Move the selected keys. They snap to beats, or to the grid with Keys on beat on; hold Alt to place them freely",
 	},
 	{
 		keys: ["Ctrl/Cmd+Drag a key"],
@@ -192,7 +192,8 @@ const CLIP_ROWS: ShortcutRow[] = [
 	{ keys: ["Delete on a key"], description: "Delete the selected keys" },
 	{
 		keys: ["← → on a key"],
-		description: "Nudge the selected keys a frame; with Shift, a beat",
+		description:
+			"Nudge the selected keys a frame, or one grid line with Keys on beat on; with Shift, a beat",
 	},
 	{
 		keys: ["↑ ↓ on a key in a setting row"],

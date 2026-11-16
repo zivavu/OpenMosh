@@ -27,6 +27,14 @@ let layerHighlight = $state<boolean>(
 	loadSettings().layerHighlight ?? DEFAULT_SETTINGS.layerHighlight,
 );
 
+let keyGrid = $state<boolean>(
+	loadSettings().keyGrid ?? DEFAULT_SETTINGS.keyGrid,
+);
+
+let keyGridBeats = $state<number>(
+	loadSettings().keyGridBeats ?? DEFAULT_SETTINGS.keyGridBeats,
+);
+
 function applyContrast() {
 	if (highContrast) document.documentElement.dataset.contrast = "high";
 	else delete document.documentElement.dataset.contrast;
@@ -83,5 +91,20 @@ export const uiPrefs = {
 	set layerHighlight(on: boolean) {
 		layerHighlight = on;
 		updateSettings({ layerHighlight: on });
+	},
+	/** Whether new and dragged keys land on the song's beat grid. */
+	get keyGrid(): boolean {
+		return keyGrid;
+	},
+	set keyGrid(on: boolean) {
+		keyGrid = on;
+		updateSettings({ keyGrid: on });
+	},
+	get keyGridBeats(): number {
+		return keyGridBeats;
+	},
+	set keyGridBeats(beats: number) {
+		keyGridBeats = beats;
+		updateSettings({ keyGridBeats: beats });
 	},
 };

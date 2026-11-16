@@ -14,6 +14,8 @@
 	import { copyKeys, type CopiedKey } from "../../timeline/key-clipboard";
 	import { CLICK_PX, FinePointer, isFine, PLAIN } from "../../fine-drag";
 	import DragReadout from "./DragReadout.svelte";
+	import { keyGrid } from "../../timeline/key-grid.svelte";
+	import { nextGridLine, onGrid } from "../../key-grid";
 
 	/** The keys along a selected clip's bar, or a lane's: click, Shift-click or
 	 * Ctrl-click to select them, drag to move the selection, Delete to remove it,
@@ -192,7 +194,10 @@
 				hi = Math.max(...moving);
 			}
 			let delta = (pointer.x - x0) * secPerPx;
-			if (beatSec > 0 && !ev.altKey) {
+			const grid = keyGrid();
+			if (grid && !ev.altKey)
+				delta = onGrid(start + t + delta, grid) - start - t;
+			else if (beatSec > 0 && !ev.altKey) {
 				const abs = start + t + delta;
 				const beat =
 					Math.round((abs - beatOffset) / beatSec) * beatSec + beatOffset;
@@ -257,7 +262,7 @@
 		) {
 			e.preventDefault();
 			e.stopPropagation();
-			nudge(these, e.key === "ArrowLeft" ? -1 : 1, e.shiftKey);
+			nudge(t, these, e.key === "ArrowLeft" ? -1 : 1, e.shiftKey);
 		} else if (e.key === "Delete" || e.key === "Backspace") {
 			e.preventDefault();
 			e.stopPropagation();
@@ -284,12 +289,19 @@
 		);
 	}
 
-	/** The keys a frame along, or a beat with `beat` while there is one. */
-	function nudge(these: number[], direction: -1 | 1, beat: boolean) {
-		const size = beat && beatSec > 0 ? beatSec : NUDGE_SEC;
+	/** The keys a frame along, or to the next grid line while the grid is on; a beat
+	 * with `beat` while there is one. `t` is the key the arrow was pressed on. */
+	function nudge(t: number, these: number[], direction: -1 | 1, beat: boolean) {
+		const grid = keyGrid();
+		const step =
+			beat && beatSec > 0
+				? direction * beatSec
+				: grid
+					? nextGridLine(start + t, grid, direction) - start - t
+					: direction * NUDGE_SEC;
 		const lo = Math.min(...these);
 		const hi = Math.max(...these);
-		const delta = Math.min(Math.max(direction * size, -lo), length - hi);
+		const delta = Math.min(Math.max(step, -lo), length - hi);
 		if (Math.abs(delta) < 1e-4) return;
 		onMove(these, delta, `keys-nudge:${++dragSerial}`);
 		picked = these.map((x) => x + delta);

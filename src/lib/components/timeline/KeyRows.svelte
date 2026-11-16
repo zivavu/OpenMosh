@@ -9,6 +9,8 @@
 		repeatsFor,
 	} from "../../timeline/key-eases";
 	import DragReadout from "./DragReadout.svelte";
+	import { keyGrid, snapToKeyGrid } from "../../timeline/key-grid.svelte";
+	import { nextGridLine, onGrid } from "../../key-grid";
 	import KeyEditPopover from "./KeyEditPopover.svelte";
 	import { tallKeyRows } from "../../timeline/key-row-size.svelte";
 	import { onDestroy, untrack } from "svelte";
@@ -238,7 +240,10 @@
 				else dx = 0;
 			}
 			let dt = dx * secPerPx;
-			if (bpm > 0 && !ev.altKey && dx !== 0) {
+			const grid = keyGrid();
+			if (grid && !ev.altKey)
+				dt = onGrid(row.offset + t + dt, grid) - row.offset - t;
+			else if (bpm > 0 && !ev.altKey && dx !== 0) {
 				const beatSec = 60 / bpm;
 				const at = row.offset + t + dt;
 				const beat =
@@ -301,10 +306,11 @@
 	function onTrackDblClick(e: MouseEvent, row: KeyRow) {
 		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
 		if (rect.width <= 0) return;
-		const at =
+		const clicked =
 			viewStart +
 			((e.clientX - rect.left) / rect.width) * (viewEnd - viewStart);
-		if (at < row.from || at > row.to) return;
+		if (clicked < row.from || clicked > row.to) return;
+		const at = snapToKeyGrid(clicked, row.from, row.to);
 		const n =
 			1 - (e.clientY - rect.top - PAD) / Math.max(1, rect.height - PAD * 2);
 		const v = rowValue(row, row.min + n * (row.max - row.min));
@@ -343,13 +349,16 @@
 		} else if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && !mod) {
 			e.preventDefault();
 			e.stopPropagation();
-			const size = e.shiftKey && bpm > 0 ? 60 / bpm : NUDGE_SEC;
-			const result = dragKeys(
-				rows,
-				these,
-				(e.key === "ArrowLeft" ? -1 : 1) * size,
-				0,
-			);
+			const direction = e.key === "ArrowLeft" ? -1 : 1;
+			const grid = keyGrid();
+			const at = row.offset + t;
+			const step =
+				e.shiftKey && bpm > 0
+					? (direction * 60) / bpm
+					: grid
+						? nextGridLine(at, grid, direction) - at
+						: direction * NUDGE_SEC;
+			const result = dragKeys(rows, these, step, 0);
 			if (result.dt === 0) return;
 			onTracks(result.tracks, `key-rows-nudge:${++dragSerial}`);
 			picked = result.picked;

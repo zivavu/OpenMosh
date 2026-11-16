@@ -45,6 +45,10 @@ export interface EditorSettings {
 	numberInputs: boolean;
 	/** Swaps the color tokens for a brighter set, on `html[data-contrast]`. */
 	highContrast: boolean;
+	/** New and dragged keys land on the song's beat grid. */
+	keyGrid: boolean;
+	/** The grid's spacing in beats: 4 is a bar, 0.25 a sixteenth. */
+	keyGridBeats: number;
 }
 
 /** What a fresh editor starts from, and what double-clicking a control restores. */
@@ -72,6 +76,8 @@ export const DEFAULT_SETTINGS: EditorSettings = {
 	projectSong: "ask",
 	numberInputs: false,
 	highContrast: false,
+	keyGrid: false,
+	keyGridBeats: 1,
 };
 
 export function loadSettings(): Partial<EditorSettings> {

@@ -123,6 +123,9 @@
 		keyTime?: number | null;
 		/** The playhead is off the clip: sliders show its nearest edge and key nothing. */
 		keyOutside?: boolean;
+		/** Where a key set at this many seconds into the clip lands: on the beat grid
+		 * while it's on. */
+		snapKeyTime?: (clipTime: number) => number;
 		/** Move the playhead to this many seconds into the clip. */
 		onKeySeek?: (clipTime: number) => void;
 		/** The song is playing: a keyed slider held now records a pass. */
@@ -150,9 +153,20 @@
 		headless = false,
 		keyTime = null,
 		keyOutside = false,
+		snapKeyTime,
 		onKeySeek,
 		playing = false,
 	}: Props = $props();
+
+	/** Where a key set now lands: the playhead, or the grid line nearest it. */
+	let keyAt = $derived(
+		keyTime === null ? null : (snapKeyTime?.(keyTime) ?? keyTime),
+	);
+
+	/** A key that landed off the playhead brings it along, so the slider reads it. */
+	function followKey() {
+		if (keyAt !== null && keyAt !== keyTime && !playing) onKeySeek?.(keyAt);
+	}
 
 	let recording = $state<{ id: string; key: string } | null>(null);
 	const takes = new ParamTakes({
@@ -563,19 +577,12 @@
 		else if (history !== "none") {
 			onBeforeUserEdit?.(`param:${effects[index].instanceId}:${key}`);
 		}
-		if (
-			keyTime !== null &&
-			typeof value === "number" &&
-			isGrouped(effects[index], key)
-		)
-			effects = keyGroupedValue(effects, index, key, keyTime, value);
-		else if (
-			keyTime !== null &&
-			typeof value === "number" &&
-			isKeyed(effects[index], key)
-		)
-			effects[index] = setParamKey(effects[index], key, keyTime, value);
-		else effects[index].values[key] = value;
+		if (keyAt !== null && typeof value === "number" && animated) {
+			if (isGrouped(effects[index], key))
+				effects = keyGroupedValue(effects, index, key, keyAt, value);
+			else effects[index] = setParamKey(effects[index], key, keyAt, value);
+			followKey();
+		} else effects[index].values[key] = value;
 		if (!effects[index].enabled) {
 			hold(effects[index]);
 			effects[index].enabled = true;
@@ -586,21 +593,28 @@
 
 	/** Start animating a param, key it at the playhead, or take the key there away. */
 	function keyToggle(index: number, key: string, clear: boolean) {
-		if (keyTime === null || keyOutside) return;
+		if (keyTime === null || keyAt === null || keyOutside) return;
 		const effect = effects[index];
 		onBeforeUserEdit?.();
 		if (isGrouped(effect, key)) {
-			effects = toggleGroupedKey(effects, index, key, keyTime, clear);
+			effects = toggleGroupedKey(
+				effects,
+				index,
+				key,
+				clear ? keyTime : keyAt,
+				clear,
+			);
 		} else if (!isKeyed(effect, key)) {
 			const value = Number(effect.values[key]);
-			effects[index] = setParamKey(effect, key, keyTime, value);
+			effects[index] = setParamKey(effect, key, keyAt, value);
 		} else if (clear) effects[index] = clearParamKeys(effect, key, keyTime);
-		else if (keyAtTime(effect, key, keyTime))
-			effects[index] = removeParamKey(effect, key, keyTime);
+		else if (keyAtTime(effect, key, keyAt))
+			effects[index] = removeParamKey(effect, key, keyAt);
 		else {
-			const value = Number(paramValueAt(effect, key, keyTime));
-			effects[index] = setParamKey(effect, key, keyTime, value);
+			const value = Number(paramValueAt(effect, key, keyAt));
+			effects[index] = setParamKey(effect, key, keyAt, value);
 		}
+		if (!clear) followKey();
 		appliedIndex = null;
 		onUserEdit?.();
 	}
@@ -625,12 +639,12 @@
 		key: string,
 		group: string | null | "leave",
 	) {
-		if (keyTime === null || (keyOutside && group !== "leave")) return;
+		if (keyAt === null || (keyOutside && group !== "leave")) return;
 		onBeforeUserEdit?.();
 		effects =
 			group === "leave"
 				? ungroupParam(effects, index, key)
-				: groupParam(effects, index, key, group, keyTime);
+				: groupParam(effects, index, key, group, keyAt);
 		appliedIndex = null;
 		onUserEdit?.();
 	}
@@ -1181,6 +1195,7 @@
 					effectIndex={i}
 					{keyTime}
 					{keyOutside}
+					{keyAt}
 					recordingKey={recording?.id === effect.instanceId
 						? recording.key
 						: null}

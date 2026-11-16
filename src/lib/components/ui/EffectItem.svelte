@@ -146,6 +146,8 @@
 		keyTime?: number | null;
 		/** The playhead is off the clip: keyed sliders and the diamonds wait. */
 		keyOutside?: boolean;
+		/** Where a key set now lands, when the beat grid moves it off `keyTime`. */
+		keyAt?: number | null;
 		/** The slider a recorded pass is writing on this effect, if any. */
 		recordingKey?: string | null;
 		/** Key the param at the playhead, or remove the key there; `clear` stops animating it. */
@@ -190,6 +192,7 @@
 		onTouchDragStart,
 		keyTime = null,
 		keyOutside = false,
+		keyAt = null,
 		recordingKey = null,
 		onKeyToggle,
 		onKeySeek,
@@ -652,8 +655,9 @@
 											label={param.label}
 											{keyed}
 											here={keyLink
-												? !!keyNear(keyLink.keys, keyTime)
-												: keyed && !!keyAtTime(effect, param.key, keyTime)}
+												? !!keyNear(keyLink.keys, keyAt ?? keyTime)
+												: keyed &&
+													!!keyAtTime(effect, param.key, keyAt ?? keyTime)}
 											startHint={KEY_START_HINT}
 											blocked={keyOutside ? KEY_OUTSIDE_HINT : null}
 											onToggle={(clear) => onKeyToggle(param.key, clear)}

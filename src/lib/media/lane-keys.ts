@@ -176,6 +176,39 @@ export function setLaneStyleAt(
 	return next;
 }
 
+/** Whether `style`, edited from what shows at `time`, moves a keyed or grouped value. */
+export function movesAnimated(
+	lane: MediaLane,
+	style: MediaStyle,
+	time: number,
+): boolean {
+	if (!hasLaneKeys(lane)) return false;
+	const shown = laneStyleAt(lane, time);
+	return PLACEMENT_KEYS.some(
+		(k) =>
+			style[k] !== shown[k] &&
+			(isPlacementKeyed(lane, k) || isPlacementGrouped(lane, k)),
+	);
+}
+
+/** `style`, edited from what shows at `time`, keyed at `at` instead: only the values
+ * that moved carry over, onto what shows there. */
+export function setLaneStyleMoved(
+	lane: MediaLane,
+	style: MediaStyle,
+	time: number,
+	at: number,
+): MediaLane {
+	if (at === time) return setLaneStyleAt(lane, style, time);
+	const shown = laneStyleAt(lane, time);
+	const moved = Object.fromEntries(
+		Object.entries(style).filter(
+			([k, v]) => v !== shown[k as keyof MediaStyle],
+		),
+	);
+	return setLaneStyleAt(lane, { ...laneStyleAt(lane, at), ...moved }, at);
+}
+
 /** Start animating, key the value shown, take the key there away, or with `clear`
  * stop animating at the value shown. */
 export function toggleLaneKey(

@@ -8,6 +8,7 @@
 	import type { FreqBand } from "../../effects";
 	import EffectsPanel from "../ui/EffectsPanel.svelte";
 	import { clipKeyTime } from "../../effects/param-keys";
+	import { snapToKeyGrid } from "../../timeline/key-grid.svelte";
 
 	/** A layer clip's own effect chain, as the clip panels edit it: the mirror
 	 * EffectsPanel needs, the write-back on every edit, and label upkeep. */
@@ -110,6 +111,8 @@
 	{onAllBands}
 	keyTime={keyAt?.time ?? null}
 	keyOutside={keyAt?.outside ?? false}
+	snapKeyTime={(t) =>
+		snapToKeyGrid(clip.start + t, clip.start, clip.end) - clip.start}
 	{playing}
 	onKeySeek={onSeek ? (t) => onSeek(clip.start + t) : undefined}
 />
