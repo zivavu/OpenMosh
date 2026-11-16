@@ -159,6 +159,20 @@ export function keyAtTime(
 	return keyNear(effect.keys?.[paramKey], time);
 }
 
+/** Where a clip's sliders read and key, in seconds into it. A playhead off the clip
+ * reads the nearest edge, but keys nothing there. */
+export function clipKeyTime(
+	playhead: number,
+	clip: { start: number; end: number },
+): { time: number; outside: boolean } {
+	const t = playhead - clip.start;
+	const length = clip.end - clip.start;
+	return {
+		time: Math.min(Math.max(t, 0), length),
+		outside: t < -KEY_NEAR || t > length + KEY_NEAR,
+	};
+}
+
 /** The nearest key time before or after `time` across one param, or null. */
 export function adjacentKeyTime(
 	keys: Keyframe<number>[] | undefined,

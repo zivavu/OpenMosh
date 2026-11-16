@@ -7,6 +7,7 @@
 	import type { SpectrumData } from "../../types";
 	import type { FreqBand } from "../../effects";
 	import EffectsPanel from "../ui/EffectsPanel.svelte";
+	import { clipKeyTime } from "../../effects/param-keys";
 
 	/** A layer clip's own effect chain, as the clip panels edit it: the mirror
 	 * EffectsPanel needs, the write-back on every edit, and label upkeep. */
@@ -48,12 +49,7 @@
 		playing = false,
 	}: Props = $props();
 
-	// Keys sit inside the clip: a playhead past either end keys its nearest edge.
-	let keyTime = $derived(
-		time === null
-			? null
-			: Math.min(Math.max(time - clip.start, 0), clip.end - clip.start),
-	);
+	let keyAt = $derived(time === null ? null : clipKeyTime(time, clip));
 
 	// The clip's chain, mirrored for EffectsPanel to own and written back on every
 	// edit: the chain on show is this mirror, so the editor has nothing to apply.
@@ -112,7 +108,8 @@
 		})}
 	onBeforeUserEdit={onBeforeEdit}
 	{onAllBands}
-	{keyTime}
+	keyTime={keyAt?.time ?? null}
+	keyOutside={keyAt?.outside ?? false}
 	{playing}
 	onKeySeek={onSeek ? (t) => onSeek(clip.start + t) : undefined}
 />

@@ -143,6 +143,8 @@
 		effectIndex?: number;
 		/** Seconds into the clip the playhead sits at; null where sliders can't be keyed. */
 		keyTime?: number | null;
+		/** The playhead is off the clip: keyed sliders and the diamonds wait. */
+		keyOutside?: boolean;
 		/** Key the param at the playhead, or remove the key there; `clear` stops animating it. */
 		onKeyToggle?: (paramKey: string, clear: boolean) => void;
 		onKeySeek?: (paramKey: string, direction: -1 | 1) => void;
@@ -184,6 +186,7 @@
 		onDragEnd,
 		onTouchDragStart,
 		keyTime = null,
+		keyOutside = false,
 		onKeyToggle,
 		onKeySeek,
 		groups = [],
@@ -313,6 +316,7 @@
 		];
 	}
 
+	const KEY_OUTSIDE_HINT = "Move the playhead into the clip to key this.";
 	const KEY_START_HINT =
 		"Animate this setting. A key goes here with its current value; move the playhead, then the slider, to add more. Once it's animated, holding the slider while the song plays records your moves.";
 	const LOAD_MASK_HINT =
@@ -605,7 +609,11 @@
 								{@const keyed = isKeyed(effect, param.key) || !!keyLink}
 								{@const linked = hasTrack && !!effect.volumeLinks?.[param.key]}
 								{@const shown = paramValueAt(effect, param.key, keyTime)}
-								<div class="param-range-wrap">
+								{@const waiting = keyOutside && keyed}
+								<div
+									class="param-range-wrap"
+									title={waiting ? KEY_OUTSIDE_HINT : undefined}
+								>
 									<RangeSlider
 										id="{effect.instanceId}-{param.key}"
 										value={+shown}
@@ -613,7 +621,7 @@
 										max={param.max}
 										step={param.step}
 										curve={param.curve}
-										disabled={hasTrack && !!effect.volumeLinks?.[param.key]}
+										disabled={linked || waiting}
 										oninput={(v) => onParamChange(param.key, v)}
 										ondblclick={() =>
 											onParamChange(param.key, param.defaultValue)}
@@ -630,6 +638,7 @@
 												? !!keyNear(keyLink.keys, keyTime)
 												: keyed && !!keyAtTime(effect, param.key, keyTime)}
 											startHint={KEY_START_HINT}
+											blocked={keyOutside ? KEY_OUTSIDE_HINT : null}
 											onToggle={(clear) => onKeyToggle(param.key, clear)}
 											prev={onKeySeek &&
 											adjacentKeyTime(keys, keyTime, -1) !== null

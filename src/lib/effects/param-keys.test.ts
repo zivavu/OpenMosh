@@ -7,6 +7,7 @@ import {
 	chainAtKeyTime,
 	chainKeyTimes,
 	clearChainKeys,
+	clipKeyTime,
 	clearParamKeys,
 	hydrateParamKeys,
 	moveChainKeys,
@@ -168,5 +169,23 @@ describe("repeatChainKeys", () => {
 		expect(paramValueAt(out, "levels", 4)).toBe(12);
 		expect(paramValueAt(out, "levels", 4.1)).toBeLessThan(6);
 		expect(paramValueAt(out, "levels", 8)).toBe(12);
+	});
+});
+
+describe("clipKeyTime", () => {
+	const clip = { start: 10, end: 14 };
+
+	it("counts seconds into the clip", () => {
+		expect(clipKeyTime(11.5, clip)).toEqual({ time: 1.5, outside: false });
+	});
+
+	it("reads the nearest edge off the clip, and says it's off", () => {
+		expect(clipKeyTime(8, clip)).toEqual({ time: 0, outside: true });
+		expect(clipKeyTime(20, clip)).toEqual({ time: 4, outside: true });
+	});
+
+	it("counts a playhead on either edge as inside", () => {
+		expect(clipKeyTime(10, clip).outside).toBe(false);
+		expect(clipKeyTime(14, clip).outside).toBe(false);
 	});
 });

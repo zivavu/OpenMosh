@@ -12,6 +12,8 @@
 		here: boolean;
 		/** The tooltip before anything is keyed. */
 		startHint: string;
+		/** Why no key can be set right now, or null when one can. */
+		blocked?: string | null;
 		onToggle: (clear: boolean) => void;
 		/** Null when there is no key that way. */
 		prev?: (() => void) | null;
@@ -27,6 +29,7 @@
 		keyed,
 		here,
 		startHint,
+		blocked = null,
 		onToggle,
 		prev = null,
 		next = null,
@@ -75,15 +78,20 @@
 		type="button"
 		class="key-btn"
 		class:here
+		class:blocked
 		aria-pressed={keyed}
-		title={(!keyed ? startHint : here ? REMOVE_HINT : ADD_HINT) +
-			(menu.length > 0 ? MENU_HINT : "")}
+		aria-disabled={!!blocked}
+		title={blocked ??
+			(!keyed ? startHint : here ? REMOVE_HINT : ADD_HINT) +
+				(menu.length > 0 ? MENU_HINT : "")}
 		aria-label={!keyed
 			? `Animate ${label}`
 			: here
 				? `Remove the key on ${label}`
 				: `Add a key on ${label}`}
-		onclick={(e) => onToggle(e.shiftKey)}
+		onclick={(e) => {
+			if (!blocked) onToggle(e.shiftKey);
+		}}
 		oncontextmenu={openMenu}
 		ondblclick={(e) => e.stopPropagation()}
 	>
@@ -166,6 +174,11 @@
 		border-radius: var(--r-1);
 		color: var(--text-3);
 		cursor: pointer;
+	}
+
+	.key-btn.blocked {
+		opacity: 0.35;
+		cursor: not-allowed;
 	}
 
 	.key-step:disabled {
