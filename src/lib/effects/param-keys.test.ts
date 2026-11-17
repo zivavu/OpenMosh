@@ -164,11 +164,31 @@ describe("repeatChainKeys", () => {
 		expect(out.keys?.levels.map((k) => k.t)).toEqual([0, 1, 2, 3, 4, 5, 6]);
 	});
 
-	it("jumps back to the start of a one-way ramp", () => {
-		const [out] = repeatChainKeys([ramp()], 8);
-		expect(paramValueAt(out, "levels", 4)).toBe(12);
-		expect(paramValueAt(out, "levels", 4.1)).toBeLessThan(6);
-		expect(paramValueAt(out, "levels", 8)).toBe(12);
+	it("glides a one-way run back to its start over one key gap", () => {
+		let e = posterize();
+		[2, 4, 6, 8].forEach((v, t) => (e = setParamKey(e, "levels", t, v)));
+		const [out] = repeatChainKeys([e], 9);
+		expect(out.keys?.levels).toEqual(
+			[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((t) => ({
+				t,
+				v: [2, 4, 6, 8][t % 4],
+			})),
+		);
+	});
+
+	it("repeats only the keys at the times given", () => {
+		let e = posterize();
+		[2, 4, 6, 8].forEach((v, t) => (e = setParamKey(e, "levels", t, v)));
+		const [out] = repeatChainKeys([e], 6, [1, 2]);
+		expect(out.keys?.levels.map((k) => [k.t, k.v])).toEqual([
+			[0, 2],
+			[1, 4],
+			[2, 6],
+			[3, 4],
+			[4, 6],
+			[5, 4],
+			[6, 6],
+		]);
 	});
 });
 

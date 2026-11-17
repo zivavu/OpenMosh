@@ -40,7 +40,8 @@
 		onDelete: (times: number[]) => void;
 		onDeleteAll: () => void;
 		onSimplify: () => void;
-		onRepeat?: () => void;
+		/** The keys at these moments played again and again to the strip's end. */
+		onRepeat?: (times: number[]) => void;
 		/** The keys at these moments laid down again every `period` seconds. */
 		onRepeatEvery?: (times: number[], period: number) => void;
 		/** What has a key at this moment, for its tooltip. */
@@ -414,11 +415,17 @@
 			>
 		{/if}
 		{#if onRepeat && times.length > 1}
+			{@const run = selected.length > 1 ? selected : times}
 			<button
 				type="button"
 				role="menuitem"
-				title="Plays the run from the first key to the last over and over until the {scope} ends."
-				onclick={() => pick(onRepeat)}>Repeat to the {scope}'s end</button
+				title={selected.length > 1
+					? `Plays the selected keys over and over until the ${scope} ends.`
+					: `Plays every key, first to last, over and over until the ${scope} ends.`}
+				onclick={() => pick(() => onRepeat(run))}
+				>{selected.length > 1
+					? `Repeat the selection to the ${scope}'s end`
+					: `Repeat to the ${scope}'s end`}</button
 			>
 		{/if}
 		{#each repeats as option (option.beats)}
