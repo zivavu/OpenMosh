@@ -50,6 +50,7 @@
 	import { laneGroupRowId, laneRowId } from "../../timeline/key-rows";
 	import {
 		groupPlacement,
+		isPlacementKey,
 		isPlacementKeyed,
 		movesAnimated,
 		setLaneStyleMoved,
@@ -218,22 +219,30 @@
 			return;
 		}
 		onLaneChange(setLaneStyleMoved(lane, next, time, keyAt!));
-		followKey();
+		followKey(isPlacementKey(key) ? key : null);
 	}
 
 	/** Where a placement key set now lands: the playhead, or the grid line nearest it. */
 	let keyAt = $derived(time === null ? null : snapToKeyGrid(time));
 
-	/** A key that landed off the playhead brings it along, so the panel reads it. */
-	function followKey() {
-		if (keyAt !== null && keyAt !== time && !playing) onSeek?.(keyAt);
+	function keyRowOf(key: PlacementKey): string {
+		const link = lane?.keyLinks?.[key];
+		return link ? laneGroupRowId(link.group) : laneRowId(key);
+	}
+
+	/** A key that landed off the playhead brings it along, so the panel reads it,
+	 * and gets selected on the timeline, so it's clear which key moved. */
+	function followKey(key: PlacementKey | null) {
+		if (keyAt === null) return;
+		if (keyAt !== time && !playing) onSeek?.(keyAt);
+		if (lane && key) focusKey(lane.id, keyRowOf(key), keyAt);
 	}
 
 	function toggleKey(key: PlacementKey, clear: boolean) {
 		if (!lane || time === null || keyAt === null) return;
 		onBeforeEdit?.();
 		onLaneChange(toggleLaneKey(lane, key, clear ? time : keyAt, clear));
-		if (!clear) followKey();
+		if (!clear) followKey(key);
 	}
 
 	function groupKey(key: PlacementKey, group: string | null | "leave") {
@@ -309,7 +318,7 @@
 		const { id } = lane;
 		return () => {
 			onSeek(t);
-			focusKey(id, link ? laneGroupRowId(link.group) : laneRowId(key), t);
+			focusKey(id, keyRowOf(key), t);
 		};
 	}
 

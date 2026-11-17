@@ -52,6 +52,9 @@
 		/** A shift-drag box over the lane, seconds from `start`: the keys in it get
 		 * selected, for the next Delete. */
 		box?: { from: number; to: number; serial: number } | null;
+		/** Where a slider edit would key, seconds from `start`, when the beat grid
+		 * moves it off the playhead: the key there is marked, or a ghost of one. */
+		target?: number | null;
 	}
 
 	let {
@@ -74,6 +77,7 @@
 		onRepeatEvery,
 		focus = null,
 		box = null,
+		target = null,
 	}: Props = $props();
 
 	/** Within this many pixels of a beat, a dragged key lands on it. */
@@ -321,12 +325,22 @@
 </script>
 
 <div class="clip-keys" class:top={scope === "layer"} bind:this={strip}>
+	{#if target !== null && target >= 0 && target <= length && !has(times, target)}
+		<span
+			class="clip-key ghost"
+			style="left: {pct(target)}%"
+			aria-hidden="true"
+		>
+			<KeyGlyph ease={undefined} />
+		</span>
+	{/if}
 	{#each times as t, i (i)}
 		{#if t >= 0 && t <= length}
 			<button
 				type="button"
 				class="clip-key"
 				class:picked={has(selected, t)}
+				class:target={target !== null && Math.abs(t - target) <= SAME}
 				style="left: {pct(t)}%"
 				title={keyTitle(t)}
 				aria-label="{noun} at {formatTimeMs(start + t)}"
@@ -473,5 +487,24 @@
 	.clip-key:hover,
 	.clip-key:focus-visible {
 		color: var(--text);
+	}
+
+	.clip-key.target {
+		outline: 1px dashed var(--text);
+		outline-offset: -1px;
+		border-radius: 50%;
+	}
+
+	.clip-key.ghost {
+		pointer-events: none;
+		z-index: 1;
+	}
+
+	.clip-key.ghost :global(svg) {
+		fill: none;
+		stroke: var(--live);
+		stroke-width: 1.5;
+		stroke-dasharray: 2 1.5;
+		filter: none;
 	}
 </style>

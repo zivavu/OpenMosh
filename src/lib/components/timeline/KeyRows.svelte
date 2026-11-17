@@ -9,7 +9,11 @@
 		repeatsFor,
 	} from "../../timeline/key-eases";
 	import DragReadout from "./DragReadout.svelte";
-	import { keyGrid, snapToKeyGrid } from "../../timeline/key-grid.svelte";
+	import {
+		gridKeyTarget,
+		keyGrid,
+		snapToKeyGrid,
+	} from "../../timeline/key-grid.svelte";
 	import { nextGridLine, onGrid } from "../../key-grid";
 	import KeyEditPopover from "./KeyEditPopover.svelte";
 	import { tallKeyRows } from "../../timeline/key-row-size.svelte";
@@ -63,6 +67,9 @@
 		onOpenRow?: (row: KeyRow) => void;
 		/** The media lane whose placement rows these are, if any. */
 		laneId?: string;
+		/** The paused playhead, where the panel's sliders key these rows; null while
+		 * playing or when the panel isn't on them. */
+		editAt?: number | null;
 	}
 
 	let {
@@ -77,6 +84,7 @@
 		onTracks,
 		onOpenRow,
 		laneId,
+		editAt = null,
 	}: Props = $props();
 
 	/** Room above and below the line, so a key at either end stays grabbable. */
@@ -154,6 +162,17 @@
 
 	function norm(row: KeyRow, v: number): number {
 		return row.max > row.min ? (v - row.min) / (row.max - row.min) : 0;
+	}
+
+	/** Where a slider edit keys this row, in its own seconds, when the beat grid
+	 * moves it off the playhead. */
+	function rowTarget(row: KeyRow): number | null {
+		const at = gridKeyTarget(editAt, row.from, row.to);
+		return at === null ? null : at - row.offset;
+	}
+
+	function keyTop(row: KeyRow, v: number): string {
+		return `calc(${PAD}px + (100% - ${PAD * 2}px) * ${1 - norm(row, v)})`;
 	}
 
 	/** The line through a row's keys, across what of its span is on screen. */
@@ -451,6 +470,9 @@
 
 {#each rows as row (row.id)}
 	{@const tall = tallKeyRows.has(row.id)}
+	{@const target = rowTarget(row)}
+	{@const targetAt = target === null ? null : row.offset + target}
+	{@const onTarget = target !== null && !!keyframeAt(row.keys, target)}
 	<div
 		class="tl-row key-row"
 		class:tall
@@ -495,6 +517,16 @@
 			<svg class="curve" viewBox="0 0 1000 100" preserveAspectRatio="none">
 				<polyline points={curve(row)} />
 			</svg>
+			{#if target !== null && targetAt !== null && targetAt >= viewStart && targetAt <= viewEnd && !onTarget}
+				{@const v = sampleNumbers(row.keys, target) ?? row.min}
+				<span
+					class="row-key ghost"
+					style="left: {toPct(targetAt)}%; top: {keyTop(row, v)}"
+					aria-hidden="true"
+				>
+					<KeyGlyph ease={undefined} />
+				</span>
+			{/if}
 			{#each row.keys as k, i (i)}
 				{@const at = row.offset + k.t}
 				{#if at >= viewStart && at <= viewEnd}
@@ -502,8 +534,8 @@
 						type="button"
 						class="row-key"
 						class:picked={isPicked({ row: row.id, t: k.t })}
-						style="left: {toPct(at)}%; top: calc({PAD}px + (100% - {PAD *
-							2}px) * {1 - norm(row, k.v)})"
+						class:target={onTarget && keyframeAt([k], target!) !== null}
+						style="left: {toPct(at)}%; top: {keyTop(row, k.v)}"
 						title="{row.label}: {valueText(row, k.v)} at {formatTimeMs(
 							at,
 						)}{k.ease ? `. To the next key: ${easeLabel(k.ease)}` : ''}"
@@ -762,5 +794,24 @@
 
 	.row-key.picked :global(svg) {
 		filter: drop-shadow(0 0 2px var(--row-color));
+	}
+
+	.row-key.target {
+		outline: 1px dashed var(--text);
+		outline-offset: -1px;
+		border-radius: 50%;
+	}
+
+	.row-key.ghost {
+		pointer-events: none;
+		z-index: 1;
+	}
+
+	.row-key.ghost :global(svg) {
+		fill: none;
+		stroke: var(--row-color);
+		stroke-width: 1.5;
+		stroke-dasharray: 2 1.5;
+		filter: none;
 	}
 </style>

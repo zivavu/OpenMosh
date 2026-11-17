@@ -47,6 +47,10 @@ export const PLACEMENT_KEYS = [
 
 export type PlacementKey = (typeof PLACEMENT_KEYS)[number];
 
+export function isPlacementKey(key: string): key is PlacementKey {
+	return (PLACEMENT_KEYS as readonly string[]).includes(key);
+}
+
 export type LaneKeys = Partial<Record<PlacementKey, Keyframe<number>[]>>;
 
 /** Placement values grouped to follow one curve, by value. */

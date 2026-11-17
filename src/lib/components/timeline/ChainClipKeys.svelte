@@ -21,6 +21,7 @@
 	import ClipKeys from "./ClipKeys.svelte";
 	import { chainKeysAt } from "../../timeline/key-clipboard";
 	import { chainKeyRows, keyedAt } from "../../timeline/key-rows";
+	import { gridKeyTarget } from "../../timeline/key-grid.svelte";
 
 	/** A selected clip's effect keys on its bar. */
 	interface Props {
@@ -33,6 +34,8 @@
 		bpm?: number;
 		beatOffset?: number;
 		onSeek?: (time: number) => void;
+		/** The paused playhead, where the panel's sliders key; null while playing. */
+		editAt?: number | null;
 		onEdit: (
 			edit: (effects: EffectInstance[]) => EffectInstance[],
 			coalesceKey?: string,
@@ -47,6 +50,7 @@
 		bpm = 0,
 		beatOffset = 0,
 		onSeek,
+		editAt = null,
 		onEdit,
 	}: Props = $props();
 
@@ -56,6 +60,10 @@
 		return b?.laneId === laneId
 			? { from: b.from - clip.start, to: b.to - clip.start, serial: b.serial }
 			: null;
+	});
+	let target = $derived.by(() => {
+		const at = gridKeyTarget(editAt, clip.start, clip.end);
+		return at === null ? null : at - clip.start;
 	});
 	let focus = $derived(
 		keyFocus.current?.owner === CHAIN_OWNER ? keyFocus.current : null,
@@ -89,6 +97,7 @@
 			onEdit((e) => repeatChainKeysEvery(e, times, period, length))}
 		{focus}
 		{box}
+		{target}
 	/>
 {/if}
 

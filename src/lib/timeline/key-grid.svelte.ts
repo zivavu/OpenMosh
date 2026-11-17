@@ -1,5 +1,6 @@
 import { keyGridOf, onGridWithin, type KeyGrid } from "../key-grid";
 import { uiPrefs } from "../ui-prefs.svelte";
+import { KEY_NEAR } from "../keyframes";
 
 /** The editor's tempo, which the key grid follows. 0 BPM is no grid. */
 const tempo = $state({ bpm: 0, beatOffset: 0 });
@@ -24,4 +25,17 @@ export function keyGrid(): KeyGrid | null {
 export function snapToKeyGrid(at: number, from = 0, to = Infinity): number {
 	const grid = keyGrid();
 	return grid ? onGridWithin(at, grid, from, to) : at;
+}
+
+/** The grid line a slider edit at `playhead` keys on, when that isn't the playhead
+ * itself; null off the grid, on a line, or with the playhead outside `from`..`to`. */
+export function gridKeyTarget(
+	playhead: number | null | undefined,
+	from = 0,
+	to = Infinity,
+): number | null {
+	if (playhead == null) return null;
+	if (playhead < from - KEY_NEAR || playhead > to + KEY_NEAR) return null;
+	const at = snapToKeyGrid(Math.min(Math.max(playhead, from), to), from, to);
+	return Math.abs(at - playhead) > KEY_NEAR ? at : null;
 }

@@ -76,6 +76,8 @@
 		onToggleKeyRows?: (laneId: string) => void;
 		/** Where the playhead is, for the clip a lane's setting rows show. */
 		playhead?: number;
+		/** The paused playhead, where the panel's sliders key; null while playing. */
+		editAt?: number | null;
 		/** The clip toolbar's actions, fanned out over the selection. */
 		onApplyPreset?: (clipIds: string[], preset: Preset) => void;
 		onRoll?: (clipIds: string[]) => void;
@@ -108,6 +110,7 @@
 		keyRowsOpen = new Set<string>(),
 		onToggleKeyRows,
 		playhead = 0,
+		editAt = null,
 		onApplyPreset,
 		onRoll,
 		onClear,
@@ -124,6 +127,12 @@
 			lane.clips.find((c) => selectedClipIds.includes(c.id)) ??
 			clipAt(lane, playhead)
 		);
+	}
+
+	/** The rows show a clip the panel edits, so its sliders key them. */
+	function rowsEditable(lane: TextLane): boolean {
+		const clip = rowClip(lane);
+		return !!clip && selectedClipIds.includes(clip.id);
 	}
 
 	function keyRowsOf(lane: TextLane): KeyRow[] {
@@ -393,6 +402,7 @@
 								{bpm}
 								{beatOffset}
 								{onSeek}
+								{editAt}
 								onEdit={(edit, key) => editClipKeys(clip.id, edit, key)}
 							/>
 							<span
@@ -422,6 +432,7 @@
 					{bpm}
 					{beatOffset}
 					onSeek={(t) => onSeek?.(t)}
+					editAt={rowsEditable(lane) ? editAt : null}
 					onTracks={(tracks, key) => editKeyRows(lane, tracks, key)}
 					onOpenRow={(row) => openKeyRow(lane, row)}
 				/>
