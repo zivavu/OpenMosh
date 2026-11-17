@@ -2348,6 +2348,8 @@
 			? Math.min(clock.time, mixer.duration - 1e-3)
 			: clock.time,
 	);
+	/** Where the panels' sliders key: the paused playhead. */
+	let editAt = $derived(clock.playing() ? null : previewTime);
 	// Every lane shares the master clock's axis; a video under its own span is a second clock.
 	let showVideoBar = $derived(
 		isVideo &&
@@ -3580,6 +3582,7 @@
 							keyRowsOpen={keyRowLanes.ids}
 							onToggleKeyRows={keyRowLanes.toggle}
 							playhead={previewTime}
+							{editAt}
 							onModeChange={mediaState.modeChange}
 							plan={isSequenceMode ? mixPlan : undefined}
 							{peaksOf}
@@ -3607,6 +3610,7 @@
 							keyRowsOpen={keyRowLanes.ids}
 							onToggleKeyRows={keyRowLanes.toggle}
 							playhead={previewTime}
+							{editAt}
 							onModeChange={textState.modeChange}
 							{lyricsSync}
 							bind:lyricsOpen
@@ -3631,6 +3635,7 @@
 							keyRowsOpen={keyRowLanes.ids}
 							onToggleKeyRows={keyRowLanes.toggle}
 							playhead={previewTime}
+							{editAt}
 							onModeChange={fxState.modeChange}
 							onRoll={fxState.moshes.roll}
 							onClear={fxState.clear}

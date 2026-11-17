@@ -7,6 +7,7 @@ import { levelOf } from "../key-groups";
 import {
 	hasLaneKeys,
 	isPlacementGrouped,
+	isPlacementKey,
 	isPlacementKeyed,
 	setLaneGroupCurve,
 	laneStyleAt,
@@ -34,10 +35,6 @@ export interface PlacementTakeHost {
 
 /** A take's name for a group's curve, apart from the placement values. */
 const GROUP = "group:";
-
-function isPlacement(key: string): key is PlacementKey {
-	return (PLACEMENT_KEYS as readonly string[]).includes(key);
-}
 
 export class PlacementTakes {
 	readonly #host: PlacementTakeHost;
@@ -67,7 +64,7 @@ export class PlacementTakes {
 		// What isn't keyed is written as it is.
 		const plain: Partial<MediaStyle> = {};
 		for (const key of Object.keys(style) as (keyof MediaStyle)[]) {
-			if (isPlacement(key) && animated(key)) continue;
+			if (isPlacementKey(key) && animated(key)) continue;
 			if (style[key] !== lane.style[key])
 				(plain as Record<string, unknown>)[key] = style[key];
 		}

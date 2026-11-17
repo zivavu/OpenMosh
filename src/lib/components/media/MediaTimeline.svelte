@@ -13,6 +13,7 @@
 		type KeyRow,
 		type RowTracks,
 	} from "../../timeline/key-rows";
+	import { gridKeyTarget } from "../../timeline/key-grid.svelte";
 	import ChainClipKeys from "../timeline/ChainClipKeys.svelte";
 	import { laneKeysAt, pasteKeysOnto } from "../../timeline/key-clipboard";
 	import ClipKeys from "../timeline/ClipKeys.svelte";
@@ -126,6 +127,8 @@
 		onToggleKeyRows?: (laneId: string) => void;
 		/** Where the playhead is, for the clip a lane's setting rows show. */
 		playhead?: number;
+		/** The paused playhead, where the panel's sliders key; null while playing. */
+		editAt?: number | null;
 		onApplyPreset?: (clipIds: string[], preset: Preset) => void;
 		onRoll?: (clipIds: string[]) => void;
 		onClear?: (clipIds: string[]) => void;
@@ -164,6 +167,7 @@
 		keyRowsOpen = new Set<string>(),
 		onToggleKeyRows,
 		playhead = 0,
+		editAt = null,
 		onApplyPreset,
 		onRoll,
 		onClear,
@@ -181,6 +185,12 @@
 			lane.clips.find((c) => selectedClipIds.includes(c.id)) ??
 			clipAt(lane, playhead)
 		);
+	}
+
+	/** The rows show a clip the panel edits, so its sliders key them. */
+	function rowsEditable(lane: MediaLane): boolean {
+		const clip = rowClip(lane);
+		return !!clip && selectedClipIds.includes(clip.id);
 	}
 
 	function keyRowsOf(lane: MediaLane): KeyRow[] {
@@ -841,6 +851,7 @@
 			>
 				{#if hasLaneKeys(lane) && lane.clips.some( (c) => selectedClipIds.includes(c.id) )}
 					{const from = $derived(vp.viewStart)}
+					{const layerTarget = $derived(gridKeyTarget(editAt))}
 					<ClipKeys
 						scope="layer"
 						times={laneKeyTimes(lane).map((t) => t - from)}
@@ -907,6 +918,7 @@
 									to: keyBox.current.to - from,
 								}
 							: null}
+						target={layerTarget === null ? null : layerTarget - from}
 					/>
 				{/if}
 				{#each lane.clips as clip (clip.id)}
@@ -991,6 +1003,7 @@
 								{bpm}
 								{beatOffset}
 								{onSeek}
+								{editAt}
 								onEdit={(edit, key) => editClipKeys(clip.id, edit, key)}
 							/>
 							<span
@@ -1044,6 +1057,7 @@
 					{bpm}
 					{beatOffset}
 					onSeek={(t) => onSeek?.(t)}
+					editAt={rowsEditable(lane) ? editAt : null}
 					onTracks={(tracks, key) => editKeyRows(lane, tracks, key)}
 					onOpenRow={(row) => openKeyRow(lane, row)}
 					laneId={lane.id}

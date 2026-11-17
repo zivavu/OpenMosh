@@ -167,9 +167,17 @@
 		keyTime === null ? null : (snapKeyTime?.(keyTime) ?? keyTime),
 	);
 
-	/** A key that landed off the playhead brings it along, so the slider reads it. */
-	function followKey() {
-		if (keyAt !== null && keyAt !== keyTime && !playing) onKeySeek?.(keyAt);
+	function keyRowOf(effect: EffectInstance, key: string): string {
+		const link = effect.keyLinks?.[key];
+		return link ? groupRowId(link.group) : effectRowId(effect.instanceId, key);
+	}
+
+	/** A key that landed off the playhead brings it along, so the slider reads it,
+	 * and gets selected on the timeline, so it's clear which key moved. */
+	function followKey(index: number, key: string) {
+		if (keyAt === null) return;
+		if (keyAt !== keyTime && !playing) onKeySeek?.(keyAt);
+		focusKey(CHAIN_OWNER, keyRowOf(effects[index], key), keyAt);
 	}
 
 	let recording = $state<{ id: string; key: string } | null>(null);
@@ -585,7 +593,7 @@
 			if (isGrouped(effects[index], key))
 				effects = keyGroupedValue(effects, index, key, keyAt, value);
 			else effects[index] = setParamKey(effects[index], key, keyAt, value);
-			followKey();
+			followKey(index, key);
 		} else effects[index].values[key] = value;
 		if (!effects[index].enabled) {
 			hold(effects[index]);
@@ -618,7 +626,7 @@
 			const value = Number(paramValueAt(effect, key, keyAt));
 			effects[index] = setParamKey(effect, key, keyAt, value);
 		}
-		if (!clear) followKey();
+		if (!clear) followKey(index, key);
 		appliedIndex = null;
 		onUserEdit?.();
 	}
@@ -626,15 +634,11 @@
 	function keySeek(index: number, key: string, direction: -1 | 1) {
 		if (keyTime === null) return;
 		const e = effects[index];
-		const link = e.keyLinks?.[key];
-		const t = adjacentKeyTime(link?.keys ?? e.keys?.[key], keyTime, direction);
+		const keys = e.keyLinks?.[key]?.keys ?? e.keys?.[key];
+		const t = adjacentKeyTime(keys, keyTime, direction);
 		if (t === null) return;
 		onKeySeek?.(t);
-		focusKey(
-			CHAIN_OWNER,
-			link ? groupRowId(link.group) : effectRowId(e.instanceId, key),
-			t,
-		);
+		focusKey(CHAIN_OWNER, keyRowOf(e, key), t);
 	}
 
 	/** Put a slider in a group (null starts a new one), or take it out with "leave". */
