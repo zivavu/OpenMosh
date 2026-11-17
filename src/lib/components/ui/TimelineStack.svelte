@@ -1,5 +1,13 @@
 <script lang="ts">
-	import { Crosshair, Pause, Play, Repeat, Repeat1, X } from "lucide-svelte";
+	import {
+		Crosshair,
+		MapPin,
+		Pause,
+		Play,
+		Repeat,
+		Repeat1,
+		X,
+	} from "lucide-svelte";
 	import { untrack, type Snippet } from "svelte";
 	import { formatTime, formatTimeMs } from "../../audio/audio-utils";
 	import {
@@ -377,6 +385,18 @@
 
 		{@render toolbar?.()}
 
+		{#if trackDuration > 0 && onSeek}
+			<button
+				class="tl-tool-btn tl-mark-start"
+				onclick={() => stack.markStartHere()}
+				disabled={!stack.clockOffStart}
+				title={stack.clockOffStart
+					? "Put the start marker where playback is (D)"
+					: "Put the start marker where playback is (D). Play first"}
+			>
+				<MapPin size={12} />
+			</button>
+		{/if}
 		{#if trackDuration > 0}
 			<button
 				class="tl-tool-btn tl-follow"
@@ -858,8 +878,13 @@
 	}
 
 	/* Pushes Follow, and nothing else, to the far right. */
-	.tl-follow {
+	.tl-follow,
+	.tl-mark-start {
 		margin-left: auto;
+	}
+
+	.tl-mark-start + .tl-follow {
+		margin-left: 0;
 	}
 
 	/* A hairline between groups of lane actions, so the toolbar reads as sections. */

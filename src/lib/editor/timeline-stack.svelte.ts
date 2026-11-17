@@ -530,6 +530,17 @@ export class TimelineStackState {
 		this.#seek(clamped);
 	}
 
+	/** The static playhead to where the clock is, leaving playback running. */
+	markStartHere(): void {
+		const time = this.#getCurrentTime();
+		this.staticTime = Math.max(0, Math.min(this.#getDuration(), time));
+	}
+
+	/** Whether the clock has left the static playhead, so there's somewhere to mark. */
+	get clockOffStart(): boolean {
+		return Math.abs(this.#getCurrentTime() - this.staticTime) > 1e-3;
+	}
+
 	/** Put the clock back on the static marker when playback stops. */
 	returnToStatic(): void {
 		this.#seek(Math.max(0, Math.min(this.#getDuration(), this.staticTime)));
