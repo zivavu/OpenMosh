@@ -238,39 +238,25 @@ export function shiftKeys<T>(
 	return keys.map((k) => ({ ...k, t: k.t + delta }));
 }
 
-/** How long a repeat takes to jump back to the start of its run, when the run
- * doesn't end where it began. */
-const REPEAT_JUMP = 1 / 120;
-
-/** The run from `first` lasting `span` played again and again up to `end`. A run
- * that ends on its start value loops seamlessly; one that doesn't jumps back. */
-export function repeatKeys<T>(
-	keys: Keyframe<T>[],
-	first: number,
-	span: number,
-	end: number,
-): Keyframe<T>[] {
-	if (span <= SAME_MOMENT) return keys;
-	// Bounded however short the run: a crafted clip can't make this spin.
-	const cycles = Math.min(Math.floor((end - first) / span), 1000);
-	const run = keys.filter(
-		(k) => k.t >= first - SAME_MOMENT && k.t <= first + span + SAME_MOMENT,
-	);
-	let out = keys;
-	for (let n = 1; n <= cycles; n++) {
-		for (const [i, k] of run.entries()) {
-			let t = k.t + n * span;
-			if (t > end + SAME_MOMENT) break;
-			const there = keyframeAt(out, t);
-			if (i === 0 && there) {
-				if (there.v === k.v) continue;
-				t += REPEAT_JUMP;
-			}
-			out = putKeyframe(out, t, k.v);
-			if (k.ease) keyframeAt(out, t)!.ease = k.ease;
-		}
-	}
-	return out;
+/** How often the keys at `times` repeat, or 0 when they can't. Back to back when
+ * every track ends on the value it started from, so the run loops seamlessly; else
+ * one key gap after its last key, so the end glides back into the start. */
+export function repeatPeriod(
+	tracks: Iterable<Keyframe<unknown>[]>,
+	times: readonly number[],
+): number {
+	if (times.length < 2) return 0;
+	const first = Math.min(...times);
+	const last = Math.max(...times);
+	const span = last - first;
+	if (span <= SAME_MOMENT) return 0;
+	const loops = [...tracks].every((keys) => {
+		if (!keys.some((k) => hasTime(times, k.t))) return true;
+		const a = keyframeAt(keys, first);
+		const b = keyframeAt(keys, last);
+		return !!a && !!b && a.v === b.v;
+	});
+	return loops ? span : span + span / (times.length - 1);
 }
 
 /** The keys at `times` laid down again every `period` seconds, up to `end`. */

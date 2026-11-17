@@ -8,7 +8,7 @@ import {
 	normalizeTrack,
 	putKeyframe,
 	removeKeyframe,
-	repeatKeys,
+	repeatPeriod,
 	repeatKeysEvery,
 	sampleNumbers,
 	removeKeysAtTimes,
@@ -360,13 +360,16 @@ export function simplifyLaneKeys(lane: MediaLane): MediaLane {
 	return next;
 }
 
-/** The lane's keys from first to last played again and again until `end`. */
-export function repeatLaneKeys(lane: MediaLane, end: number): MediaLane {
-	const times = laneKeyTimes(lane);
-	if (times.length < 2) return lane;
-	const first = times[0];
-	const span = times[times.length - 1] - first;
-	return mapTracks(lane, (keys) => repeatKeys(keys, first, span, end));
+/** The keys at `times`, or every key without them, played again and again to
+ * `end`. */
+export function repeatLaneKeys(
+	lane: MediaLane,
+	end: number,
+	times: readonly number[] = laneKeyTimes(lane),
+): MediaLane {
+	const period = repeatPeriod(tracks(lane), times);
+	if (period <= 0) return lane;
+	return mapTracks(lane, (keys) => repeatKeysEvery(keys, times, period, end));
 }
 
 /** The keys at `times` laid down again every `period` seconds up to `end`. */

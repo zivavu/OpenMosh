@@ -90,7 +90,7 @@
 		onDelete={(times) => onEdit((e) => removeChainKeysAt(e, times))}
 		onDeleteAll={() => onEdit(clearChainKeys)}
 		onSimplify={() => onEdit(simplifyChainKeys)}
-		onRepeat={() => onEdit((e) => repeatChainKeys(e, length))}
+		onRepeat={(times) => onEdit((e) => repeatChainKeys(e, length, times))}
 		onCopy={(times) => chainKeysAt(clip.effects, times, clip.start)}
 		describe={(t) => keyedAt(chainKeyRows(clip), t)}
 		onRepeatEvery={(times, period) =>

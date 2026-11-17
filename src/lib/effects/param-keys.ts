@@ -9,8 +9,8 @@ import {
 	normalizeTrack,
 	putKeyframe,
 	removeKeyframe,
-	repeatKeys,
 	repeatKeysEvery,
+	repeatPeriod,
 	sampleNumbers,
 	removeKeysAtTimes,
 	setEaseAtTimes,
@@ -303,16 +303,18 @@ export function simplifyChainKeys(effects: EffectInstance[]): EffectInstance[] {
 	});
 }
 
-/** The keys from the chain's first to its last played again and again up to `length`. */
+/** The keys at `times`, or every key without them, played again and again to
+ * `length`. */
 export function repeatChainKeys(
 	effects: EffectInstance[],
 	length: number,
+	times: readonly number[] = chainKeyTimes(effects),
 ): EffectInstance[] {
-	const times = chainKeyTimes(effects);
-	if (times.length < 2) return effects;
-	const first = times[0];
-	const span = times[times.length - 1] - first;
-	return mapKeys(effects, (keys) => repeatKeys(keys, first, span, length));
+	const period = repeatPeriod(tracksOf(effects), times);
+	if (period <= 0) return effects;
+	return mapKeys(effects, (keys) =>
+		repeatKeysEvery(keys, times, period, length),
+	);
 }
 
 /** The keys at `times` laid down again every `period` seconds up to `length`. */

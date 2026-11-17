@@ -904,9 +904,13 @@
 								lane,
 								times.map((t) => from + t),
 							)}
-						onRepeat={() =>
+						onRepeat={(times) =>
 							editLane(lane.id, (l) =>
-								repeatLaneKeys(l, Math.max(...l.clips.map((c) => c.end))),
+								repeatLaneKeys(
+									l,
+									Math.max(...l.clips.map((c) => c.end)),
+									times.map((t) => from + t),
+								),
 							)}
 						focus={keyFocus.current?.owner === lane.id
 							? { ...keyFocus.current, t: keyFocus.current.t - from }
