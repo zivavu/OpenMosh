@@ -2104,6 +2104,7 @@
 			if (timelineAxis)
 				timelineAxis.followPlayhead = !timelineAxis.followPlayhead;
 		},
+		markStartHere: () => timelineAxis?.markStartHere(),
 		togglePlay: clock.toggle,
 		toggleRepeat: toggleSelectionRepeat,
 		splitAtPlayhead: () =>

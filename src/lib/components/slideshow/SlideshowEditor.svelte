@@ -1877,6 +1877,9 @@
 			e.preventDefault();
 			if (timelineAxis)
 				timelineAxis.followPlayhead = !timelineAxis.followPlayhead;
+		} else if (key === "d" && !e.altKey && !e.shiftKey) {
+			e.preventDefault();
+			timelineAxis?.markStartHere();
 		} else if (key === "s" && !e.altKey && !e.shiftKey) {
 			e.preventDefault();
 			if (!timelineAxis) return;

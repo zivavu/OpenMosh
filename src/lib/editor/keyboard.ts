@@ -15,6 +15,8 @@ export interface KeyboardActions {
 	reInput: () => void;
 	toggleFullscreen: () => void;
 	toggleFollowPlayhead: () => void;
+	/** D: the start marker to where playback is. */
+	markStartHere: () => void;
 	/** Space: the master transport (a track, a video, or a still's own clock). */
 	togglePlay: () => void;
 	/** R: repeat the selected clips in the preview, or stop. */
@@ -86,6 +88,9 @@ export function createKeyboardHandler(
 		} else if (key === "c" && !mod && !e.altKey && !e.shiftKey) {
 			e.preventDefault();
 			actions.toggleFollowPlayhead();
+		} else if (key === "d" && !mod && !e.altKey && !e.shiftKey) {
+			e.preventDefault();
+			actions.markStartHere();
 		} else if (key === "r" && !mod && !e.altKey && !e.shiftKey) {
 			e.preventDefault();
 			actions.toggleRepeat();

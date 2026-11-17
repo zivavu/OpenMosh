@@ -74,6 +74,10 @@ const timelineGroup = (wheelScrollsLanes: boolean): ShortcutGroup => ({
 			keys: ["C"],
 			description: "Follow the playhead, or stop; a pan or scrub stops it too",
 		},
+		{
+			keys: ["D"],
+			description: "Put the start marker where playback is, and keep playing",
+		},
 	],
 });
 
