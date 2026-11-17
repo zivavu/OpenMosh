@@ -159,8 +159,9 @@ export class TimelineStackState {
 
 	/** The view and length a clip drag started from, whether that view showed the
 	 * whole project, the stamp of its undo entry, and the seconds it has added before
-	 * the start. */
+	 * the start. A box drag only scrolls, inside the project as it is. */
 	#drag: {
+		box: boolean;
 		start: number;
 		end: number;
 		duration: number;
@@ -175,14 +176,17 @@ export class TimelineStackState {
 		return this.#drag !== null;
 	}
 
-	beginDrag(): void {
+	beginDrag(kind: "clips" | "box" = "clips"): void {
 		cancelAnimationFrame(this.#fitFrame);
 		const duration = this.#getDuration();
+		const box = kind === "box";
 		this.#drag = {
+			box,
 			start: this.vp.viewStart,
 			end: this.vp.viewEnd,
 			duration,
-			whole: this.vp.viewStart <= 1e-6 && this.vp.viewEnd >= duration - 1e-6,
+			whole:
+				!box && this.vp.viewStart <= 1e-6 && this.vp.viewEnd >= duration - 1e-6,
 			seq: null,
 			front: 0,
 		};
@@ -387,6 +391,12 @@ export class TimelineStackState {
 		this.#rowScroll = null;
 	}
 
+	/** How far the lane list is scrolled down, so a point can be held to the rows
+	 * while they scroll under it. */
+	get rowScrollTop(): number {
+		return this.#rowScroller()?.scrollTop ?? 0;
+	}
+
 	/** The nearest ancestor of the lane rows that scrolls them, if they overflow it. */
 	#rowScroller(): HTMLElement | null {
 		const [lane] = this.#laneEls.keys();
@@ -416,7 +426,8 @@ export class TimelineStackState {
 			vp.viewEnd = end;
 			return true;
 		}
-		const limit = this.growTo ? this.maxLength : this.#getDuration();
+		const limit =
+			this.growTo && !this.#drag?.box ? this.maxLength : this.#getDuration();
 		const span = vp.viewEnd - vp.viewStart;
 		const start = Math.max(0, Math.min(limit - span, vp.viewStart + delta));
 		if (Math.abs(start - vp.viewStart) < 1e-9) return false;

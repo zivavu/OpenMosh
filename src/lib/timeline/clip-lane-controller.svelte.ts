@@ -133,9 +133,12 @@ export class ClipLaneController<
 		time: number;
 		x: number;
 		y: number;
+		/** `y` plus how far the rows were scrolled then: the start stays on its row. */
+		rowY: number;
 		laneId: string;
 		clipId: string | null;
 	} | null = null;
+	#boxPointer: { x: number; y: number } | null = null;
 	/** A Ctrl press on a clip: a drag from it moves slowly, a release splits. */
 	#ctrlPress: {
 		laneId: string;
@@ -684,10 +687,44 @@ export class ClipLaneController<
 			time: this.timeAt(e.clientX),
 			x: e.clientX,
 			y: e.clientY,
+			rowY: e.clientY + this.stack.rowScrollTop,
 			laneId,
 			clipId,
 		};
+		this.#boxPointer = { x: e.clientX, y: e.clientY };
 		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+		this.stack.beginDrag("box");
+		// A wheel or a scroll moves the lanes under a still pointer.
+		addEventListener("wheel", this.#refreshBox, {
+			capture: true,
+			passive: true,
+		});
+		addEventListener("scroll", this.#refreshBox, {
+			capture: true,
+			passive: true,
+		});
+	}
+
+	#boxFrame = 0;
+	#refreshBox = () => {
+		cancelAnimationFrame(this.#boxFrame);
+		this.#boxFrame = requestAnimationFrame(() => this.#updateBox());
+	};
+
+	/** The box from where it started to the pointer, as the view stands now. */
+	#updateBox(): void {
+		const box = this.#boxStart;
+		const at = this.#boxPointer;
+		if (!box || !at) return;
+		// A few pixels of slack, so a shaky shift-click stays a click.
+		if (!this.marquee && Math.abs(at.x - box.x) < 3) return;
+		const t = this.timeAt(at.x);
+		const startY = box.rowY - this.stack.rowScrollTop;
+		this.marquee = {
+			laneIds: this.#boxLanes(startY, at.y, box.laneId),
+			from: Math.max(0, Math.min(box.time, t)),
+			to: Math.min(this.trackDuration, Math.max(box.time, t)),
+		};
 	}
 
 	/** This controller's lanes the box spans, top to bottom on screen. */
@@ -702,7 +739,12 @@ export class ClipLaneController<
 		const start = this.#boxStart!;
 		const box = this.marquee;
 		this.#boxStart = null;
+		this.#boxPointer = null;
 		this.marquee = null;
+		cancelAnimationFrame(this.#boxFrame);
+		removeEventListener("wheel", this.#refreshBox, { capture: true });
+		removeEventListener("scroll", this.#refreshBox, { capture: true });
+		this.stack.endDrag();
 		const host = this.host;
 		if (!box) {
 			// A shift-click: extend from the primary, across lanes too, or clear on empty space.
@@ -786,16 +828,14 @@ export class ClipLaneController<
 			this.stack.confirmSnap(moving.joins.map((j) => j.at + delta));
 			return;
 		}
-		const box = this.#boxStart;
-		if (box) {
-			// A few pixels of slack, so a shaky shift-click stays a click.
-			if (!this.marquee && Math.abs(e.clientX - box.x) < 3) return;
-			const t = this.timeAt(e.clientX);
-			this.marquee = {
-				laneIds: this.#boxLanes(box.y, e.clientY, box.laneId),
-				from: Math.max(0, Math.min(box.time, t)),
-				to: Math.min(this.trackDuration, Math.max(box.time, t)),
-			};
+		if (this.#boxStart) {
+			this.#boxPointer = { x: e.clientX, y: e.clientY };
+			this.#updateBox();
+			if (!this.marquee) return;
+			// Held near an edge, the view scrolls on and the box grows with it.
+			const grow = () => this.#updateBox();
+			this.stack.edgeScroll(e.clientX, grow);
+			this.stack.edgeScrollRows(e.clientY, grow);
 			return;
 		}
 		if (this.scrubbing) this.stack.seekStatic(this.timeAt(e.clientX));
