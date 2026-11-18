@@ -68,7 +68,8 @@ void main() {
   }
   vec3 col = src.rgb;
   if (style >= 0) col = stylize(src.rgb, style, 1.0 - smoothstep(0.0, 0.7, depth));
-  col = mix(col, u_ink, ink);
+  // Under a pixel wide, lines fade rather than stay a pixel.
+  col = mix(col, u_ink, ink * clamp(u_lineWidth, 0.0, 1.0));
   outColor = vec4(mix(src.rgb, col, u_opacity), src.a);
 }`;
 

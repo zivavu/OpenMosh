@@ -19,7 +19,8 @@ export function drawTrackingToCanvas(
 	ctx.clearRect(0, 0, width, height);
 
 	const fg = params.color === "white" ? "#ffffff" : "#000000";
-	const lw = Math.max(1, params.thickness * (height / 720));
+	const lw = params.thickness * (height / 720);
+	const lines = lw > 0;
 	const fontSize = Math.max(9, Math.round(height * 0.016));
 	ctx.lineWidth = lw;
 	ctx.strokeStyle = fg;
@@ -50,11 +51,13 @@ export function drawTrackingToCanvas(
 		}
 
 		ctx.globalAlpha = alpha;
-		ctx.setLineDash(lost ? [lw * 3, lw * 3] : []);
-		drawBrackets(ctx, x, y, bw, bh, box.primary ? 0.32 : 0.26);
-		ctx.setLineDash([]);
+		if (lines) {
+			ctx.setLineDash(lost ? [lw * 3, lw * 3] : []);
+			drawBrackets(ctx, x, y, bw, bh, box.primary ? 0.32 : 0.26);
+			ctx.setLineDash([]);
+		}
 
-		if (box.primary) {
+		if (box.primary && lines) {
 			ctx.beginPath();
 			ctx.arc(box.cx * width, box.cy * height, lw * 1.3, 0, Math.PI * 2);
 			ctx.fill();
@@ -79,14 +82,16 @@ export function drawTrackingToCanvas(
 
 	// Fixed center crosshair: belongs to the "camera", so it stays rock still
 	// even during signal loss.
-	const ch = Math.min(width, height) * 0.016;
-	ctx.globalAlpha = 0.85;
-	ctx.beginPath();
-	ctx.moveTo(width / 2 - ch, height / 2);
-	ctx.lineTo(width / 2 + ch, height / 2);
-	ctx.moveTo(width / 2, height / 2 - ch);
-	ctx.lineTo(width / 2, height / 2 + ch);
-	ctx.stroke();
+	if (lines) {
+		const ch = Math.min(width, height) * 0.016;
+		ctx.globalAlpha = 0.85;
+		ctx.beginPath();
+		ctx.moveTo(width / 2 - ch, height / 2);
+		ctx.lineTo(width / 2 + ch, height / 2);
+		ctx.moveTo(width / 2, height / 2 - ch);
+		ctx.lineTo(width / 2, height / 2 + ch);
+		ctx.stroke();
+	}
 
 	ctx.globalAlpha = 1;
 }
