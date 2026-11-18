@@ -267,7 +267,10 @@
 	function requestHighlight() {
 		const target = highlightOn ? selectedHighlight() : null;
 		const fit = target ? frameFit() : null;
-		if (!target || !fit || !renderer || !canvasEl) return;
+		if (!target || !fit || !renderer || !canvasEl) {
+			renderer?.traceHighlight(null);
+			return;
+		}
 		const w = canvasEl.width * fit.s;
 		const h = canvasEl.height * fit.s;
 		const k = Math.min(1, HIGHLIGHT_MAX_SIDE / Math.max(w, h, 1));
@@ -288,6 +291,16 @@
 		if (done) paintHighlight(done);
 		if (r.highlightPending)
 			highlightPoll = requestAnimationFrame(pollHighlight);
+		// A trace held back behind this one, on a still picture: draw it again. While
+		// frames keep coming the next one takes it, and an extra draw here would show an
+		// old moment between two new ones. Never mid-export either.
+		else if (r.highlightWaiting)
+			highlightPoll = requestAnimationFrame(() => {
+				highlightPoll = 0;
+				const still = !needsAnimation && !suspended && !externallyDriven;
+				if (renderer === r && r.highlightWaiting && still)
+					drawFrame(lastDrawAt);
+			});
 	}
 
 	function paintHighlight({ key, image }: LayerHighlight) {
@@ -1008,7 +1021,11 @@
 				hasAnimatedEffects),
 	);
 
+	/** The time the last frame drew at, to draw it again for a held-back trace. */
+	let lastDrawAt = 0;
+
 	function drawFrame(now: number) {
+		lastDrawAt = now;
 		// Before anything renders: the bars have to see this frame's audio.
 		renderer!.setSpectrum(spectrum, now, spectrumSampleRate);
 		const beat = bpm > 0 ? ((textTime - beatOffset) * bpm) / 60 : null;
@@ -1413,6 +1430,14 @@
 	let fontTick = $state(0);
 	$effect(() => onFontsChanged(() => fontTick++));
 
+	/** A switched-off effect draws nothing, so only its switch is worth a redraw: a
+	 * chain lists every effect, and reading all their values cost more than the draw. */
+	function readDrawnEffect(e: EffectInstance) {
+		if (!e.enabled) return;
+		for (const k of Object.keys(e.values)) e.values[k];
+		if (e.keys) for (const k of Object.keys(e.keys)) e.keys[k];
+	}
+
 	/** Touch every field a media lane draws from, so a paused canvas redraws on an edit. */
 	function readMediaTimeline() {
 		if (!mediaTimeline?.enabled) return;
@@ -1434,10 +1459,7 @@
 				c.mode;
 				c.seed;
 				c.intervalSec;
-				for (const e of c.effects) {
-					e.enabled;
-					for (const k of Object.keys(e.values)) e.values[k];
-				}
+				for (const e of c.effects) readDrawnEffect(e);
 			}
 		}
 	}
@@ -1459,10 +1481,7 @@
 				c.mode;
 				c.seed;
 				c.intervalSec;
-				for (const e of c.effects) {
-					e.enabled;
-					for (const k of Object.keys(e.values)) e.values[k];
-				}
+				for (const e of c.effects) readDrawnEffect(e);
 			}
 		}
 	}

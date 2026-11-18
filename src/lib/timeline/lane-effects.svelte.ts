@@ -3,6 +3,7 @@
  * written back on every edit. Both clip panels need the same mirror. */
 
 import { untrack } from "svelte";
+import { plainCopy } from "../plain-copy.svelte";
 import {
 	setVolumeLink,
 	type EffectInstance,
@@ -65,7 +66,7 @@ export class LaneEffects<L extends EffectLane> {
 	commit(): void {
 		const lane = this.#getLane();
 		if (!lane) return;
-		const effects = $state.snapshot(this.#effects) as EffectInstance[];
+		const effects = plainCopy(this.#effects);
 		this.#loadedFrom = effects;
 		this.#onLaneChange({ ...lane, effects });
 	}

@@ -135,8 +135,9 @@ export class ChainTimelineState<
 		);
 	}
 
+	// The live timeline: the history copies it only when the push isn't coalesced.
 	pushHistory = (coalesceKey?: string) => {
-		this.history.push($state.snapshot(this.timeline) as T, coalesceKey);
+		this.history.push(this.timeline, coalesceKey);
 	};
 
 	set = (next: T) => {
@@ -159,9 +160,12 @@ export class ChainTimelineState<
 	}
 
 	beforeClipEdit = (coalesceKey?: string) => {
-		this.#editBase = this.selectedClip
-			? ($state.snapshot(this.selectedClip) as C)
-			: null;
+		const clip = this.selectedClip;
+		// Only a multi-selection replays the edit, so only it needs the clip as it was.
+		this.#editBase =
+			clip && this.#otherSelected(clip.id).length > 0
+				? ($state.snapshot(clip) as C)
+				: null;
 		this.pushHistory(coalesceKey);
 	};
 

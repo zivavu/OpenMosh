@@ -65,14 +65,13 @@
 	 * preset overwrites stop clobbering it. An auto clip keeps its label. */
 	function onChainEdited() {
 		chain.commit();
-		const next = $state.snapshot(clip) as C;
-		if (next.mode === "interval") {
-			if (next.presetName) next.modified = true;
-		} else if (isHandBuiltLabel(next))
-			next.label = handBuiltLabel(next.effects);
-		else if (!next.modified) next.modified = true;
-		if (next.label !== clip.label || next.modified !== clip.modified) {
-			onClipChange({ ...clip, label: next.label, modified: next.modified });
+		let { label, modified } = clip;
+		if (clip.mode === "interval") {
+			if (clip.presetName) modified = true;
+		} else if (isHandBuiltLabel(clip)) label = handBuiltLabel(chain.effects);
+		else modified = true;
+		if (label !== clip.label || modified !== clip.modified) {
+			onClipChange({ ...clip, label, modified });
 		}
 	}
 </script>

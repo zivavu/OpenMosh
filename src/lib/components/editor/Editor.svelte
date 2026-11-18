@@ -67,6 +67,7 @@
 	import KeyGridControl from "../timeline/KeyGridControl.svelte";
 	import { editorShortcutGroups } from "../../editor/shortcut-groups";
 	import { createKeyboardHandler } from "../../editor/keyboard";
+	import { plainCopy } from "../../plain-copy.svelte";
 	import { clearEffects as clearEffectsFn } from "../../editor/mosh";
 	import { executeRecording } from "../../editor/recording";
 	import { createRecordingState } from "../../editor/recording-state.svelte";
@@ -1051,16 +1052,10 @@
 			v: SEQ_ENTRY_VERSION,
 			bpm: tempo.bpm,
 			beatOffset: tempo.beatOffset,
-			text: layersAsLoaded(
-				$state.snapshot(textState.timeline) as TextTimeline,
-				"text",
-			),
-			media: $state.snapshot(mediaState.timeline) as MediaTimeline,
-			fx: $state.snapshot(fxState.lanes) as FxLane[],
-			sourceEdits: $state.snapshot(sourceRegistry.edits) as Record<
-				string,
-				SourceEdit
-			>,
+			text: layersAsLoaded(plainCopy(textState.timeline), "text"),
+			media: plainCopy(mediaState.timeline),
+			fx: plainCopy(fxState.lanes),
+			sourceEdits: plainCopy(sourceRegistry.edits),
 		};
 		if (isSequenceMode) {
 			entry.length = mixer.duration;

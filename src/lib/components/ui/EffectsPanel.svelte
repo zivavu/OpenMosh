@@ -24,6 +24,7 @@
 		cloneEffectInstance,
 		createEffectInstance,
 		deletePreset,
+		getDefinition,
 		restorePreset,
 		isPresetsChange,
 		importPresets,
@@ -429,8 +430,16 @@
 		}
 	>();
 
+	/** How many of each effect the chain holds, counted once per change, not per row. */
+	let defCounts = $derived.by(() => {
+		const counts = new Map<string, number>();
+		for (const e of effects)
+			counts.set(e.defId, (counts.get(e.defId) ?? 0) + 1);
+		return counts;
+	});
+
 	function isCopy(effect: EffectInstance): boolean {
-		return effects.filter((e) => e.defId === effect.defId).length > 1;
+		return (defCounts.get(effect.defId) ?? 0) > 1;
 	}
 
 	function duplicate(index: number) {
@@ -521,7 +530,7 @@
 		const rows = effects
 			.map((e, i) => ({ effect: e, index: i }))
 			.filter(({ effect }) => {
-				const def = EFFECT_DEFINITIONS.find((d) => d.id === effect.defId);
+				const def = getDefinition(effect.defId);
 				// A switched-on one stays, so nothing renders that the list doesn't show.
 				if (def?.needsAudio && !hasTrack && !inLiveGroup(effect)) return false;
 				return !searchQuery || (!!def && effectMatchesSearch(def, searchQuery));
@@ -592,7 +601,13 @@
 		if (keyAt !== null && typeof value === "number" && animated) {
 			if (isGrouped(effects[index], key))
 				effects = keyGroupedValue(effects, index, key, keyAt, value);
-			else effects[index] = setParamKey(effects[index], key, keyAt, value);
+			else {
+				// Written into the live effect, so only what reads its keys reruns, not
+				// everything that walks the chain.
+				const effect = effects[index];
+				effect.keys = setParamKey(effect, key, keyAt, value).keys;
+				effect.values[key] = value;
+			}
 			followKey(index, key);
 		} else effects[index].values[key] = value;
 		if (!effects[index].enabled) {
