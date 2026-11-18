@@ -3,7 +3,13 @@ import { createEffectInstance, getDefinition } from "./effects";
 import { paramValueAt, setParamKey } from "./effects/param-keys";
 import { ParamTakes } from "./effects/param-take";
 import { KeyTake, type TakeSamples } from "./key-take";
-import { simplifyKeys, writeTake, type Keyframe } from "./keyframes";
+import {
+	simplifyKeys,
+	spaceKeys,
+	TAKE_GAP,
+	writeTake,
+	type Keyframe,
+} from "./keyframes";
 import { DEFAULT_MEDIA_STYLE, type MediaLane } from "./media";
 import { toggleLaneKey } from "./media/lane-keys";
 import { PlacementTakes } from "./media/placement-take";
@@ -46,7 +52,33 @@ describe("simplifyKeys", () => {
 	});
 });
 
+describe("spaceKeys", () => {
+	it("keeps no two keys closer than the gap, and both ends", () => {
+		const keys = Array.from({ length: 61 }, (_, i) => ({
+			t: i / 60,
+			v: i % 7,
+		}));
+		const out = spaceKeys(keys, 0.1);
+		expect(out[0]).toBe(keys[0]);
+		expect(out[out.length - 1]).toBe(keys[60]);
+		for (let i = 1; i < out.length; i++)
+			expect(out[i].t - out[i - 1].t).toBeGreaterThan(0.099);
+		expect(out.length).toBe(11);
+	});
+});
+
 describe("writeTake", () => {
+	it("spaces a recording take's keys out, but not a finished one's", () => {
+		const samples = Array.from({ length: 31 }, (_, i) => ({
+			t: i / 60,
+			v: i % 2 ? 10 : 0,
+		}));
+		const live = writeTake(undefined, samples);
+		for (let i = 1; i < live.length; i++)
+			expect(live[i].t - live[i - 1].t).toBeGreaterThan(TAKE_GAP - 0.002);
+		expect(writeTake(undefined, samples, 0.01)).toHaveLength(31);
+	});
+
 	it("replaces the keys inside the pass and keeps the rest", () => {
 		const base = [0, 1, 2, 3].map((t) => ({ t, v: 0 }));
 		const out = writeTake(base, [

@@ -385,8 +385,29 @@ export function simplifyKeys(
 	return keys.filter((_, i) => keep[i]);
 }
 
+/** While a take records, its keys sit at least this many seconds apart on the bar. */
+export const TAKE_GAP = 0.1;
+
+/** `keys` with none closer than `gap` to the one kept before it. The first and last
+ * stay, so the pass still starts and ends where it did. */
+export function spaceKeys(
+	keys: Keyframe<number>[],
+	gap: number,
+): Keyframe<number>[] {
+	if (keys.length < 3) return keys;
+	const out = [keys[0]];
+	const farEnough = (k: Keyframe<number>) =>
+		k.t - out[out.length - 1].t >= gap - SAME_MOMENT;
+	for (const k of keys.slice(1, -1)) if (farEnough(k)) out.push(k);
+	const last = keys[keys.length - 1];
+	if (out.length > 1 && !farEnough(last)) out.pop();
+	out.push(last);
+	return out;
+}
+
 /** A recorded pass written over `base`: the keys inside the stretch it covered go,
- * its samples come in. With `tolerance`, the samples are thinned first. */
+ * its samples come in. With `tolerance` it's the finished pass, thinned; without,
+ * the one still recording, spaced out. */
 export function writeTake(
 	base: Keyframe<number>[] | undefined,
 	samples: Keyframe<number>[],
@@ -399,6 +420,8 @@ export function writeTake(
 		(k) => k.t < from - SAME_MOMENT || k.t > to + SAME_MOMENT,
 	);
 	const take =
-		tolerance === undefined ? samples : simplifyKeys(samples, tolerance);
+		tolerance === undefined
+			? spaceKeys(samples, TAKE_GAP)
+			: simplifyKeys(samples, tolerance);
 	return [...kept, ...take].sort((a, b) => a.t - b.t);
 }
