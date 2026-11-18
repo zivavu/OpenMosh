@@ -284,8 +284,7 @@
 		}
 	}
 
-	function keyTitle(t: number): string {
-		const ease = easeAt(t);
+	function keyTitle(t: number, ease: KeyEase | "mixed" | undefined): string {
 		const what = describe?.(t);
 		return (
 			`${noun} at ${formatTimeMs(start + t)}` +
@@ -318,6 +317,10 @@
 		menu = null;
 	}
 
+	// Once per change for the whole strip, not once per key in the template.
+	let eases = $derived(times.map(easeAt));
+	let titles = $derived(times.map((t, i) => keyTitle(t, eases[i])));
+
 	/** The ease every selected key shares, for the menu's check mark. */
 	let sharedEase = $derived.by(() => {
 		const eases = selected.map(easeAt);
@@ -343,7 +346,7 @@
 				class:picked={has(selected, t)}
 				class:target={target !== null && Math.abs(t - target) <= SAME}
 				style="left: {pct(t)}%"
-				title={keyTitle(t)}
+				title={titles[i]}
 				aria-label="{noun} at {formatTimeMs(start + t)}"
 				aria-pressed={has(selected, t)}
 				onpointerdown={(e) => onPointerDown(e, t)}
@@ -351,7 +354,7 @@
 				onkeydown={(e) => onKeydown(e, t)}
 				ondblclick={(e) => e.stopPropagation()}
 			>
-				<KeyGlyph ease={easeAt(t)} />
+				<KeyGlyph ease={eases[i]} />
 			</button>
 		{/if}
 	{/each}

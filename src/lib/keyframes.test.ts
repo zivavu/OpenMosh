@@ -1,9 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import {
 	eased,
+	easeLookup,
 	isKeyEase,
 	KEY_EASES,
 	keyNear,
+	nearestIndex,
 	normalizeTrack,
 	putKeyframe,
 	repeatKeysEvery,
@@ -134,5 +136,36 @@ describe("repeatKeysEvery", () => {
 	it("does nothing with no period or nothing picked", () => {
 		expect(repeatKeysEvery(keys, [1], 0, 9)).toBe(keys);
 		expect(repeatKeysEvery(keys, [5], 1, 9)).toBe(keys);
+	});
+});
+
+describe("nearestIndex", () => {
+	const keys = [{ t: 0 }, { t: 1 }, { t: 3 }];
+	it("finds the closest key on either side", () => {
+		expect(nearestIndex(keys, -1)).toBe(0);
+		expect(nearestIndex(keys, 0.4)).toBe(0);
+		expect(nearestIndex(keys, 2.2)).toBe(2);
+		expect(nearestIndex(keys, 9)).toBe(2);
+		expect(nearestIndex([], 1)).toBe(-1);
+	});
+});
+
+describe("easeLookup", () => {
+	it("reads the ease shared by the keys at a moment", () => {
+		const easeAt = easeLookup([
+			[
+				{ t: 1, v: 0, ease: "hold" },
+				{ t: 0, v: 0 },
+			],
+			[
+				{ t: 1, v: 0, ease: "hold" },
+				{ t: 2, v: 0, ease: "in" },
+			],
+			[{ t: 2, v: 0 }],
+		]);
+		expect(easeAt(0)).toBeUndefined();
+		expect(easeAt(1)).toBe("hold");
+		expect(easeAt(2)).toBe("mixed");
+		expect(easeAt(5)).toBeUndefined();
 	});
 });

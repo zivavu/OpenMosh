@@ -3,6 +3,7 @@
 
 import {
 	keyframeAt,
+	nearestIndex,
 	putKeyframe,
 	removeKeyframe,
 	SAME_MOMENT,
@@ -204,12 +205,21 @@ export function laneKeyRows(lane: MediaLane, firstColor = 0): KeyRow[] {
 	return rows;
 }
 
-/** The rows with a key at `t`, in their own seconds, named and comma-separated. */
-export function keyedAt(rows: KeyRow[], t: number): string {
-	return rows
-		.filter((r) => r.keys.some((k) => Math.abs(k.t - t) <= SAME_MOMENT))
-		.map((r) => r.label)
-		.join(", ");
+/** The rows with a key at a moment, named and comma-separated. Each row is read
+ * once, so asking about every key costs one pass. */
+export function keyedLookup(rows: KeyRow[]): (t: number) => string {
+	const sorted = rows.map((r) => ({
+		label: r.label,
+		keys: r.keys.map((k) => ({ t: k.t })).sort((a, b) => a.t - b.t),
+	}));
+	return (t) =>
+		sorted
+			.filter((r) => {
+				const k = r.keys[nearestIndex(r.keys, t)];
+				return k !== undefined && Math.abs(k.t - t) <= SAME_MOMENT;
+			})
+			.map((r) => r.label)
+			.join(", ");
 }
 
 /** The chain with edited rows written back; a row emptied stops its slider animating. */

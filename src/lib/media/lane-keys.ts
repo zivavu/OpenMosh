@@ -2,7 +2,7 @@
  * seconds, so every clip on the layer moves along the same path. */
 
 import {
-	easeAtIn,
+	easeLookup,
 	keyNear,
 	keyTimesOf,
 	normalizeTrack,
@@ -254,11 +254,10 @@ export function laneKeyTimes(lane: LaneKeyed): number[] {
 	return keyTimesOf(tracks(lane));
 }
 
-export function laneEaseAt(
+export function laneEaseLookup(
 	lane: LaneKeyed,
-	time: number,
-): KeyEase | "mixed" | undefined {
-	return easeAtIn(tracks(lane), time);
+): (time: number) => KeyEase | "mixed" | undefined {
+	return easeLookup(tracks(lane));
 }
 
 function mapTracks(

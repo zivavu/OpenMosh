@@ -2,7 +2,7 @@
 	import type { ChainClip } from "../../editor/chain-clip";
 	import type { EffectInstance } from "../../effects/types";
 	import {
-		chainEaseAt,
+		chainEaseLookup,
 		chainHasKeys,
 		chainKeyTimes,
 		clearChainKeys,
@@ -20,7 +20,7 @@
 	} from "../../timeline/key-focus.svelte";
 	import ClipKeys from "./ClipKeys.svelte";
 	import { chainKeysAt } from "../../timeline/key-clipboard";
-	import { chainKeyRows, keyedAt } from "../../timeline/key-rows";
+	import { chainKeyRows, keyedLookup } from "../../timeline/key-rows";
 	import { gridKeyTarget } from "../../timeline/key-grid.svelte";
 
 	/** A selected clip's effect keys on its bar. */
@@ -65,6 +65,8 @@
 		const at = gridKeyTarget(editAt, clip.start, clip.end);
 		return at === null ? null : at - clip.start;
 	});
+	let easeAt = $derived(chainEaseLookup(clip.effects));
+	let describe = $derived(keyedLookup(chainKeyRows(clip)));
 	let focus = $derived(
 		keyFocus.current?.owner === CHAIN_OWNER ? keyFocus.current : null,
 	);
@@ -80,7 +82,7 @@
 		times={chainKeyTimes(clip.effects)}
 		{length}
 		start={clip.start}
-		easeAt={(t) => chainEaseAt(clip.effects, t)}
+		{easeAt}
 		beatSec={bpm > 0 ? 60 / bpm : 0}
 		{beatOffset}
 		onSeek={(t) => onSeek?.(t)}
@@ -92,7 +94,7 @@
 		onSimplify={() => onEdit(simplifyChainKeys)}
 		onRepeat={(times) => onEdit((e) => repeatChainKeys(e, length, times))}
 		onCopy={(times) => chainKeysAt(clip.effects, times, clip.start)}
-		describe={(t) => keyedAt(chainKeyRows(clip), t)}
+		{describe}
 		onRepeatEvery={(times, period) =>
 			onEdit((e) => repeatChainKeysEvery(e, times, period, length))}
 		{focus}
