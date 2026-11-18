@@ -35,7 +35,12 @@ export function readTrackingParams(
 	const str = (key: string, d: string) =>
 		typeof v[key] === "string" ? (v[key] as string) : d;
 	return {
+		mode: str("mode", "hud") as TrackingParams["mode"],
 		count: Math.max(1, Math.round(num("count", 5))),
+		blocks: Math.max(1, Math.round(num("blocks", 40))),
+		follow: str("follow", "light") as TrackingParams["follow"],
+		fill: str("fill", "invert") as TrackingParams["fill"],
+		links: num("links", 0.4),
 		sensitivity: num("sensitivity", 0.5),
 		size: num("size", 0.12),
 		thickness: num("thickness", 2),

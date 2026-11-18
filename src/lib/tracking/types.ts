@@ -1,11 +1,23 @@
+import type { BlocksState } from "./blocks";
+
 /** The defId this overlay effect is registered under in EFFECT_DEFINITIONS. */
 export const TRACKING_EFFECT_ID = "tracking";
 
 /** Per-box lifecycle: lock → degraded → lost → reacquire → lock. */
 export type BoxState = "lock" | "degraded" | "lost" | "reacquire";
 
+export type TrackingMode = "hud" | "blocks";
+export type BlockFollow = "light" | "motion" | "detail";
+export type BlockFill = "invert" | "heat" | "hue" | "mix";
+
 export interface TrackingParams {
+	mode: TrackingMode;
 	count: number;
+	/** Blocks look: how many boxes, what they follow, how they fill, how many arcs (0..1). */
+	blocks: number;
+	follow: BlockFollow;
+	fill: BlockFill;
+	links: number;
 	/** 0..1: how selective the saliency picker is (higher = only strongest spots). */
 	sensitivity: number;
 	/** Base box size as a fraction of the smaller image dimension. */
@@ -74,6 +86,8 @@ export interface TrackingState {
 	disturbance: number;
 	/** Key of the current primary (designated) target, -1 = none. */
 	primaryKey: number;
+	/** The Blocks look's state, made on its first tick. */
+	blocks?: BlocksState;
 }
 
 export interface FrameBox {
