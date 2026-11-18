@@ -3730,10 +3730,7 @@ export class GlRenderer {
 		if (u["u_count"]) gl.uniform1i(u["u_count"], count);
 		if (u["u_fill"]) gl.uniform1i(u["u_fill"], BLOCK_FILLS[params.fill] ?? 0);
 		if (u["u_res"]) gl.uniform2f(u["u_res"], this.imgW, this.imgH);
-		const lineWidth = Math.max(
-			1,
-			(params.thickness * Math.min(this.imgW, this.imgH)) / 720,
-		);
+		const lineWidth = (params.thickness * Math.min(this.imgW, this.imgH)) / 720;
 		if (u["u_lineWidth"]) gl.uniform1f(u["u_lineWidth"], lineWidth);
 		if (u["u_opacity"]) gl.uniform1f(u["u_opacity"], params.opacity);
 		const ink = params.color === "white" ? 1 : 0;
@@ -3749,7 +3746,11 @@ export class GlRenderer {
 			time,
 			this.ribbonBuf,
 		);
-		if (verts > 0) this.drawRibbons(verts, ink, params.opacity);
+		// Under a pixel wide, lines fade rather than stay a pixel.
+		const fade = Math.min(1, lineWidth);
+		if (verts > 0 && fade > 0) {
+			this.drawRibbons(verts, ink, params.opacity * fade);
+		}
 	}
 
 	/** Blends the link ribbons over whatever FBO is bound. */
