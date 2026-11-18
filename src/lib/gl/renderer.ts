@@ -81,6 +81,26 @@ import {
 	type TrackingParams,
 	type TrackingState,
 } from "../tracking";
+import {
+	analyzeBlocks,
+	BLOCK_FILLS,
+	buildLinkRibbons,
+	RIBBON_FLOATS,
+	RIBBON_MAX_FLOATS,
+	BLOCKS_TEX_H,
+	BLOCKS_TEX_W,
+	easeBlocks,
+	gridFromRGBA,
+	newBlocksState,
+	packBlocks,
+	type BlocksState,
+} from "../tracking/blocks";
+import {
+	BLOCKS_FRAG,
+	BLOCKS_POOL_FRAG,
+	RIBBON_FRAG,
+	RIBBON_VERT,
+} from "../tracking/blocks-shader";
 
 /** Cached 2D-drawn overlay texture; `sig` covers everything the draw depends on. */
 interface OverlayTexture {
@@ -508,6 +528,16 @@ export class GlRenderer {
 	private trackingTexH = 0;
 	/** Signature of the HUD currently uploaded in trackingTexture (skip redraws). */
 	private lastTrackingSig = "";
+	private blocksProgram: CompiledProgram | null = null;
+	private blocksPoolProgram: CompiledProgram | null = null;
+	private blocksData: WebGLTexture | null = null;
+	private blocksBuf = new Float32Array(BLOCKS_TEX_W * BLOCKS_TEX_H * 4);
+	private ribbonBuf = new Float32Array(RIBBON_MAX_FLOATS);
+	private ribbon: {
+		program: CompiledProgram;
+		vao: WebGLVertexArrayObject;
+		vbo: WebGLBuffer;
+	} | null = null;
 	private salFBO: WebGLFramebuffer | null = null;
 	private salTexture: WebGLTexture | null = null;
 	private salBuf: Uint8Array | null = null;
@@ -2386,21 +2416,25 @@ export class GlRenderer {
 		this.salPBO = gl.createBuffer()!;
 	}
 
-	/** Downsample `srcTex` into the small saliency FBO (leaves it bound). */
-	private drawSaliencyPass(srcTex: WebGLTexture) {
+	/** Downsample `srcTex` into the small saliency FBO (leaves it bound). The
+	 * Blocks look pools each cell instead, keeping its brightest pixel in alpha. */
+	private drawSaliencyPass(srcTex: WebGLTexture, params: TrackingParams) {
 		const gl = this.gl;
 		gl.bindFramebuffer(gl.FRAMEBUFFER, this.salFBO);
 		gl.viewport(0, 0, this.salW, this.salH);
-		gl.useProgram(this.passthrough.program);
-		if (this.passthrough.uniforms["u_flipY"]) {
-			gl.uniform1f(this.passthrough.uniforms["u_flipY"], 1.0);
+		const prog =
+			params.mode === "blocks"
+				? (this.blocksPoolProgram ??= this.compile(BLOCKS_POOL_FRAG))
+				: this.passthrough;
+		gl.useProgram(prog.program);
+		if (prog.uniforms["u_flipY"]) gl.uniform1f(prog.uniforms["u_flipY"], 1.0);
+		if (prog.uniforms["u_cell"]) {
+			gl.uniform2f(prog.uniforms["u_cell"], 1 / this.salW, 1 / this.salH);
 		}
 		this.setTextureFilter(srcTex, true);
 		gl.activeTexture(gl.TEXTURE0);
 		gl.bindTexture(gl.TEXTURE_2D, srcTex);
-		if (this.passthrough.uniforms["u_texture"]) {
-			gl.uniform1i(this.passthrough.uniforms["u_texture"], 0);
-		}
+		if (prog.uniforms["u_texture"]) gl.uniform1i(prog.uniforms["u_texture"], 0);
 		gl.drawArrays(gl.TRIANGLES, 0, 6);
 		this.setTextureFilter(srcTex, false);
 	}
@@ -2411,6 +2445,16 @@ export class GlRenderer {
 		time: number,
 	) {
 		if (!this.salBuf) return;
+		if (params.mode === "blocks") {
+			analyzeBlocks(
+				(state.blocks ??= newBlocksState()),
+				gridFromRGBA(this.salBuf, this.salW, this.salH),
+				this.imgW / this.imgH,
+				params,
+				time,
+			);
+			return;
+		}
 		const lum = lumFromRGBA(this.salBuf, this.salW * this.salH);
 		state.salPoints = computeSaliency(lum, this.salW, this.salH, params);
 		trackBoxes(state, lum, this.salW, this.salH, time);
@@ -2427,7 +2471,7 @@ export class GlRenderer {
 		const gl = this.gl;
 		this.ensureSalResources();
 		if (!this.salFBO || !this.salBuf) return;
-		this.drawSaliencyPass(srcTex);
+		this.drawSaliencyPass(srcTex, params);
 		gl.readPixels(
 			0,
 			0,
@@ -2451,7 +2495,7 @@ export class GlRenderer {
 		const gl = this.gl;
 		this.ensureSalResources();
 		if (!this.salFBO || !this.salPBO || !this.salBuf) return;
-		this.drawSaliencyPass(srcTex);
+		this.drawSaliencyPass(srcTex, params);
 		gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.salPBO);
 		// Orphan the store every read. Chromium keeps a readback shadow per READ-usage
 		// buffer and only drops it on bufferData or delete, so reuse warns every cycle.
@@ -3540,10 +3584,12 @@ export class GlRenderer {
 		if (this.imgW <= 0 || this.imgH <= 0) return;
 		const params = readTrackingParams(eff.values);
 		const state = this.getTrackingState(eff.instanceId);
+		const blocks = params.mode === "blocks";
 
 		// Re-analyze on a fixed cadence in animation-time so preview and export stay
 		// deterministic. 0.12 s is about 8 Hz: fluid motion, cheap 128-px readback.
-		const interval = 0.12;
+		// Blocks re-place every tick, so they look twice as often.
+		const interval = blocks ? 0.06 : 0.12;
 		if (state.lastAnalyze < 0 || time < state.lastAnalyze) {
 			// First frame or time reset: blocking analyze so a single-frame render
 			// shows a populated HUD.
@@ -3558,6 +3604,16 @@ export class GlRenderer {
 				this.startSaliencyRead(state, params, inputTex, time);
 				state.lastAnalyze = time;
 			}
+		}
+		if (blocks) {
+			this.drawTrackingBlocks(
+				(state.blocks ??= newBlocksState()),
+				params,
+				inputTex,
+				targetFBO,
+				time,
+			);
+			return;
 		}
 		syncBoxes(state, params, time);
 		const trackingW = Math.max(1, Math.round(this.imgW * 0.5));
@@ -3617,6 +3673,129 @@ export class GlRenderer {
 		);
 	}
 
+	private drawTrackingBlocks(
+		state: BlocksState,
+		params: TrackingParams,
+		inputTex: WebGLTexture,
+		targetFBO: WebGLFramebuffer,
+		time: number,
+	) {
+		const gl = this.gl;
+		easeBlocks(state, time);
+		const count = packBlocks(state, this.blocksBuf);
+		if (!this.blocksData) {
+			this.blocksData = gl.createTexture()!;
+			gl.bindTexture(gl.TEXTURE_2D, this.blocksData);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+			gl.texImage2D(
+				gl.TEXTURE_2D,
+				0,
+				gl.RGBA32F,
+				BLOCKS_TEX_W,
+				BLOCKS_TEX_H,
+				0,
+				gl.RGBA,
+				gl.FLOAT,
+				null,
+			);
+		}
+		gl.bindTexture(gl.TEXTURE_2D, this.blocksData);
+		gl.texSubImage2D(
+			gl.TEXTURE_2D,
+			0,
+			0,
+			0,
+			BLOCKS_TEX_W,
+			BLOCKS_TEX_H,
+			gl.RGBA,
+			gl.FLOAT,
+			this.blocksBuf,
+		);
+
+		const prog = (this.blocksProgram ??= this.compile(BLOCKS_FRAG));
+		const u = prog.uniforms;
+		gl.bindFramebuffer(gl.FRAMEBUFFER, targetFBO);
+		gl.viewport(0, 0, this.imgW, this.imgH);
+		gl.useProgram(prog.program);
+		if (u["u_flipY"]) gl.uniform1f(u["u_flipY"], 1.0);
+		gl.activeTexture(gl.TEXTURE0);
+		gl.bindTexture(gl.TEXTURE_2D, inputTex);
+		if (u["u_texture"]) gl.uniform1i(u["u_texture"], 0);
+		gl.activeTexture(gl.TEXTURE2);
+		gl.bindTexture(gl.TEXTURE_2D, this.blocksData);
+		if (u["u_blocks"]) gl.uniform1i(u["u_blocks"], 2);
+		if (u["u_count"]) gl.uniform1i(u["u_count"], count);
+		if (u["u_fill"]) gl.uniform1i(u["u_fill"], BLOCK_FILLS[params.fill] ?? 0);
+		if (u["u_res"]) gl.uniform2f(u["u_res"], this.imgW, this.imgH);
+		const lineWidth = Math.max(
+			1,
+			(params.thickness * Math.min(this.imgW, this.imgH)) / 720,
+		);
+		if (u["u_lineWidth"]) gl.uniform1f(u["u_lineWidth"], lineWidth);
+		if (u["u_opacity"]) gl.uniform1f(u["u_opacity"], params.opacity);
+		const ink = params.color === "white" ? 1 : 0;
+		if (u["u_ink"]) gl.uniform3f(u["u_ink"], ink, ink, ink);
+		gl.drawArrays(gl.TRIANGLES, 0, 6);
+		gl.activeTexture(gl.TEXTURE0);
+
+		const verts = buildLinkRibbons(
+			state,
+			this.imgW,
+			this.imgH,
+			lineWidth * 0.8,
+			time,
+			this.ribbonBuf,
+		);
+		if (verts > 0) this.drawRibbons(verts, ink, params.opacity);
+	}
+
+	/** Blends the link ribbons over whatever FBO is bound. */
+	private drawRibbons(verts: number, ink: number, opacity: number) {
+		const gl = this.gl;
+		if (!this.ribbon) {
+			const program = createProgram(gl, RIBBON_VERT, RIBBON_FRAG);
+			const vao = gl.createVertexArray()!;
+			const vbo = gl.createBuffer()!;
+			gl.bindVertexArray(vao);
+			gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+			const stride = RIBBON_FLOATS * 4;
+			gl.enableVertexAttribArray(0);
+			gl.vertexAttribPointer(0, 2, gl.FLOAT, false, stride, 0);
+			gl.enableVertexAttribArray(1);
+			gl.vertexAttribPointer(1, 3, gl.FLOAT, false, stride, 8);
+			this.ribbon = {
+				program: { program, uniforms: getUniformLocations(gl, program) },
+				vao,
+				vbo,
+			};
+		}
+		const { program, vao, vbo } = this.ribbon;
+		gl.useProgram(program.program);
+		const u = program.uniforms;
+		if (u["u_ink"]) gl.uniform3f(u["u_ink"], ink, ink, ink);
+		if (u["u_opacity"]) gl.uniform1f(u["u_opacity"], opacity);
+		gl.bindVertexArray(vao);
+		gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+		gl.bufferData(
+			gl.ARRAY_BUFFER,
+			this.ribbonBuf.subarray(0, verts * RIBBON_FLOATS),
+			gl.DYNAMIC_DRAW,
+		);
+		gl.enable(gl.BLEND);
+		gl.blendFuncSeparate(
+			gl.SRC_ALPHA,
+			gl.ONE_MINUS_SRC_ALPHA,
+			gl.ONE,
+			gl.ONE_MINUS_SRC_ALPHA,
+		);
+		gl.drawArrays(gl.TRIANGLES, 0, verts);
+		gl.disable(gl.BLEND);
+		gl.bindVertexArray(this.quadVAO);
+	}
+
 	/** WebGL ignores every call on a lost context without an error, so a caller that
 	 * can't afford blank frames asks. */
 	get contextLost(): boolean {
@@ -3646,6 +3825,19 @@ export class GlRenderer {
 		this.setLiveBrush("", null);
 		if (this.trackingTexture) gl.deleteTexture(this.trackingTexture);
 		this.trackingTexture = null;
+		if (this.blocksData) gl.deleteTexture(this.blocksData);
+		this.blocksData = null;
+		for (const p of [this.blocksProgram, this.blocksPoolProgram]) {
+			if (p) gl.deleteProgram(p.program);
+		}
+		this.blocksProgram = null;
+		this.blocksPoolProgram = null;
+		if (this.ribbon) {
+			gl.deleteProgram(this.ribbon.program.program);
+			gl.deleteVertexArray(this.ribbon.vao);
+			gl.deleteBuffer(this.ribbon.vbo);
+		}
+		this.ribbon = null;
 		this.clearCaptionTextures();
 		this.clearTextLayerTextures();
 		this.clearMediaLayerTextures();

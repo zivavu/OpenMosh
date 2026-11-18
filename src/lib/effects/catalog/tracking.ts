@@ -1,9 +1,22 @@
 import type { EffectDefinition } from "../types";
 
+const hud = (v: Record<string, number | string>) => v.mode !== "blocks";
+const blocks = (v: Record<string, number | string>) => v.mode === "blocks";
+
 export const definition: EffectDefinition = {
 	id: "tracking",
 	name: "Tracking",
 	params: [
+		{
+			key: "mode",
+			label: "Look",
+			type: "select",
+			defaultValue: "hud",
+			options: [
+				{ label: "HUD", value: "hud" },
+				{ label: "Blocks", value: "blocks" },
+			],
+		},
 		{
 			key: "count",
 			label: "Targets",
@@ -13,6 +26,42 @@ export const definition: EffectDefinition = {
 			step: 1,
 			defaultValue: 5,
 			moshMax: 8,
+			visibleWhen: hud,
+		},
+		{
+			key: "blocks",
+			label: "Blocks",
+			type: "range",
+			min: 4,
+			max: 96,
+			step: 1,
+			defaultValue: 40,
+			visibleWhen: blocks,
+		},
+		{
+			key: "follow",
+			label: "Follows",
+			type: "select",
+			defaultValue: "light",
+			options: [
+				{ label: "Light", value: "light" },
+				{ label: "Motion", value: "motion" },
+				{ label: "Detail", value: "detail" },
+			],
+			visibleWhen: blocks,
+		},
+		{
+			key: "fill",
+			label: "Fill",
+			type: "select",
+			defaultValue: "invert",
+			options: [
+				{ label: "Invert", value: "invert" },
+				{ label: "Heat", value: "heat" },
+				{ label: "Hue Shift", value: "hue" },
+				{ label: "Mix", value: "mix" },
+			],
+			visibleWhen: blocks,
 		},
 		{
 			key: "sensitivity",
@@ -40,6 +89,16 @@ export const definition: EffectDefinition = {
 			max: 3,
 			step: 0.5,
 			defaultValue: 2,
+		},
+		{
+			key: "links",
+			label: "Arcs",
+			type: "range",
+			min: 0,
+			max: 1,
+			step: 0.01,
+			defaultValue: 0.4,
+			visibleWhen: blocks,
 		},
 		{
 			key: "opacity",
