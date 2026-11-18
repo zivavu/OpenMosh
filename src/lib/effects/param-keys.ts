@@ -2,7 +2,7 @@
  * that holds the chain, so a clip carries its animation wherever it goes. */
 
 import {
-	easeAtIn,
+	easeLookup,
 	KEY_NEAR,
 	keyNear,
 	keyTimesOf,
@@ -201,12 +201,11 @@ export function chainKeyTimes(effects: EffectInstance[]): number[] {
 	return keyTimesOf(tracksOf(effects));
 }
 
-/** The ease the keys at `time` share, or undefined when they differ or are linear. */
-export function chainEaseAt(
+/** The ease the chain's keys share at a moment, or undefined when linear. */
+export function chainEaseLookup(
 	effects: EffectInstance[],
-	time: number,
-): KeyEase | "mixed" | undefined {
-	return easeAtIn(tracksOf(effects), time);
+): (time: number) => KeyEase | "mixed" | undefined {
+	return easeLookup(tracksOf(effects));
 }
 
 /** Each effect's keys rewritten by `map`; effects without keys stay as they are. */

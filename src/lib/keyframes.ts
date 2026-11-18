@@ -191,19 +191,40 @@ export function keyTimesOf(tracks: Iterable<Keyframe<unknown>[]>): number[] {
 	return out;
 }
 
-/** The ease the keys at `time` share: undefined when linear, "mixed" when they differ. */
-export function easeAtIn(
+/** The ease the keys at a moment share: undefined when linear, "mixed" when they
+ * differ. The tracks are read once, so asking about every key costs one pass. */
+export function easeLookup(
 	tracks: Iterable<Keyframe<unknown>[]>,
+): (time: number) => KeyEase | "mixed" | undefined {
+	const sorted = [...tracks].map((keys) =>
+		keys.map((k) => ({ t: k.t, ease: k.ease })).sort((a, b) => a.t - b.t),
+	);
+	return (time) => {
+		let ease: KeyEase | undefined | null = null;
+		for (const keys of sorted) {
+			const k = keys[nearestIndex(keys, time)];
+			if (!k || Math.abs(k.t - time) > KEY_EPSILON) continue;
+			if (ease === null) ease = k.ease;
+			else if (ease !== k.ease) return "mixed";
+		}
+		return ease ?? undefined;
+	};
+}
+
+/** The index of the key nearest `time` in `keys` sorted by time; -1 when empty. */
+export function nearestIndex(
+	keys: readonly { t: number }[],
 	time: number,
-): KeyEase | "mixed" | undefined {
-	let ease: KeyEase | undefined | null = null;
-	for (const keys of tracks) {
-		const k = keyframeAt(keys, time);
-		if (!k) continue;
-		if (ease === null) ease = k.ease;
-		else if (ease !== k.ease) return "mixed";
+): number {
+	let lo = 0;
+	let hi = keys.length;
+	while (lo < hi) {
+		const mid = (lo + hi) >> 1;
+		if (keys[mid].t < time) lo = mid + 1;
+		else hi = mid;
 	}
-	return ease ?? undefined;
+	if (lo === keys.length) return lo - 1;
+	return lo > 0 && time - keys[lo - 1].t < keys[lo].t - time ? lo - 1 : lo;
 }
 
 /** The key at `from` moved to `to`, landing on whatever sat there. */

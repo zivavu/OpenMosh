@@ -6,7 +6,7 @@
 	import {
 		chainKeyRows,
 		laneKeyRows,
-		keyedAt,
+		keyedLookup,
 		touchesLane,
 		withChainTracks,
 		withLaneTracks,
@@ -19,7 +19,7 @@
 	import ClipKeys from "../timeline/ClipKeys.svelte";
 	import {
 		hasLaneKeys,
-		laneEaseAt,
+		laneEaseLookup,
 		laneKeyTimes,
 		moveLaneKeys,
 		clearLaneKeys,
@@ -852,12 +852,14 @@
 				{#if hasLaneKeys(lane) && lane.clips.some( (c) => selectedClipIds.includes(c.id) )}
 					{const from = $derived(vp.viewStart)}
 					{const layerTarget = $derived(gridKeyTarget(editAt))}
+					{const easeAt = $derived(laneEaseLookup(lane))}
+					{const keyedAt = $derived(keyedLookup(laneKeyRows(lane)))}
 					<ClipKeys
 						scope="layer"
 						times={laneKeyTimes(lane).map((t) => t - from)}
 						length={vp.viewEnd - from}
 						start={from}
-						easeAt={(t) => laneEaseAt(lane, from + t)}
+						easeAt={(t) => easeAt(from + t)}
 						beatSec={bpm > 0 ? 60 / bpm : 0}
 						{beatOffset}
 						onSeek={(t) => onSeek?.(t)}
@@ -898,7 +900,7 @@
 									Math.max(...l.clips.map((c) => c.end)),
 								),
 							)}
-						describe={(t) => keyedAt(laneKeyRows(lane), from + t)}
+						describe={(t) => keyedAt(from + t)}
 						onCopy={(times) =>
 							laneKeysAt(
 								lane,
