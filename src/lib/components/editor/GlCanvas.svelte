@@ -1299,10 +1299,16 @@
 	}
 
 	// Resize the renderer when the preview box changes; otherwise a static redraw here.
+	// The draw untracked: what a frame reads is the static driver's to follow, and
+	// tracked here every edit would draw the frame a second time.
 	$effect(() => {
 		if (suspended || !renderer || !imageReady || !renderSize) return;
-		renderer.resize(renderSize.width, renderSize.height);
-		if (!externallyDriven && !needsAnimation) drawFrame(0);
+		const { width, height } = renderSize;
+		const still = !externallyDriven && !needsAnimation;
+		untrack(() => {
+			renderer!.resize(width, height);
+			if (still) drawFrame(0);
+		});
 	});
 
 	// Applied here rather than by the parent so a change also repaints a paused canvas.
@@ -1367,7 +1373,8 @@
 		const key = focus && focus.instanceId === tintedMask() ? focus.index : -1;
 		if (r.maskPreviewKey === key) return;
 		r.maskPreviewKey = key;
-		if (!needsAnimation && !suspended && !externallyDriven) drawFrame(0);
+		if (!needsAnimation && !suspended && !externallyDriven)
+			untrack(() => drawFrame(0));
 	});
 
 	// The Mask whose area is shown gets it tinted, eased in and out; never in an export.
