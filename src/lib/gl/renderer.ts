@@ -1542,8 +1542,11 @@ export class GlRenderer {
 		if (!presentFBO || !presentTex) return;
 		// Layers run their own chains through the shared ping-pong, so they finish
 		// before the main chain starts using it.
-		const trace = this.highlightRequest;
-		this.highlightRequest = null;
+		// A read still on the GPU holds the next trace back: collecting it early would
+		// stall the frame. The request waits for a render after it lands.
+		if (this.highlightFence) this.pollHighlight(false);
+		const trace = this.highlightFence ? null : this.highlightRequest;
+		if (trace) this.highlightRequest = null;
 		this.highlightTex = null;
 		const prepared = this.prepareLayers(
 			textLayers,
@@ -2549,13 +2552,18 @@ export class GlRenderer {
 
 	/** Trace `target`'s drawn edge on the next render, at `w`×`h`. Read back rather
 	 * than drawn here, so the canvas an export reads never carries it. */
-	traceHighlight(target: HighlightTarget, w: number, h: number) {
-		this.highlightRequest = { target, w, h };
+	traceHighlight(target: HighlightTarget | null, w = 0, h = 0) {
+		this.highlightRequest = target ? { target, w, h } : null;
 	}
 
 	/** True while a trace is still on the GPU; poll takeHighlight until it isn't. */
 	get highlightPending(): boolean {
 		return this.highlightFence !== null;
+	}
+
+	/** A trace asked for while another was on the GPU, waiting for the next render. */
+	get highlightWaiting(): boolean {
+		return this.highlightRequest !== null && this.highlightFence === null;
 	}
 
 	/** The newest finished trace, handed out once. Never stalls. */

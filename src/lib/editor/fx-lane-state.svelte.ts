@@ -81,8 +81,9 @@ export class FxLaneState {
 		return findFxClip(this.lanes, this.selectedClipId)?.clip ?? null;
 	}
 
+	// The live lanes: the history copies them only when the push isn't coalesced.
 	pushHistory = (coalesceKey?: string) => {
-		this.history.push($state.snapshot(this.lanes) as FxLane[], coalesceKey);
+		this.history.push(this.lanes, coalesceKey);
 	};
 
 	set = (next: FxLane[]) => {

@@ -6,6 +6,7 @@
 
 import { NO_EDIT, PENDING_EDIT, nextEditSeq } from "../editor/edit-clock";
 import type { UndoSource } from "../editor/undo-router";
+import { plainCopy } from "../plain-copy.svelte";
 
 /** How long a coalesce key stays live. Longer than the gap between drag ticks,
  * shorter than the pause before someone reaches for the same control again. */
@@ -44,7 +45,7 @@ export function createSnapshotHistory<T>() {
 		future = [];
 		futureSeqs = [];
 		// Oldest out first: the far end of a session is the least likely step wanted back.
-		past = [...past, $state.snapshot(before) as T].slice(-MAX_ENTRIES);
+		past = [...past, plainCopy(before)].slice(-MAX_ENTRIES);
 		pastSeqs = [...pastSeqs, nextEditSeq()].slice(-MAX_ENTRIES);
 	}
 
@@ -53,24 +54,24 @@ export function createSnapshotHistory<T>() {
 		lastKey = null;
 		lastAt = 0;
 		// What is on screen becomes the thing redo comes back to.
-		future = [...future, $state.snapshot(current) as T];
+		future = [...future, plainCopy(current)];
 		futureSeqs = [...futureSeqs, nextEditSeq()];
 		const prev = past[past.length - 1];
 		past = past.slice(0, -1);
 		pastSeqs = pastSeqs.slice(0, -1);
-		return $state.snapshot(prev) as T;
+		return plainCopy(prev);
 	}
 
 	function redo(current: T): T | null {
 		if (!canRedo) return null;
 		lastKey = null;
 		lastAt = 0;
-		past = [...past, $state.snapshot(current) as T];
+		past = [...past, plainCopy(current)];
 		pastSeqs = [...pastSeqs, nextEditSeq()];
 		const next = future[future.length - 1];
 		future = future.slice(0, -1);
 		futureSeqs = futureSeqs.slice(0, -1);
-		return $state.snapshot(next) as T;
+		return plainCopy(next);
 	}
 
 	/** Forget everything. The live state is the caller's and stays untouched. */

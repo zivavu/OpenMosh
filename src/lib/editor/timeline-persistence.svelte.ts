@@ -51,6 +51,11 @@ export class TimelinePersistence {
 	#pending = false;
 	/** Only the transition into failure is announced, or it would toast every tick. */
 	#failed = false;
+	/** A save is on its timer. Until it writes, the effect stops reading the timeline:
+	 * that read copies the whole project, and a drag would pay it on every tick. */
+	#waiting = $state(false);
+	/** The run that resumes watching after a write: it reads, but nothing changed. */
+	#resuming = false;
 	/** The key whose stored timeline has landed; saving waits for the screen's to match. */
 	loadedKey: string | null = null;
 
@@ -101,22 +106,40 @@ export class TimelinePersistence {
 
 	// Skipped while playing: the volume-link tick mutates the chains each frame.
 	#schedule() {
+		if (this.#waiting) return;
 		const host = this.#host;
 		if (host.playing()) {
+			this.#resuming = false;
 			this.#pending = true;
 			return;
 		}
 		const entry = host.entry();
+		if (this.#resuming) {
+			this.#resuming = false;
+			return;
+		}
 		const key = host.storeKey();
 		if (!key || key !== this.loadedKey || !entry) return;
 		if (this.#held.has(key)) return;
-		clearTimeout(this.#timer);
 		untrack(() => host.saves.schedule("timeline"));
 		this.#pending = true;
+		this.#waiting = true;
+		// Written as it stands when the timer fires, with every change made meanwhile.
 		this.#timer = setTimeout(() => {
 			this.#pending = false;
-			this.#write(key, entry);
+			const now = untrack(() => host.entry());
+			const current = untrack(() => host.storeKey());
+			if (now && current === key && !this.#held.has(key)) this.#write(key, now);
+			else untrack(() => host.saves.drop("timeline"));
+			this.#resume();
 		}, 300);
+	}
+
+	#resume() {
+		clearTimeout(this.#timer);
+		if (!this.#waiting) return;
+		this.#resuming = true;
+		this.#waiting = false;
 	}
 
 	#write(key: string, entry: SeqEntry) {
@@ -141,7 +164,7 @@ export class TimelinePersistence {
 	/** Write the current timeline under the current key now; a key switch outruns the
 	 * effect. */
 	flush() {
-		clearTimeout(this.#timer);
+		this.#resume();
 		if (!this.#pending) return;
 		this.#pending = false;
 		const key = this.#host.storeKey();
