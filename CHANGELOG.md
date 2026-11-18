@@ -1,5 +1,47 @@
 # Changelog
 
+## [1.0.5](https://github.com/zivavu/OpenMosh/compare/v1.0.4...v1.0.5) (2026-11-18)
+
+The editor has keyframes. Effect sliders can change over their clip, and a media layer's position, size, rotation and opacity over the timeline. Each animated setting gets its own row under its lane, where you can move, copy, ease and repeat keys, snap them to the song's beat, or record a slider's moves while the song plays. Settings can also be grouped to follow one curve. Outside keyframes: hold Ctrl to drag sliders, clips and keys slowly, and Ctrl+scroll zooms the timeline from anywhere over it. Trimming a clip's start leaves its footage where it was. Projects can run up to ten hours, and removing media or deleting a preset can be undone. Effects no longer pixelate a media layer, and sliders stay smooth in long projects.
+
+Layers already in a project keep their bleed; only new ones start without it. Media layers with effects render sharper than they did, so an older project can look crisper.
+
+
+### Added
+
+* Animate effect sliders, and a media layer's position, size, rotation and opacity, with keyframes ([f3a20e3](https://github.com/zivavu/OpenMosh/commit/f3a20e32fd9fdc206a1954db7ff3985768309cc8), [09e8ac3](https://github.com/zivavu/OpenMosh/commit/09e8ac3a8ec96c5bbbedc7ea0258b6e1d0c3b059), [2eb97f2](https://github.com/zivavu/OpenMosh/commit/2eb97f2b7c0fc609caa02e8c2a642c91d0a59a07))
+* Color an animated slider by whether it sits on a key, show its diamond faintly, and stop animating from the diamond's right-click menu ([a5456eb](https://github.com/zivavu/OpenMosh/commit/a5456eb67c8511d4d42748579cea1b9105b83412), [d03a590](https://github.com/zivavu/OpenMosh/commit/d03a590faa3b05481e6df8ab233d8560b756f9fb))
+* Ease keys in or out, or overshoot or bounce into the next one ([191f63e](https://github.com/zivavu/OpenMosh/commit/191f63ed2ec71dfb9031d8f6b977779553792cf0))
+* Group effect settings, or a layer's placement values, to follow one keyframed curve ([472bcce](https://github.com/zivavu/OpenMosh/commit/472bccee7f03c90d6d5137fb61e5f62cec54674a), [f5cd94f](https://github.com/zivavu/OpenMosh/commit/f5cd94f9e6b1b1f791b40adf5719455610427c27))
+* Hold Ctrl to drag sliders, clips and keys slowly ([b399dbb](https://github.com/zivavu/OpenMosh/commit/b399dbbf7b755ed5d8cdaa6f7892cffa02ed7ee8))
+* Keep a Mask's painting and image in presets ([5340bcf](https://github.com/zivavu/OpenMosh/commit/5340bcf2cfee0af9bfeb00b919e42fdf063e9516))
+* Keep a clip's footage and effect keys in place when you trim its start, split it, or drag the edge between two clips ([8659a2b](https://github.com/zivavu/OpenMosh/commit/8659a2bf2d0ec53d3bea01e1eaa7509e542213f1), [af78beb](https://github.com/zivavu/OpenMosh/commit/af78bebc42f10e8315c4bd6e927ce17759e32844), [b72a6e8](https://github.com/zivavu/OpenMosh/commit/b72a6e885ee513b1292ed15e70403be6a6e35e32), [f60e5ac](https://github.com/zivavu/OpenMosh/commit/f60e5acf1a45d15549d3d2c7a04a27991d0a6466))
+* Let editor projects and slideshows run up to ten hours, and play the sound of videos longer than 20 minutes ([c80ed01](https://github.com/zivavu/OpenMosh/commit/c80ed01f657bf6ed23c10b2b1e06b8740149f537), [bcf0404](https://github.com/zivavu/OpenMosh/commit/bcf040484e36a1ff7e71d838c9bd31ee6d52de85))
+* Move Show FPS and Highlight selected layer into Settings ([1c10dc5](https://github.com/zivavu/OpenMosh/commit/1c10dc596f20798e949ff928d21c356375de0aaf))
+* Move, copy, paste and nudge keys on the timeline, snap them to the song's beat grid, repeat them on the beat to the clip's end, and jump between them with J and K ([424a496](https://github.com/zivavu/OpenMosh/commit/424a496f6257e3df9778b91234bc8f323746e1c6), [8a7f01c](https://github.com/zivavu/OpenMosh/commit/8a7f01cceec5c759555b3f309f5c70e8c2493e5a), [372e0aa](https://github.com/zivavu/OpenMosh/commit/372e0aaa7ccc62ea220a82c375633513d8a93654), [59d8886](https://github.com/zivavu/OpenMosh/commit/59d88867a95e1321a55f49142b99637dc6161972))
+* Offer Undo when you remove media or delete a preset ([34e7a8e](https://github.com/zivavu/OpenMosh/commit/34e7a8e8bec6c46ef83523522d3ad849a75c5d65))
+* Record a keyed slider's moves while the song plays ([1c8ca53](https://github.com/zivavu/OpenMosh/commit/1c8ca53d458aee7986ae50eada36e74864779f9b), [9fd686c](https://github.com/zivavu/OpenMosh/commit/9fd686cabfca9d16c8e9c7bf0ff427d7936c97a7))
+* Select keys in bulk or by Shift-dragging over a lane, then delete or simplify them; the key a slider edit or the panel's arrows land on gets selected too ([181d1e6](https://github.com/zivavu/OpenMosh/commit/181d1e67b82589f617ef067c92ee445b8c5e4eaf), [ea167fc](https://github.com/zivavu/OpenMosh/commit/ea167fcb362b54e51071ff03e371e1a7301a8a82), [74b423d](https://github.com/zivavu/OpenMosh/commit/74b423d834a89117cbb0cc474577d66d709ea823), [13618cc](https://github.com/zivavu/OpenMosh/commit/13618cc5a4627463ab23f92efdf58739d14a3cbf))
+* Show each animated setting in its own row under its lane, naming the settings a key holds; drag a key to see its value, type one in, make the row taller, or double-click to add media edit keys ([f788605](https://github.com/zivavu/OpenMosh/commit/f788605d37d5e395c0a905216e38a0c912efe786), [91d80dc](https://github.com/zivavu/OpenMosh/commit/91d80dc02ad35856d8550e79809064eed8eb9059), [cccda6d](https://github.com/zivavu/OpenMosh/commit/cccda6d49f16be05376d56371681f2d006407dbc))
+* Start new layers with no bleed ([ab8c772](https://github.com/zivavu/OpenMosh/commit/ab8c7727157aaf36ed78d39581b20053cc721329))
+* Turn on Drives FX from an audio clip's bar, and see what an audio clip offers in the effects panel ([ed0a279](https://github.com/zivavu/OpenMosh/commit/ed0a279d58d899b3539989095ab8e1b1c9a2ce66), [3ed4cff](https://github.com/zivavu/OpenMosh/commit/3ed4cff9be38c85bff7a38b851db23084b60af0d))
+* Zoom the timeline with Ctrl+scroll from anywhere over it, scroll it while you Shift-drag a box over clips, and move the start marker to the playhead with D ([3e4726a](https://github.com/zivavu/OpenMosh/commit/3e4726afc7eae5e437fe74dde87cfbf907c034f9), [cf91507](https://github.com/zivavu/OpenMosh/commit/cf91507c960463a219ccf4077dabe9299f52926c), [f2205c2](https://github.com/zivavu/OpenMosh/commit/f2205c2a8430a1918e96a5cd158dfadc7d855e37))
+
+
+### Fixed
+
+* Close a right-click menu with a click or Esc anywhere else ([37ade46](https://github.com/zivavu/OpenMosh/commit/37ade46f70a6080814384ed22a0a480ab44270ce))
+* Keep a new project's name when you close the tab right after Saved ([139a587](https://github.com/zivavu/OpenMosh/commit/139a587a78b9bad86dc9cbb657f43646bca35289))
+* List sound added to an editor lane in the song library right away ([8db4b2d](https://github.com/zivavu/OpenMosh/commit/8db4b2d17e490a4b588b672d12cec61d078b6acd))
+* Make the effects panel's empty-state text and the Mosh panel's labels, chips and tabs easier to read ([78ecd86](https://github.com/zivavu/OpenMosh/commit/78ecd86773c484c76d279415e93267440432a88c), [5f8ba12](https://github.com/zivavu/OpenMosh/commit/5f8ba12e359ffc9006d4b685ec880000bdacaf63))
+* Say why BPM Detect is off, and what to do instead ([5ba25b7](https://github.com/zivavu/OpenMosh/commit/5ba25b706adcdd05788879b5305ff4dbab474519))
+* Stop effects from pixelating a media layer ([14d47ac](https://github.com/zivavu/OpenMosh/commit/14d47ace0ebd45586dcede8983bf598b1800b80e))
+
+
+### Faster
+
+* Keep sliders smooth while you drag them, even in long projects or on clips full of keyframes ([4ad2efa](https://github.com/zivavu/OpenMosh/commit/4ad2efa2eccf84b257b3b8a131dfd9821d8ba838), [0297500](https://github.com/zivavu/OpenMosh/commit/0297500c0510137cc427a7eb989c28865008089c), [f348f19](https://github.com/zivavu/OpenMosh/commit/f348f198d2d69f690c16bd3a27b9c20d34eb6291))
+
 ## [1.0.4](https://github.com/zivavu/OpenMosh/compare/v1.0.3...v1.0.4) (2026-11-10)
 
 The editor can now save the frame under the playhead as a PNG or JPG. Record's settings have a video quality choice, from Small for sharing in chats to Max for YouTube or editing later; Standard keeps the bitrate exports had before. In the editor you can flip media by dragging Scale X or Y below zero, and remove media from the rail with the trash button on its thumbnail (Ctrl+Z puts it back). Generate takes several generator types at once. Glows no longer turn into a bright wash over a transparent background. A mosh for a PNG or JPG leaves out effects that only show during playback, a new 3D Transform starts facing the camera, and a roll clears the preset's highlight once it changes the chain.
