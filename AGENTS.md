@@ -232,6 +232,8 @@ what Vercel serves. `main` itself only deploys as a Vercel preview.
   one branch collects several tasks, one commit each. Keep adding to the batch branch until its
   PR is opened; after that, start the next batch from it (or from `main` once it has merged) and
   rebase onto `main` before that batch's PR.
+- Commit each completed task automatically once its checks pass rather than waiting to be asked;
+  follow-up tweaks amend or fixup that commit.
 - A tweak to a change already committed on the branch is part of that commit: amend it, or fold it
   in with a fixup and an autosquash rebase. `main` should never see "fix the thing from before".
 - Stage files by name, never `git commit -a` or `git add .`, and check
