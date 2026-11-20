@@ -11,7 +11,14 @@ import {
 	type TimelineClip,
 } from "./clips";
 
-type Lane<C extends TimelineClip> = ClipLane<C> & { id: string };
+type Lane<C extends TimelineClip> = ClipLane<C> & { id: string; z?: number };
+
+/** Visual top-to-bottom lane order: highest `z` first, array order on ties. */
+function visualLaneIds<C extends TimelineClip, L extends Lane<C>>(
+	lanes: L[],
+): string[] {
+	return [...lanes].sort((a, b) => (b.z ?? 0) - (a.z ?? 0)).map((l) => l.id);
+}
 
 /** Snapshot the given clips, anchored at the earliest one's start. */
 export function copyClipBlock<
@@ -73,11 +80,7 @@ export function pasteClipBlock<
 	const unchanged: ClipBlockPaste<L> = { lanes, clipIds: [] };
 	if (entries.length === 0 || duration <= 0) return unchanged;
 	const byId = new Map<string, L>(lanes.map((l) => [l.id, l]));
-	const moved = retargetClipBlock(
-		entries,
-		lanes.map((l) => l.id),
-		targetLaneId,
-	);
+	const moved = retargetClipBlock(entries, visualLaneIds(lanes), targetLaneId);
 	// A lane deleted since the copy takes its clips with it.
 	const placed = placeClipBlock(moved, byId, at, duration);
 	if (placed.length === 0) return unchanged;

@@ -484,20 +484,34 @@ describe("retargetClipBlock", () => {
 	const e = (laneId: string) => ({ laneId, offset: 0, length: 1 });
 
 	it("moves the block so its first lane is the target, keeping spacing", () => {
-		const out = retargetClipBlock([e("a"), e("b")], laneIds, "b");
+		const down = retargetClipBlock([e("a"), e("b")], laneIds, "b");
+		expect(down.map((x) => x.laneId)).toEqual(["b", "c"]);
+		const up = retargetClipBlock([e("b"), e("c")], laneIds, "a");
+		expect(up.map((x) => x.laneId)).toEqual(["a", "b"]);
+	});
+
+	it("clamps at the bottom so no copied lanes are dropped", () => {
+		const out = retargetClipBlock([e("a"), e("b")], laneIds, "c");
 		expect(out.map((x) => x.laneId)).toEqual(["b", "c"]);
 	});
 
-	it("drops entries pushed past the last lane", () => {
-		const out = retargetClipBlock([e("a"), e("b")], laneIds, "c");
-		expect(out.map((x) => x.laneId)).toEqual(["c"]);
+	it("keeps non-adjacent lane spacing when shifting and clamping", () => {
+		const four = ["a", "b", "c", "d"];
+		expect(
+			retargetClipBlock([e("a"), e("c")], four, "b").map((x) => x.laneId),
+		).toEqual(["b", "d"]);
+		expect(
+			retargetClipBlock([e("a"), e("c")], four, "d").map((x) => x.laneId),
+		).toEqual(["b", "d"]);
 	});
 
-	it("is the input when the target is unknown, absent, or already first", () => {
+	it("is the input when the target is unknown, absent, or clamps back in place", () => {
 		const entries = [e("a")];
 		expect(retargetClipBlock(entries, laneIds, "mosh")).toBe(entries);
 		expect(retargetClipBlock(entries, laneIds, null)).toBe(entries);
 		expect(retargetClipBlock(entries, laneIds, "a")).toBe(entries);
+		const pair = [e("a"), e("b")];
+		expect(retargetClipBlock(pair, ["a", "b"], "b")).toBe(pair);
 	});
 });
 

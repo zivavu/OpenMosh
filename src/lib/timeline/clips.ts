@@ -502,7 +502,8 @@ function firstFreeDelta(
 	return null;
 }
 
-/** Move a copied block onto other lanes: its first lane becomes `targetLaneId`. */
+/** Move a copied block onto other lanes: its first lane becomes `targetLaneId`,
+ * clamped so the bottom lane stays inside `laneIds`. */
 export function retargetClipBlock<E extends ClipBlockEntry>(
 	entries: E[],
 	laneIds: string[],
@@ -512,17 +513,22 @@ export function retargetClipBlock<E extends ClipBlockEntry>(
 	const to = laneIds.indexOf(targetLaneId);
 	if (to === -1) return entries;
 	let from = Infinity;
+	let last = -1;
 	for (const e of entries) {
 		const i = laneIds.indexOf(e.laneId);
-		if (i !== -1) from = Math.min(from, i);
+		if (i !== -1) {
+			from = Math.min(from, i);
+			last = Math.max(last, i);
+		}
 	}
-	if (from === Infinity || from === to) return entries;
+	if (from === Infinity) return entries;
+	const start = Math.min(to, laneIds.length - 1 - (last - from));
+	if (start === from) return entries;
 	const out: E[] = [];
 	for (const e of entries) {
 		const i = laneIds.indexOf(e.laneId);
 		if (i === -1) continue;
-		const j = i - from + to;
-		if (j < laneIds.length) out.push({ ...e, laneId: laneIds[j] });
+		out.push({ ...e, laneId: laneIds[i - from + start] });
 	}
 	return out;
 }

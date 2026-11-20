@@ -608,6 +608,7 @@ export class TimelineStackState {
 		const leave = () => {
 			if (this.#hover?.laneId === laneId) this.#hover = null;
 		};
+		el.addEventListener("pointerenter", hover);
 		el.addEventListener("pointermove", hover);
 		el.addEventListener("pointerleave", leave);
 		const detachWheel = this.vp.attachWheel(
@@ -621,6 +622,7 @@ export class TimelineStackState {
 		return {
 			destroy: () => {
 				el.removeEventListener("pointerdown", markUsed, true);
+				el.removeEventListener("pointerenter", hover);
 				el.removeEventListener("pointermove", hover);
 				el.removeEventListener("pointerleave", leave);
 				leave();

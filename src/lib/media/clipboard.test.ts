@@ -195,6 +195,55 @@ describe("pasteMediaClips onto another lane", () => {
 		const result = pasteMediaClips(t, copied, 6, 10, a.id);
 		expect(result.timeline.lanes[0].clips[1].sourceId).toBeUndefined();
 	});
+
+	it("keeps all lanes of a multi-lane copy when targeting top or bottom lane", () => {
+		const bottom = { ...laneWith([[0, 4]], "Layer 1"), z: 0 };
+		const top = { ...laneWith([[6, 8]], "Layer 2"), z: 1, sourceId: "src-b" };
+		const t = timelineOf([bottom, top]);
+		const copied = copyMediaClips(t, [bottom.clips[0].id, top.clips[0].id]);
+
+		for (const targetId of [top.id, bottom.id]) {
+			const { timeline, clipIds } = pasteMediaClips(
+				t,
+				copied,
+				20,
+				60,
+				targetId,
+			);
+			expect(clipIds).toHaveLength(2);
+			const pastedBottom = timeline.lanes[0].clips.find((c) => c.start === 20)!;
+			const pastedTop = timeline.lanes[1].clips.find((c) => c.start === 26)!;
+			expect(pastedBottom.end).toBe(24);
+			expect(pastedTop.end).toBe(28);
+			expect(pastedBottom.sourceId).toBeUndefined();
+			expect(pastedTop.sourceId).toBeUndefined();
+		}
+	});
+
+	it("shifts a multi-lane copy in visual z order and clamps at the bottom", () => {
+		const l1 = { ...laneWith([], "Layer 1"), z: 0, sourceId: "src-1" };
+		const l2 = { ...laneWith([[6, 8]], "Layer 2"), z: 1, sourceId: "src-2" };
+		const l3 = { ...laneWith([[0, 4]], "Layer 3"), z: 2, sourceId: "src-3" };
+		const t = timelineOf([l1, l2, l3]);
+		const copied = copyMediaClips(t, [l3.clips[0].id, l2.clips[0].id]);
+
+		for (const targetId of [l2.id, l1.id]) {
+			const { timeline, clipIds } = pasteMediaClips(
+				t,
+				copied,
+				20,
+				60,
+				targetId,
+			);
+			expect(clipIds).toHaveLength(2);
+			const onL2 = timeline.lanes[1].clips.find((c) => c.start === 20)!;
+			const onL1 = timeline.lanes[0].clips.find((c) => c.start === 26)!;
+			expect(onL2.end).toBe(24);
+			expect(onL2.sourceId).toBe("src-3");
+			expect(onL1.end).toBe(28);
+			expect(onL1.sourceId).toBe("src-2");
+		}
+	});
 });
 
 describe("pasteMediaContentOnto", () => {
