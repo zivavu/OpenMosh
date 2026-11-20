@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.0.6](https://github.com/zivavu/OpenMosh/compare/v1.0.5...v1.0.6) (2026-11-20)
+
+
+### Added
+
+* Add a Blocks look to Tracking ([c646289](https://github.com/zivavu/OpenMosh/commit/c6462893fe0d5d26f67c810e1c466b1efc369c16))
+* Let Tracking lines go from 0 to 10 wide ([660629c](https://github.com/zivavu/OpenMosh/commit/660629c8b90eed6091bdfaf54b58b26d0302ab15))
+* Polish Tracking blocks and add HUD controls ([5786802](https://github.com/zivavu/OpenMosh/commit/5786802165551fe049eefcd8a3e67e652b985a14))
+
 ## [1.0.5](https://github.com/zivavu/OpenMosh/compare/v1.0.4...v1.0.5) (2026-11-18)
 
 The editor has keyframes. Effect sliders can change over their clip, and a media layer's position, size, rotation and opacity over the timeline. Each animated setting gets its own row under its lane, where you can move, copy, ease and repeat keys, snap them to the song's beat, or record a slider's moves while the song plays. Settings can also be grouped to follow one curve. Outside keyframes: hold Ctrl to drag sliders, clips and keys slowly, and Ctrl+scroll zooms the timeline from anywhere over it. Trimming a clip's start leaves its footage where it was. Projects can run up to ten hours, and removing media or deleting a preset can be undone. Effects no longer pixelate a media layer, and sliders stay smooth in long projects.
