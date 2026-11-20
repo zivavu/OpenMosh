@@ -85,6 +85,33 @@ describe("pasteFxClips", () => {
 		expect(lanes[1].clips.map((c) => [c.start, c.end])).toEqual([[5, 7]]);
 	});
 
+	it("pastes multi-lane copies onto both lanes regardless of z order or target lane", () => {
+		const bottom = { ...laneWith([[0, 2]], "FX 1"), z: 0 };
+		const top = { ...laneWith([[1, 3]], "FX 2"), z: 1 };
+		const entries = copyFxClips(
+			[bottom, top],
+			[bottom.clips[0].id, top.clips[0].id],
+		);
+		for (const targetId of [top.id, bottom.id]) {
+			const { lanes, clipIds } = pasteFxClips(
+				[bottom, top],
+				entries,
+				10,
+				60,
+				targetId,
+			);
+			expect(clipIds).toHaveLength(2);
+			expect(lanes[0].clips.map((c) => [c.start, c.end])).toEqual([
+				[0, 2],
+				[10, 12],
+			]);
+			expect(lanes[1].clips.map((c) => [c.start, c.end])).toEqual([
+				[1, 3],
+				[11, 13],
+			]);
+		}
+	});
+
 	it("pastes nothing when the lane is full", () => {
 		const lane = laneWith([[0, 6]]);
 		const entries = copyFxClips([lane], [lane.clips[0].id]);
