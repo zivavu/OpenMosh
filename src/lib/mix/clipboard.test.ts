@@ -33,4 +33,33 @@ describe("audio clipboard", () => {
 			gain: 0.5,
 		});
 	});
+
+	it("keeps all lanes of a multi-lane copy when targeting the bottom lane", () => {
+		const top = createAudioLane("Music", true);
+		const topClip = createAudioClip(0, 4, trackSourceId("a"), 0);
+		top.clips = [topClip];
+		const bottom = createAudioLane("SFX");
+		const bottomClip = createAudioClip(2, 5, trackSourceId("b"), 1);
+		bottom.clips = [bottomClip];
+		const lanes = [top, bottom];
+
+		const copied = copyAudioClips(lanes, [topClip.id, bottomClip.id]);
+		const { lanes: next, clipIds } = pasteAudioClips(
+			lanes,
+			copied,
+			20,
+			60,
+			bottom.id,
+		);
+
+		expect(clipIds).toHaveLength(2);
+		expect(next[0].clips.map((c) => [c.start, c.end])).toEqual([
+			[0, 4],
+			[20, 24],
+		]);
+		expect(next[1].clips.map((c) => [c.start, c.end])).toEqual([
+			[2, 5],
+			[22, 25],
+		]);
+	});
 });
