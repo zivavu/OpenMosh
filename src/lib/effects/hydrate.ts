@@ -29,6 +29,16 @@ function migrateValues(
 	if (defId === "duotone") return migrateDuotone(values);
 	if (defId === "edges") return migrateEdges(values);
 	if (defId === "slices") return migrateSlices(values);
+	if (defId === "tracking") return migrateTracking(values);
+	return values;
+}
+
+/** Tracking's White/Black select became a hex color picker. */
+function migrateTracking(
+	values: Record<string, number | string>,
+): Record<string, number | string> {
+	if (values.color === "white") return { ...values, color: "#ffffff" };
+	if (values.color === "black") return { ...values, color: "#000000" };
 	return values;
 }
 

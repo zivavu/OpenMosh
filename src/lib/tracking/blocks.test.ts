@@ -2,11 +2,13 @@ import { describe, expect, test } from "bun:test";
 import {
 	activityMap,
 	analyzeBlocks,
+	blocksParamSignature,
 	buildLinkRibbons,
 	detectBlocks,
 	easeBlocks,
 	LINK_SEGMENTS,
 	newBlocksState,
+	reanalyzeBlocks,
 	RIBBON_FLOATS,
 	RIBBON_MAX_FLOATS,
 	type BlockGrid,
@@ -32,6 +34,42 @@ function sky(bx = 40, by = 36, sparks: [number, number][] = []): BlockGrid {
 	for (const [x, y] of sparks) {
 		mean[y * GW + x] = 0.3;
 		peak[y * GW + x] = 1;
+	}
+	return { mean, peak, gw: GW, gh: GH };
+}
+
+/** Sparse pinpoint sparks clustered in a burst with black sky between them. */
+function sparseBurst(bx = 50, by = 36): BlockGrid {
+	const mean = new Float32Array(GW * GH).fill(0.01);
+	const peak = new Float32Array(GW * GH).fill(0.01);
+	for (let dy = -12; dy <= 12; dy += 4) {
+		for (let dx = -12; dx <= 12; dx += 4) {
+			if (Math.hypot(dx, dy) > 13) continue;
+			const i = (by + dy) * GW + (bx + dx);
+			mean[i] = 0.25;
+			peak[i] = 1;
+		}
+	}
+	return { mean, peak, gw: GW, gh: GH };
+}
+
+/** Night sky with a crisp vertical ray and a crisp horizontal ray. */
+function streaks(): BlockGrid {
+	const mean = new Float32Array(GW * GH).fill(0.01);
+	const peak = new Float32Array(GW * GH).fill(0.01);
+	// Vertical streak at x=30, y=14..42
+	for (let y = 14; y <= 42; y++) {
+		for (let x = 29; x <= 31; x++) {
+			mean[y * GW + x] = 0.7;
+			peak[y * GW + x] = 1;
+		}
+	}
+	// Horizontal streak at y=50, x=68..104
+	for (let y = 49; y <= 51; y++) {
+		for (let x = 68; x <= 104; x++) {
+			mean[y * GW + x] = 0.7;
+			peak[y * GW + x] = 1;
+		}
 	}
 	return { mean, peak, gw: GW, gh: GH };
 }
@@ -67,10 +105,48 @@ describe("detectBlocks", () => {
 		for (const [sx, sy] of sparks) {
 			const hit = rects.some((r) => {
 				const [cx, cy] = centerCell(r);
-				return r.level >= 2 && Math.hypot(cx - sx, cy - sy) < 4;
+				return r.level >= 2 && Math.hypot(cx - sx, cy - sy) < 2;
 			});
 			expect(hit).toBe(true);
 		}
+	});
+
+	test("groups sparse pinpoint sparks into a hero level-0 cloud window", () => {
+		const grid = sparseBurst(50, 36);
+		const rects = detectBlocks(
+			grid,
+			activityMap(grid, null, params),
+			ASPECT,
+			params,
+		);
+		const heroes = rects.filter((r) => r.level === 0);
+		expect(heroes.length).toBeGreaterThan(0);
+		const [cx, cy] = centerCell(heroes[0]);
+		expect(Math.hypot(cx - 50, cy - 36)).toBeLessThan(8);
+	});
+
+	test("fits elongated boxes to vertical and horizontal streaks", () => {
+		const grid = streaks();
+		const rects = detectBlocks(
+			grid,
+			activityMap(grid, null, params),
+			ASPECT,
+			params,
+		);
+		const tallOnVertical = rects.some((r) => {
+			const [cx, cy] = centerCell(r);
+			const w = (r.x1 - r.x0) * ASPECT;
+			const h = r.y1 - r.y0;
+			return Math.hypot(cx - 30, cy - 28) < 6 && h > w * 1.4;
+		});
+		const wideOnHorizontal = rects.some((r) => {
+			const [cx, cy] = centerCell(r);
+			const w = (r.x1 - r.x0) * ASPECT;
+			const h = r.y1 - r.y0;
+			return Math.hypot(cx - 86, cy - 50) < 6 && w > h * 1.4;
+		});
+		expect(tallOnVertical).toBe(true);
+		expect(wideOnHorizontal).toBe(true);
 	});
 
 	test("finds nothing on a black frame", () => {
@@ -117,7 +193,7 @@ describe("analyzeBlocks", () => {
 			state.blocks.filter((b) => b.level === 0).map((b) => b.id),
 		);
 		expect(ids.size).toBeGreaterThan(0);
-		analyzeBlocks(state, sky(41, 36), ASPECT, params, 0.06);
+		analyzeBlocks(state, sky(41, 36), ASPECT, params, 0.04);
 		const kept = state.blocks.filter((b) => b.level === 0 && ids.has(b.id));
 		expect(kept.length).toBeGreaterThan(0);
 	});
@@ -133,6 +209,71 @@ describe("analyzeBlocks", () => {
 		expect(b.dx0).toBeLessThan(b.x0);
 		easeBlocks(state, 0);
 		expect(b.dx0).toBe(b.x0);
+	});
+
+	test("vanished blocks stay crisp during grace then collapse cleanly", () => {
+		const state = newBlocksState();
+		analyzeBlocks(state, sky(40, 36), ASPECT, params, 0);
+		easeBlocks(state, 0);
+		expect(state.blocks.length).toBeGreaterThan(0);
+
+		const black: BlockGrid = {
+			mean: new Float32Array(GW * GH),
+			peak: new Float32Array(GW * GH),
+			gw: GW,
+			gh: GH,
+		};
+		// During brief grace tick: held at full crisp alpha (no murky grey ghost).
+		analyzeBlocks(state, black, ASPECT, params, 0.03);
+		expect(state.blocks.length).toBeGreaterThan(0);
+		expect(state.blocks.every((b) => b.alpha === 1)).toBe(true);
+
+		// Past grace: target collapses to a point while staying crisp.
+		analyzeBlocks(state, black, ASPECT, params, 0.07);
+		expect(
+			state.blocks.every((b) => b.targetAlpha === 0 && b.alpha === 1),
+		).toBe(true);
+		const w0 = state.blocks[0].dx1 - state.blocks[0].dx0;
+		easeBlocks(state, 0.09);
+		if (state.blocks.length > 0) {
+			expect(state.blocks[0].dx1 - state.blocks[0].dx0).toBeLessThan(w0);
+		}
+		// Jumping back snaps and clears collapsing blocks cleanly.
+		easeBlocks(state, 0);
+		expect(state.blocks.length).toBe(0);
+	});
+
+	test("reanalyzeBlocks updates immediately on paused param changes", () => {
+		const state = newBlocksState();
+		const many = readTrackingParams({ mode: "blocks", blocks: 48 });
+		const few = readTrackingParams({ mode: "blocks", blocks: 8 });
+		analyzeBlocks(
+			state,
+			sky(40, 36, [
+				[100, 10],
+				[110, 50],
+			]),
+			ASPECT,
+			many,
+			0,
+		);
+		analyzeBlocks(
+			state,
+			sky(40, 36, [
+				[100, 10],
+				[110, 50],
+			]),
+			ASPECT,
+			many,
+			0,
+		);
+		expect(state.lastSig).toBe(blocksParamSignature(many));
+		expect(state.blocks.length).toBeGreaterThan(8);
+
+		reanalyzeBlocks(state, few, 0);
+		expect(state.lastSig).toBe(blocksParamSignature(few));
+		expect(state.blocks.length).toBeLessThanOrEqual(8);
+		expect(state.blocks.every((b) => b.alpha === 1)).toBe(true);
 	});
 });
 
@@ -165,6 +306,8 @@ describe("buildLinkRibbons", () => {
 		expect(verts).toBe(state.links.length * perLink);
 		const byId = new Map(state.blocks.map((b) => [b.id, b]));
 		state.links.forEach((l, k) => {
+			// Single-bow arcs bend both control points to the same side.
+			expect(Math.sign(l.bend1)).toBe(Math.sign(l.bend2));
 			const a = byId.get(l.a)!;
 			const b = byId.get(l.b)!;
 			const mid = (v: number) => {

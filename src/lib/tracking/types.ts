@@ -9,24 +9,36 @@ export type BoxState = "lock" | "degraded" | "lost" | "reacquire";
 export type TrackingMode = "hud" | "blocks";
 export type BlockFollow = "light" | "motion" | "detail";
 export type BlockFill = "invert" | "heat" | "hue" | "mix";
+export type HudFollow = "detail" | "light" | "motion";
+export type HudStyle = "brackets" | "box" | "reticle";
+export type HudLabels = "full" | "minimal" | "coords";
 
 export interface TrackingParams {
 	mode: TrackingMode;
 	count: number;
-	/** Blocks look: how many boxes, what they follow, how they fill, how many arcs (0..1). */
+	/** Blocks look: how many boxes, what they follow, how they fill. */
 	blocks: number;
 	follow: BlockFollow;
 	fill: BlockFill;
+	/** HUD look: what targets follow, frame style, typography size (0 = hidden), labels, crosshair. */
+	hudFollow: HudFollow;
+	hudStyle: HudStyle;
+	/** Label font size in px at a 720px reference short side. 0 hides all text. */
+	textSize: number;
+	labels: HudLabels;
+	crosshair: boolean;
+	/** 0..1: density of connecting arcs/links between tracked targets. */
 	links: number;
 	/** 0..1: how selective the saliency picker is (higher = only strongest spots). */
 	sensitivity: number;
 	/** Base box size as a fraction of the smaller image dimension. */
 	size: number;
-	/** Stroke width, in px at a 720px reference height (scaled to actual size). */
+	/** Stroke width, in px at a 720px reference short side (scaled to actual size). */
 	thickness: number;
 	/** 0..1 overall overlay opacity. */
 	opacity: number;
-	color: "white" | "black";
+	/** Hex ink color (#rrggbb). */
+	color: string;
 }
 
 /** A salient point in normalized coords (x: left→right, y: top→bottom). */
@@ -34,6 +46,9 @@ export interface SalPoint {
 	x: number;
 	y: number;
 	score: number;
+	/** Optional locally fitted width/height as fractions of the smaller image dimension. */
+	w?: number;
+	h?: number;
 }
 
 /** A persistent tracked box (locked spot + identity), independent of per-frame jitter. */
@@ -45,6 +60,7 @@ export interface TrackBox {
 	/** Tracked normalized center. Frozen while `state` is "lost". */
 	baseX: number;
 	baseY: number;
+	/** Width and height as fractions of the smaller image dimension. */
 	w: number;
 	h: number;
 	/** Signal quality 0..1 from how well the template matches. Drops fast when the
@@ -54,10 +70,10 @@ export interface TrackBox {
 	state: BoxState;
 	/** Animation-time of the last state transition (drives state animations). */
 	stateChangedAt: number;
-	/** Display position smoothed toward baseX/baseY (avoids 8 Hz stepping). */
+	/** Display position smoothed toward baseX/baseY. */
 	drawX: number;
 	drawY: number;
-	/** Animation-time the box was (re)acquired, for fade-in. */
+	/** Animation-time the box was (re)acquired, for snappy acquire entry. */
 	acquiredAt: number;
 	/** What the target looks like: a zero-mean, unit-length luminance patch.
 	 * Null until the next tick captures it. */
@@ -74,8 +90,12 @@ export interface TrackingState {
 	lastAnalyze: number;
 	/** Animation-time of the last tracking tick (-1 = never); gaps = scene cut. */
 	lastTick: number;
+	/** Animation-time of the last display ease step (for dt-independent smoothing). */
+	lastEase?: number;
 	/** Signature of placement-affecting params; change forces re-acquire. */
 	signature: string;
+	/** Signature of HUD detection params last run on prevLum (enables live paused tweaks). */
+	hudParamSig?: string;
 	/** Previous downsampled luminance grid (row-major, top-first). */
 	prevLum: Float32Array | null;
 	gridW: number;
@@ -91,21 +111,27 @@ export interface TrackingState {
 }
 
 export interface FrameBox {
+	key: number;
 	cx: number;
 	cy: number;
+	/** Width and height as fractions of the smaller image dimension. */
 	w: number;
 	h: number;
 	hex: string;
 	state: BoxState;
 	/** Seconds since the box entered its current state (drives animations). */
 	stateAge: number;
-	/** True for the designated primary target (drone style hierarchy). */
+	/** Seconds since the box was acquired (drives crisp entry snap). */
+	age: number;
+	/** Signal quality 0..1. */
+	quality: number;
+	/** True for the designated primary target (visual hierarchy). */
 	primary: boolean;
-	/** Primary label line (status). Empty = no label. */
+	/** Primary label line (status / ID / coords). Empty = no label. */
 	label: string;
-	/** Secondary label line (coords). Empty = no label. */
+	/** Secondary label line (coords footer). Empty = no label. */
 	sub: string;
-	/** 0..1 fade-in alpha. */
+	/** 0..1 visibility alpha. */
 	alpha: number;
 }
 

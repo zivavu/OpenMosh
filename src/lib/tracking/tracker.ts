@@ -1,6 +1,10 @@
+import { normalizeHex } from "../color";
 import type {
 	BoxState,
 	FrameBox,
+	HudFollow,
+	HudLabels,
+	HudStyle,
 	SalPoint,
 	TrackBox,
 	TrackingFrame,
@@ -27,6 +31,12 @@ function hexId(seed: number, key: number): string {
 	return s;
 }
 
+function normalizeTrackingColor(raw: string): string {
+	if (raw === "white") return "#ffffff";
+	if (raw === "black") return "#000000";
+	return normalizeHex(raw, "#ffffff");
+}
+
 export function readTrackingParams(
 	v: Record<string, number | string>,
 ): TrackingParams {
@@ -34,26 +44,60 @@ export function readTrackingParams(
 		typeof v[key] === "number" ? (v[key] as number) : d;
 	const str = (key: string, d: string) =>
 		typeof v[key] === "string" ? (v[key] as string) : d;
+	const hudFollowRaw = str("hudFollow", "detail");
+	const hudFollow: HudFollow =
+		hudFollowRaw === "light" || hudFollowRaw === "motion"
+			? hudFollowRaw
+			: "detail";
+	const hudStyleRaw = str("hudStyle", "brackets");
+	const hudStyle: HudStyle =
+		hudStyleRaw === "box" || hudStyleRaw === "reticle"
+			? hudStyleRaw
+			: "brackets";
+	const labelsRaw = str("labels", "full");
+	const labels: HudLabels =
+		labelsRaw === "minimal" || labelsRaw === "coords" ? labelsRaw : "full";
 	return {
 		mode: str("mode", "hud") as TrackingParams["mode"],
 		count: Math.max(1, Math.round(num("count", 5))),
 		blocks: Math.max(1, Math.round(num("blocks", 40))),
 		follow: str("follow", "light") as TrackingParams["follow"],
 		fill: str("fill", "invert") as TrackingParams["fill"],
-		links: num("links", 0.4),
+		hudFollow,
+		hudStyle,
+		textSize: Math.max(0, num("textSize", 18)),
+		labels,
+		crosshair: num("crosshair", 1) !== 0,
+		links: Math.max(0, Math.min(1, num("links", 0.4))),
 		sensitivity: num("sensitivity", 0.5),
 		size: num("size", 0.12),
-		thickness: num("thickness", 2),
-		opacity: num("opacity", 1),
-		color: str("color", "white") as TrackingParams["color"],
+		thickness: Math.max(0, num("thickness", 2)),
+		opacity: Math.max(0, Math.min(1, num("opacity", 1))),
+		color: normalizeTrackingColor(str("color", "#ffffff")),
 	};
 }
 
-/** Fixed seed for hex identities and per-box size variation. */
+/** Fixed seed for hex identities and fallback per-box size variation. */
 const SEED = 42;
 
-function placementSignature(p: TrackingParams): string {
-	return `${p.count}|${p.sensitivity.toFixed(3)}|${p.size.toFixed(3)}`;
+/** Signature of HUD detection/placement params; used to rebuild boxes or re-run
+ * saliency immediately when sliders are dragged while paused. */
+export function hudParamSignature(p: TrackingParams): string {
+	return `${p.count}|${p.hudFollow}|${p.sensitivity.toFixed(3)}|${p.size.toFixed(3)}`;
+}
+
+function sizeForPoint(
+	pt: SalPoint,
+	k: number,
+	baseSize: number,
+): { w: number; h: number } {
+	if (pt.w !== undefined && pt.h !== undefined) {
+		return { w: pt.w, h: pt.h };
+	}
+	const sizeVar = 0.78 + hash2(SEED + k, 3) * 0.44;
+	const aspect = 0.85 + hash2(SEED + k, 5) * 0.3;
+	const w = baseSize * sizeVar;
+	return { w, h: w * aspect };
 }
 
 /** Rebuild the persistent box set from the current salient points when the
@@ -64,7 +108,7 @@ export function syncBoxes(
 	params: TrackingParams,
 	time: number,
 ): void {
-	const sig = placementSignature(params);
+	const sig = hudParamSignature(params);
 	const needsRebuild = state.signature !== sig || state.boxes.length === 0;
 	if (!needsRebuild) return;
 
@@ -72,10 +116,7 @@ export function syncBoxes(
 	const boxes: TrackBox[] = [];
 	for (let k = 0; k < pts.length && k < params.count; k++) {
 		const pt = pts[k];
-		const sizeVar = 0.6 + hash2(SEED + k, 3) * 0.9;
-		const aspect = 0.7 + hash2(SEED + k, 5) * 0.6;
-		const w = params.size * sizeVar;
-		const h = w * aspect;
+		const { w, h } = sizeForPoint(pt, k, params.size);
 		const prev = state.boxes[k];
 		boxes.push({
 			key: k,
@@ -86,11 +127,11 @@ export function syncBoxes(
 			drawY: pt.y,
 			w,
 			h,
-			quality: 0.6,
+			quality: 0.78,
 			state: "lock",
 			stateChangedAt: time,
-			// Fresh boxes spawn already faded in so a single frozen render (PNG/JPG preview)
-			// shows the HUD; the fade only plays on later re-acquires.
+			// Fresh boxes spawn already settled so a single frozen render (PNG/JPG preview)
+			// shows crisp locked brackets; the snap-in plays on live re-acquires.
 			acquiredAt: prev ? prev.acquiredAt : time - 0.35,
 			template: null,
 			vx: 0,
@@ -99,7 +140,7 @@ export function syncBoxes(
 	}
 	state.boxes = boxes;
 	state.signature = sig;
-	state.primaryKey = -1;
+	state.primaryKey = boxes[0]?.key ?? -1;
 }
 
 const PATCH_R = 4; // 9x9-cell template
@@ -126,7 +167,7 @@ const SETTLED = 0.25;
 const LOST_MIN_S = 0.35; // minimum time spent visibly lost
 const GIVE_UP_S = 1; // settled this long without finding it: pick a new target
 const LOST_MAX_S = 2.5; // force reacquire even mid-disturbance
-const REACQUIRE_S = 0.45; // search animation length
+const REACQUIRE_S = 0.4; // search animation length
 
 /** Frame-to-frame tracking with believable failure. Each box keeps a template of
  * its target and looks for it where its velocity says it went, matching by
@@ -139,6 +180,7 @@ export function trackBoxes(
 	gw: number,
 	gh: number,
 	time: number,
+	follow: HudFollow = "detail",
 ): void {
 	const gap = state.lastTick < 0 ? Infinity : time - state.lastTick;
 	state.lastTick = time;
@@ -155,13 +197,18 @@ export function trackBoxes(
 			if (pt) {
 				box.baseX = pt.x;
 				box.baseY = pt.y;
+				if (pt.w !== undefined && pt.h !== undefined) {
+					box.w = pt.w;
+					box.h = pt.h;
+				}
 			}
 			box.drawX = box.baseX;
 			box.drawY = box.baseY;
-			box.quality = 0.75;
+			box.quality = 0.8;
 			forgetTarget(box);
 			if (box.state !== "lock") setState(box, "lock", time);
 		}
+		state.primaryKey = state.boxes[0]?.key ?? -1;
 	} else if (prev && state.gridW === gw && state.gridH === gh) {
 		// Global disturbance: rises instantly with frame change, decays ~0.5s.
 		let diff = 0;
@@ -171,11 +218,22 @@ export function trackBoxes(
 		state.disturbance = Math.max(inst, state.disturbance * 0.75);
 		const bounds = contentBounds(lum, gw, gh);
 
+		const motionDriven = follow === "motion" && state.salPoints.length > 0;
 		for (const box of state.boxes) {
 			switch (box.state) {
 				case "lock":
 				case "degraded":
 					followBox(box, prev, lum, gw, gh, gap, bounds);
+					// In Motion mode, release boxes parked on stationary background when
+					// something else in the scene is actively moving.
+					if (
+						motionDriven &&
+						localMotion(prev, lum, gw, gh, box.baseX, box.baseY) < 0.03
+					) {
+						forgetTarget(box);
+						reacquire(box, state, time);
+						break;
+					}
 					if (box.state === "lock" && box.quality < Q_DEGRADE) {
 						setState(box, "degraded", time);
 					} else if (box.state === "degraded") {
@@ -205,7 +263,7 @@ export function trackBoxes(
 		}
 		dropDuplicates(state, time);
 
-		// Primary designation (drone hierarchy): sticky, reassigned only when the current
+		// Primary designation (visual hierarchy): sticky, reassigned only when the current
 		// primary is gone or has lost its target.
 		const cur = state.boxes.find((b) => b.key === state.primaryKey);
 		if (!cur || cur.state === "lost" || cur.quality < 0.3) {
@@ -561,7 +619,11 @@ function reacquire(box: TrackBox, state: TrackingState, time: number): void {
 	if (!best) return; // nothing to lock onto yet, retry next tick
 	box.baseX = best.x;
 	box.baseY = best.y;
-	box.quality = 0.4;
+	if (best.w !== undefined && best.h !== undefined) {
+		box.w = best.w;
+		box.h = best.h;
+	}
+	box.quality = 0.45;
 	box.acquiredAt = time;
 	forgetTarget(box);
 	setState(box, "reacquire", time);
@@ -585,20 +647,37 @@ export function resolveFrame(
 	time: number,
 	imgW: number,
 	imgH: number,
+	params?: TrackingParams,
 ): TrackingFrame {
 	const boxes: FrameBox[] = [];
 	const margin = 0.02;
 
+	// Frame-rate-independent exponential smoothing; snap immediately on seeks/resets.
+	const prevEase = state.lastEase;
+	const dt =
+		prevEase === undefined || time < prevEase || time - prevEase > 0.4
+			? -1
+			: time - prevEase;
+	state.lastEase = time;
+
+	const showText = !params || params.textSize > 0;
+	const labelMode: HudLabels = params?.labels ?? "full";
+
 	for (const box of state.boxes) {
-		// Display easing per state: smooth when locked, hesitant when degraded, frozen
-		// when lost, snappy while reacquiring.
-		let ease: number;
-		if (box.state === "lock") ease = 0.25;
-		else if (box.state === "degraded") ease = 0.09;
-		else if (box.state === "reacquire") ease = 0.5;
-		else ease = 0;
-		box.drawX += (box.baseX - box.drawX) * ease;
-		box.drawY += (box.baseY - box.drawY) * ease;
+		if (dt < 0) {
+			box.drawX = box.baseX;
+			box.drawY = box.baseY;
+		} else if (dt > 0) {
+			let rate = 0;
+			if (box.state === "lock") rate = 18;
+			else if (box.state === "degraded") rate = 6;
+			else if (box.state === "reacquire") rate = 28;
+			if (rate > 0) {
+				const ease = 1 - Math.exp(-rate * dt);
+				box.drawX += (box.baseX - box.drawX) * ease;
+				box.drawY += (box.baseY - box.drawY) * ease;
+			}
+		}
 
 		const cx = Math.min(1 - margin, Math.max(margin, box.drawX));
 		const cy = Math.min(1 - margin, Math.max(margin, box.drawY));
@@ -606,27 +685,39 @@ export function resolveFrame(
 		const primary = box.key === state.primaryKey;
 		let label = "";
 		let sub = "";
-		if (primary) {
-			label = `TGT ${box.hex} ${STATUS[box.state]}`;
-			sub = `X:${pad(cx * imgW, 4)} Y:${pad(cy * imgH, 4)}`;
-		} else if (box.state === "lost") {
-			label = STATUS[box.state];
-		} else {
-			label = box.hex;
+		if (showText) {
+			if (labelMode === "minimal") {
+				label = box.state === "lost" ? "LOST" : box.hex;
+			} else if (labelMode === "coords") {
+				label =
+					box.state === "lost"
+						? STATUS.lost
+						: `${pad(cx * imgW, 4)}, ${pad(cy * imgH, 4)}`;
+			} else if (primary) {
+				label = `TGT ${box.hex} · ${STATUS[box.state]}`;
+				sub = `X ${pad(cx * imgW, 4)}  Y ${pad(cy * imgH, 4)}`;
+			} else if (box.state === "lost") {
+				label = STATUS[box.state];
+			} else {
+				label = box.hex;
+			}
 		}
 
-		// Brackets fade in on acquire.
-		const age = time - box.acquiredAt;
-		const alpha = Math.min(1, Math.max(0, age / 0.35));
+		// Snappy architectural entry: avoid lingering translucent ghosts.
+		const age = Math.max(0, time - box.acquiredAt);
+		const alpha = Math.min(1, age / 0.12);
 
 		boxes.push({
+			key: box.key,
 			cx,
 			cy,
 			w: box.w,
 			h: box.h,
 			hex: box.hex,
 			state: box.state,
-			stateAge: time - box.stateChangedAt,
+			stateAge: Math.max(0, time - box.stateChangedAt),
+			age,
+			quality: box.quality,
 			primary,
 			label,
 			sub,
@@ -635,4 +726,31 @@ export function resolveFrame(
 	}
 
 	return { boxes, disturbance: state.disturbance };
+}
+
+/** Peak frame-to-frame luminance delta in a small patch around (nx, ny). */
+function localMotion(
+	prev: Float32Array,
+	lum: Float32Array,
+	gw: number,
+	gh: number,
+	nx: number,
+	ny: number,
+): number {
+	const cx = Math.round(nx * (gw - 1));
+	const cy = Math.round(ny * (gh - 1));
+	const r = 4;
+	let peak = 0;
+	for (let dy = -r; dy <= r; dy++) {
+		const y = cy + dy;
+		if (y < 0 || y >= gh) continue;
+		const row = y * gw;
+		for (let dx = -r; dx <= r; dx++) {
+			const x = cx + dx;
+			if (x < 0 || x >= gw) continue;
+			const d = Math.abs(lum[row + x] - prev[row + x]);
+			if (d > peak) peak = d;
+		}
+	}
+	return peak;
 }

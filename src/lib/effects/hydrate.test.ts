@@ -260,6 +260,23 @@ describe("hydrateValues", () => {
 			).toBe(30);
 		});
 	});
+
+	describe("tracking's color, saved before it became a color picker", () => {
+		it("turns white and black keywords into hex colors", () => {
+			expect(hydrateValues("tracking", { color: "white" }).color).toBe(
+				"#ffffff",
+			);
+			expect(hydrateValues("tracking", { color: "black" }).color).toBe(
+				"#000000",
+			);
+		});
+
+		it("leaves a hex color the user picked alone", () => {
+			expect(hydrateValues("tracking", { color: "#4de6ff" }).color).toBe(
+				"#4de6ff",
+			);
+		});
+	});
 });
 
 describe("hydrateEffects", () => {

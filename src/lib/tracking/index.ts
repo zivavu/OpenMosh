@@ -1,6 +1,7 @@
 export * from "./types";
 export { computeSaliency, lumFromRGBA } from "./saliency";
 export {
+	hudParamSignature,
 	readTrackingParams,
 	syncBoxes,
 	resolveFrame,
