@@ -1,5 +1,5 @@
 import { getDefinition, type EffectInstance } from "../effects";
-import { rgbToHex } from "../color";
+import { hexToVec3, rgbToHex } from "../color";
 import {
 	MASK_BRUSH_UNIT,
 	MASK_EFFECT_ID,
@@ -72,6 +72,7 @@ import {
 	TRACKING_EFFECT_ID,
 	computeSaliency,
 	lumFromRGBA,
+	hudParamSignature,
 	readTrackingParams,
 	syncBoxes,
 	resolveFrame,
@@ -84,6 +85,7 @@ import {
 import {
 	analyzeBlocks,
 	BLOCK_FILLS,
+	blocksParamSignature,
 	buildLinkRibbons,
 	RIBBON_FLOATS,
 	RIBBON_MAX_FLOATS,
@@ -93,6 +95,7 @@ import {
 	gridFromRGBA,
 	newBlocksState,
 	packBlocks,
+	reanalyzeBlocks,
 	type BlocksState,
 } from "../tracking/blocks";
 import {
@@ -2456,8 +2459,15 @@ export class GlRenderer {
 			return;
 		}
 		const lum = lumFromRGBA(this.salBuf, this.salW * this.salH);
-		state.salPoints = computeSaliency(lum, this.salW, this.salH, params);
-		trackBoxes(state, lum, this.salW, this.salH, time);
+		state.salPoints = computeSaliency(
+			lum,
+			this.salW,
+			this.salH,
+			params,
+			state.prevLum,
+		);
+		state.hudParamSig = hudParamSignature(params);
+		trackBoxes(state, lum, this.salW, this.salH, time, params.hudFollow);
 	}
 
 	/** Blocking analyze: draw, readPixels, score and track. Only for the first
@@ -3587,41 +3597,63 @@ export class GlRenderer {
 		const blocks = params.mode === "blocks";
 
 		// Re-analyze on a fixed cadence in animation-time so preview and export stay
-		// deterministic. 0.12 s is about 8 Hz: fluid motion, cheap 128-px readback.
-		// Blocks re-place every tick, so they look twice as often.
-		const interval = blocks ? 0.06 : 0.12;
-		if (state.lastAnalyze < 0 || time < state.lastAnalyze) {
-			// First frame or time reset: blocking analyze so a single-frame render
-			// shows a populated HUD.
+		// deterministic. HUD tracks at ~20 Hz for fluid motion; Blocks tracks at ~30 Hz
+		// for tight lock on fast sparks and bursts.
+		const interval = blocks ? 0.033 : 0.05;
+		const bState = blocks ? (state.blocks ??= newBlocksState()) : null;
+		if (
+			state.lastAnalyze < 0 ||
+			time < state.lastAnalyze ||
+			(bState && !bState.lastGrid) ||
+			(!blocks && !state.prevLum)
+		) {
+			// First frame, time reset, or freshly switched look: blocking analyze so a
+			// paused or single-frame render populates immediately.
 			this.abortPendingSaliency(true);
 			this.analyzeSaliencySync(state, params, inputTex, time);
 			state.lastAnalyze = time;
 		} else {
 			// Steady state: collect the previous async readback once its fence signals, then
-			// start the next on cadence. The ~1-frame latency is invisible at 8 Hz.
+			// start the next on cadence.
 			this.pollSaliency();
 			if (time - state.lastAnalyze >= interval && !this.salFence) {
 				this.startSaliencyRead(state, params, inputTex, time);
 				state.lastAnalyze = time;
+			} else if (
+				bState &&
+				bState.lastGrid &&
+				bState.lastSig !== blocksParamSignature(params)
+			) {
+				// Paused or still-image slider edit: re-fit on the cached grid immediately.
+				reanalyzeBlocks(bState, params, time);
+			} else if (
+				!blocks &&
+				state.prevLum &&
+				state.gridW > 0 &&
+				state.gridH > 0 &&
+				state.hudParamSig !== hudParamSignature(params)
+			) {
+				// Paused or still-image HUD edit: re-pick targets on the cached luminance grid.
+				state.salPoints = computeSaliency(
+					state.prevLum,
+					state.gridW,
+					state.gridH,
+					params,
+				);
+				state.hudParamSig = hudParamSignature(params);
 			}
 		}
 		if (blocks) {
-			this.drawTrackingBlocks(
-				(state.blocks ??= newBlocksState()),
-				params,
-				inputTex,
-				targetFBO,
-				time,
-			);
+			this.drawTrackingBlocks(bState!, params, inputTex, targetFBO, time);
 			return;
 		}
 		syncBoxes(state, params, time);
-		const trackingW = Math.max(1, Math.round(this.imgW * 0.5));
-		const trackingH = Math.max(1, Math.round(this.imgH * 0.5));
-		const frame = resolveFrame(state, time, trackingW, trackingH);
-
-		// The 2D-canvas redraw and texture upload are the expensive part. Render at half
-		// resolution (plenty for thin HUD strokes) and skip both when the HUD is identical.
+		// Render HUD at native resolution (capped at 2560px) so hairlines and monospace
+		// typography stay razor-sharp; signature caching skips redraws when unchanged.
+		const hudScale = Math.min(1, 2560 / Math.max(1, this.imgW, this.imgH));
+		const trackingW = Math.max(1, Math.round(this.imgW * hudScale));
+		const trackingH = Math.max(1, Math.round(this.imgH * hudScale));
+		const frame = resolveFrame(state, time, this.imgW, this.imgH, params);
 		const gl = this.gl;
 		const sig =
 			eff.instanceId +
@@ -3733,8 +3765,8 @@ export class GlRenderer {
 		const lineWidth = (params.thickness * Math.min(this.imgW, this.imgH)) / 720;
 		if (u["u_lineWidth"]) gl.uniform1f(u["u_lineWidth"], lineWidth);
 		if (u["u_opacity"]) gl.uniform1f(u["u_opacity"], params.opacity);
-		const ink = params.color === "white" ? 1 : 0;
-		if (u["u_ink"]) gl.uniform3f(u["u_ink"], ink, ink, ink);
+		const ink = hexToVec3(params.color, "#ffffff");
+		if (u["u_ink"]) gl.uniform3f(u["u_ink"], ink[0], ink[1], ink[2]);
 		gl.drawArrays(gl.TRIANGLES, 0, 6);
 		gl.activeTexture(gl.TEXTURE0);
 
@@ -3742,7 +3774,7 @@ export class GlRenderer {
 			state,
 			this.imgW,
 			this.imgH,
-			lineWidth * 0.8,
+			lineWidth * 0.65,
 			time,
 			this.ribbonBuf,
 		);
@@ -3754,7 +3786,11 @@ export class GlRenderer {
 	}
 
 	/** Blends the link ribbons over whatever FBO is bound. */
-	private drawRibbons(verts: number, ink: number, opacity: number) {
+	private drawRibbons(
+		verts: number,
+		ink: [number, number, number],
+		opacity: number,
+	) {
 		const gl = this.gl;
 		if (!this.ribbon) {
 			const program = createProgram(gl, RIBBON_VERT, RIBBON_FRAG);
@@ -3776,7 +3812,7 @@ export class GlRenderer {
 		const { program, vao, vbo } = this.ribbon;
 		gl.useProgram(program.program);
 		const u = program.uniforms;
-		if (u["u_ink"]) gl.uniform3f(u["u_ink"], ink, ink, ink);
+		if (u["u_ink"]) gl.uniform3f(u["u_ink"], ink[0], ink[1], ink[2]);
 		if (u["u_opacity"]) gl.uniform1f(u["u_opacity"], opacity);
 		gl.bindVertexArray(vao);
 		gl.bindBuffer(gl.ARRAY_BUFFER, vbo);

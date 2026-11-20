@@ -1,6 +1,8 @@
 import type { EffectDefinition } from "../types";
 
 const hud = (v: Record<string, number | string>) => v.mode !== "blocks";
+const hudWithText = (v: Record<string, number | string>) =>
+	hud(v) && (typeof v.textSize !== "number" || v.textSize > 0);
 const blocks = (v: Record<string, number | string>) => v.mode === "blocks";
 
 export const definition: EffectDefinition = {
@@ -22,7 +24,7 @@ export const definition: EffectDefinition = {
 			label: "Targets",
 			type: "range",
 			min: 1,
-			max: 12,
+			max: 16,
 			step: 1,
 			defaultValue: 5,
 			moshMax: 8,
@@ -39,6 +41,18 @@ export const definition: EffectDefinition = {
 			visibleWhen: blocks,
 		},
 		{
+			key: "hudFollow",
+			label: "Follows",
+			type: "select",
+			defaultValue: "detail",
+			options: [
+				{ label: "Detail", value: "detail" },
+				{ label: "Light", value: "light" },
+				{ label: "Motion", value: "motion" },
+			],
+			visibleWhen: hud,
+		},
+		{
 			key: "follow",
 			label: "Follows",
 			type: "select",
@@ -49,6 +63,18 @@ export const definition: EffectDefinition = {
 				{ label: "Detail", value: "detail" },
 			],
 			visibleWhen: blocks,
+		},
+		{
+			key: "hudStyle",
+			label: "Style",
+			type: "select",
+			defaultValue: "brackets",
+			options: [
+				{ label: "Brackets", value: "brackets" },
+				{ label: "Frame", value: "box" },
+				{ label: "Reticle", value: "reticle" },
+			],
+			visibleWhen: hud,
 		},
 		{
 			key: "fill",
@@ -94,13 +120,43 @@ export const definition: EffectDefinition = {
 		},
 		{
 			key: "links",
-			label: "Arcs",
+			label: "Links",
 			type: "range",
 			min: 0,
 			max: 1,
 			step: 0.01,
 			defaultValue: 0.4,
-			visibleWhen: blocks,
+		},
+		{
+			key: "textSize",
+			label: "Text Size",
+			type: "range",
+			min: 0,
+			max: 48,
+			step: 1,
+			defaultValue: 18,
+			moshMin: 0,
+			moshMax: 28,
+			visibleWhen: hud,
+		},
+		{
+			key: "labels",
+			label: "Labels",
+			type: "select",
+			defaultValue: "full",
+			options: [
+				{ label: "Telemetry", value: "full" },
+				{ label: "IDs", value: "minimal" },
+				{ label: "Coords", value: "coords" },
+			],
+			visibleWhen: hudWithText,
+		},
+		{
+			key: "crosshair",
+			label: "Crosshair",
+			type: "checkbox",
+			defaultValue: 1,
+			visibleWhen: hud,
 		},
 		{
 			key: "opacity",
@@ -115,12 +171,8 @@ export const definition: EffectDefinition = {
 		{
 			key: "color",
 			label: "Color",
-			type: "select",
-			defaultValue: "white",
-			options: [
-				{ label: "White", value: "white" },
-				{ label: "Black", value: "black" },
-			],
+			type: "color",
+			defaultValue: "#ffffff",
 		},
 	],
 };
