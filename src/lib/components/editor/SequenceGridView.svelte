@@ -367,7 +367,7 @@
 	}
 
 	.card:hover {
-		border-color: var(--line-strong);
+		border-color: var(--line-hover);
 	}
 
 	.card.loading {

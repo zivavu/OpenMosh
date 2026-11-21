@@ -128,12 +128,14 @@
 		cursor: pointer;
 		transition:
 			color var(--t-fast),
-			border-color var(--t-fast);
+			border-color var(--t-fast),
+			background var(--t-fast);
 	}
 
 	.pool-btn:hover {
+		background: rgba(255, 255, 255, 0.06);
 		color: var(--text);
-		border-color: var(--text-2);
+		border-color: var(--line-hover);
 	}
 
 	.pool-btn.danger:hover {

@@ -156,6 +156,6 @@
 
 	.rec-cancel-btn:hover {
 		color: var(--text);
-		border-color: var(--text-4);
+		border-color: var(--line-hover);
 	}
 </style>

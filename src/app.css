@@ -99,12 +99,13 @@
 	--sunken: #08080a;
 
 	--line: rgba(255, 255, 255, 0.08);
-	--line-strong: rgba(255, 255, 255, 0.16);
+	--line-strong: rgba(255, 255, 255, 0.16); /* any control's edge at rest */
+	--line-hover: rgba(255, 255, 255, 0.3);
 
 	--text: #ececf0;
 	--text-2: #9a9aa6;
-	--text-3: #62626e;
-	--text-4: #43434d;
+	--text-3: #6e6e7a;
+	--text-4: #50505b;
 
 	--slider-track: #6e6e7a;
 	--slider-thumb: #c8c8d2;
@@ -168,8 +169,8 @@ select {
 	appearance: none;
 	color-scheme: dark;
 	padding-right: 1.3rem;
-	border: 1px solid var(--line);
-	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%2362626e' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+	border: 1px solid var(--line-strong);
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%236e6e7a' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 	background-repeat: no-repeat;
 	background-position: right 0.4rem center;
 	background-size: 10px;
@@ -182,7 +183,7 @@ select {
 }
 
 select:hover:not(:disabled) {
-	border-color: var(--line-strong);
+	border-color: var(--line-hover);
 	color: var(--text);
 }
 
@@ -383,7 +384,7 @@ select option:disabled {
 }
 
 .bar-key:hover:not(:disabled) {
-	border-color: var(--text-4);
+	border-color: var(--line-hover);
 	color: var(--text);
 	background: rgba(255, 255, 255, 0.06);
 }
@@ -425,6 +426,47 @@ select option:disabled {
 	border-color: var(--rec-dim);
 	background: rgba(255, 95, 86, 0.1);
 	color: var(--rec);
+}
+
+/* A pill toggle: one pick of a small set, or a one-word action beside a field. */
+.pill {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.35rem;
+	padding: 0.2rem 0.6rem;
+	border: 1px solid var(--line-strong);
+	border-radius: var(--r-pill);
+	background: rgba(255, 255, 255, 0.03);
+	color: var(--text-2);
+	font-family: var(--font-mono);
+	font-size: 0.6rem;
+	font-weight: 600;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	white-space: nowrap;
+	cursor: pointer;
+	transition:
+		border-color var(--t-fast),
+		color var(--t-fast),
+		background var(--t-fast);
+}
+
+.pill:hover:not(:disabled) {
+	border-color: var(--line-hover);
+	background: rgba(255, 255, 255, 0.06);
+	color: var(--text);
+}
+
+.pill:disabled {
+	opacity: 0.45;
+	cursor: default;
+}
+
+.pill.active {
+	border-color: var(--live-dim);
+	background: rgba(110, 231, 192, 0.12);
+	color: var(--live);
 }
 
 /* The settings sheet a key or switch opens above itself. Anchoring is the owner's;
@@ -501,6 +543,7 @@ select option:disabled {
 
 	--line: rgba(255, 255, 255, 0.22);
 	--line-strong: rgba(255, 255, 255, 0.38);
+	--line-hover: rgba(255, 255, 255, 0.6);
 
 	--text: #fff;
 	--text-2: #e2e2e8;

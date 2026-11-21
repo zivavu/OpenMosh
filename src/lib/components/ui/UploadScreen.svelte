@@ -1163,7 +1163,7 @@
 	}
 
 	.storage-btn:hover {
-		border-color: var(--text-3);
+		border-color: var(--line-hover);
 		color: var(--text);
 	}
 
@@ -1232,7 +1232,7 @@
 	}
 
 	.compat-action:hover:not(:disabled) {
-		border-color: var(--text-3);
+		border-color: var(--line-hover);
 		background-color: rgba(255, 255, 255, 0.08);
 		color: var(--text);
 	}
@@ -1717,7 +1717,7 @@
 	}
 
 	.alt-btn:hover {
-		border-color: var(--text-3);
+		border-color: var(--line-hover);
 		background-color: rgba(255, 255, 255, 0.08);
 		color: var(--text);
 	}

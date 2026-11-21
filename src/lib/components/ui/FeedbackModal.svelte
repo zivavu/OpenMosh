@@ -250,7 +250,7 @@
 	.message-input,
 	.email-input {
 		padding: 0.5rem;
-		border: 1px solid var(--line);
+		border: 1px solid var(--line-strong);
 		border-radius: var(--r-2);
 		background: var(--ink);
 		color: var(--text);
@@ -352,7 +352,7 @@
 		align-items: center;
 		gap: 0.3rem;
 		padding: 0.3rem 0.6rem;
-		border: 1px solid var(--line);
+		border: 1px solid var(--line-strong);
 		border-radius: var(--r-2);
 		background: var(--surface);
 		color: var(--text-2);
@@ -362,7 +362,7 @@
 	}
 
 	.ghost:hover {
-		border-color: var(--text-4);
+		border-color: var(--line-hover);
 		color: var(--text);
 	}
 

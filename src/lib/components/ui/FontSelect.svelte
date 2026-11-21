@@ -109,7 +109,7 @@
 		height: 20px;
 		padding: 0;
 		background: none;
-		border: 1px solid var(--line);
+		border: 1px solid var(--line-strong);
 		border-radius: var(--r-1);
 		color: var(--text-3);
 		cursor: pointer;
@@ -117,6 +117,6 @@
 
 	.add-btn:hover {
 		color: var(--text);
-		border-color: var(--line-strong);
+		border-color: var(--line-hover);
 	}
 </style>

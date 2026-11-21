@@ -99,7 +99,7 @@
 
 	.preset:hover {
 		color: var(--text);
-		border-color: var(--line-strong);
+		border-color: var(--line-hover);
 	}
 
 	.preset.active {

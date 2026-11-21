@@ -2382,7 +2382,7 @@
 
 	.save-file-btn:hover:not(:disabled) {
 		color: var(--text);
-		border-color: var(--line-strong);
+		border-color: var(--line-hover);
 	}
 
 	.save-file-btn:disabled {

@@ -115,7 +115,7 @@
 	}
 
 	input:hover + .box {
-		border-color: var(--text-3);
+		border-color: var(--line-hover);
 	}
 
 	input:hover + .box .pip {

@@ -264,7 +264,7 @@
 	}
 
 	.add-btn:hover {
-		border-color: var(--text-3);
+		border-color: var(--line-hover);
 		color: var(--text);
 	}
 
@@ -288,7 +288,7 @@
 	}
 
 	.slide-card:hover {
-		border-color: var(--text-4);
+		border-color: var(--line-hover);
 	}
 
 	.slide-card.drag-over {

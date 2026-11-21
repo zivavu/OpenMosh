@@ -115,7 +115,7 @@
 
 	.action:hover {
 		color: var(--text);
-		border-color: var(--text-3);
+		border-color: var(--line-hover);
 		background: rgba(255, 255, 255, 0.06);
 	}
 

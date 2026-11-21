@@ -84,7 +84,7 @@
 	<!-- The hint sits on a wrapper: a disabled button doesn't always get the hover. -->
 	<span class="detect-wrap" title={detectHint}>
 		<button
-			class="detect-btn detect-auto"
+			class="pill detect-auto"
 			class:detecting={bpmDetecting}
 			onclick={onDetectBpm}
 			disabled={bpmDetecting || !hasTrack || !onDetectBpm}
@@ -98,7 +98,7 @@
 		</button>
 	</span>
 	<button
-		class="detect-btn"
+		class="pill"
 		title="Tap along to the beat to set the BPM"
 		onclick={handleTap}
 	>
@@ -127,38 +127,6 @@
 		display: inline-flex;
 	}
 
-	.detect-btn {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		gap: 0.35rem;
-		padding: 0.25rem 0.65rem;
-		border: 1px solid var(--line-strong);
-		border-radius: var(--r-pill);
-		background: transparent;
-		color: var(--text-2);
-		font-family: var(--font-mono);
-		font-size: 0.6rem;
-		letter-spacing: 0.1em;
-		text-transform: uppercase;
-		cursor: pointer;
-		white-space: nowrap;
-		transition:
-			border-color var(--t-fast),
-			color var(--t-fast),
-			background var(--t-fast);
-	}
-
-	.detect-btn:hover:not(:disabled) {
-		border-color: var(--text-3);
-		color: var(--text);
-	}
-
-	.detect-btn:disabled {
-		opacity: 0.5;
-		cursor: default;
-	}
-
 	/* Wide enough for "Detecting" and its lamp in every state: the settings panel
 	   is shrink-to-fit, so a button that grows mid-run drags the sidebar wider. */
 	.detect-auto {
@@ -167,8 +135,8 @@
 
 	/* Live work in progress, so it reads with the same green as everything else
 	   running, and keeps full contrast despite being disabled. */
-	.detect-btn.detecting,
-	.detect-btn.detecting:disabled {
+	.pill.detecting,
+	.pill.detecting:disabled {
 		opacity: 1;
 		border-color: var(--live-dim);
 		background: rgba(110, 231, 192, 0.1);

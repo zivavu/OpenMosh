@@ -135,7 +135,7 @@
 	.number-field input[type="number"] {
 		width: 62px;
 		padding: 0.25rem 0.45rem;
-		border: 1px solid var(--line);
+		border: 1px solid var(--line-strong);
 		border-radius: var(--r-2);
 		background: var(--sunken);
 		color: var(--text);
@@ -155,7 +155,7 @@
 	}
 
 	.number-field input[type="number"]:hover {
-		border-color: var(--line-strong);
+		border-color: var(--line-hover);
 	}
 
 	.number-field input[type="number"]:focus {
@@ -188,7 +188,7 @@
 		width: 18px;
 		flex: 1;
 		padding: 0;
-		border: 1px solid var(--line);
+		border: 1px solid var(--line-strong);
 		border-radius: var(--r-1);
 		background: var(--sunken);
 		color: var(--text-3);

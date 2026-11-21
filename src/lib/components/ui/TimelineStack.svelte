@@ -846,19 +846,24 @@
 		align-items: center;
 		gap: 0.25rem;
 		padding: 0.15rem 0.4rem;
-		border: 1px solid var(--line);
+		border: 1px solid var(--line-strong);
 		border-radius: var(--r-1);
-		background: rgba(255, 255, 255, 0.03);
+		background: var(--raised);
 		color: var(--text-2);
 		font-family: var(--font-mono);
 		font-size: 0.6rem;
 		letter-spacing: 0.06em;
 		text-transform: uppercase;
 		cursor: pointer;
+		transition:
+			color var(--t-fast),
+			border-color var(--t-fast),
+			background var(--t-fast);
 	}
 
 	:global(.tl-stack .tl-tool-btn:hover:not(:disabled)) {
-		border-color: var(--text-4);
+		border-color: var(--line-hover);
+		background: rgba(255, 255, 255, 0.06);
 		color: var(--text);
 	}
 
@@ -892,7 +897,7 @@
 		width: 1px;
 		align-self: stretch;
 		margin: 0 0.15rem;
-		background: rgba(255, 255, 255, 0.05);
+		background: var(--line);
 	}
 
 	:global(.tl-stack .tl-tool-label) {
@@ -921,7 +926,7 @@
 		height: 22px;
 		border: 1px solid var(--line-strong);
 		border-radius: 5px;
-		background: rgba(30, 30, 30, 0.9);
+		background: var(--raised);
 		color: var(--text-2);
 		cursor: pointer;
 		flex-shrink: 0;
@@ -938,7 +943,7 @@
 
 	.tl-transport-btn:hover:not(:disabled) {
 		color: var(--text);
-		border-color: var(--text-4);
+		border-color: var(--line-hover);
 		background: rgba(255, 255, 255, 0.06);
 	}
 

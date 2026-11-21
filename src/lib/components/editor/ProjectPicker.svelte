@@ -282,7 +282,7 @@
 
 	.ask-btn:hover:not(:disabled) {
 		color: var(--text);
-		border-color: var(--text-3);
+		border-color: var(--line-hover);
 	}
 
 	.ask-btn.primary {

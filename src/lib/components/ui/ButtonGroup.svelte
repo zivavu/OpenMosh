@@ -26,28 +26,34 @@
 </div>
 
 <style>
+	/* Dressed like the bar's other buttons; the pick lights up like a pill. */
 	.btn-group {
 		display: flex;
 		background: var(--glass);
 		backdrop-filter: var(--blur);
 		-webkit-backdrop-filter: var(--blur);
-		border: 1px solid var(--line);
-		border-radius: var(--r-2);
+		border: 1px solid var(--line-strong);
+		border-radius: var(--r-1);
 		overflow: hidden;
+		transition: border-color var(--t-fast);
+	}
+
+	.btn-group:hover {
+		border-color: var(--line-hover);
 	}
 
 	/* Not `.btn`: PanelModal styles every `.btn` inside it, which boxed each
 	 * option in its own border and hid which one was active. */
 	.option {
-		padding: 0.3rem 0.85rem;
+		padding: 0.28rem 0.8rem;
 		font-family: var(--font-mono);
-		font-size: 0.62rem;
-		font-weight: 600;
-		letter-spacing: 0.12em;
+		font-size: 0.64rem;
+		font-weight: 500;
+		letter-spacing: 0.08em;
 		text-transform: uppercase;
 		background: none;
 		border: none;
-		border-right: 1px solid var(--line);
+		border-right: 1px solid var(--line-strong);
 		color: var(--text-2);
 		cursor: pointer;
 		width: 100%;
@@ -61,11 +67,12 @@
 	}
 
 	.option.active {
-		color: var(--text);
-		background: rgba(255, 255, 255, 0.07);
+		color: var(--live);
+		background: rgba(110, 231, 192, 0.12);
 	}
 
 	.option:hover:not(.active) {
 		color: var(--text);
+		background: rgba(255, 255, 255, 0.06);
 	}
 </style>

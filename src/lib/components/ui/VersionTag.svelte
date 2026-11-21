@@ -44,7 +44,7 @@
 	}
 
 	.version-tag:hover {
-		border-color: var(--text-3);
+		border-color: var(--line-hover);
 		color: var(--text);
 	}
 </style>
