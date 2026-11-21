@@ -59,7 +59,7 @@
 		letter-spacing: 0.05em;
 		font-family: inherit;
 		background: none;
-		border: 1px solid var(--line);
+		border: 1px solid var(--line-strong);
 		border-radius: 5px;
 		color: var(--text-3);
 		cursor: pointer;
@@ -70,7 +70,7 @@
 
 	.track-add-btn:hover {
 		color: var(--text-2);
-		border-color: var(--text-4);
+		border-color: var(--line-hover);
 	}
 
 	.music-hint-callout {

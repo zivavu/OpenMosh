@@ -594,7 +594,7 @@
 	}
 
 	.rail-add:hover {
-		border-color: var(--text-4);
+		border-color: var(--line-hover);
 		color: var(--text-2);
 	}
 </style>

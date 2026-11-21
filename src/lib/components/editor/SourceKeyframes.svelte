@@ -248,7 +248,7 @@
 		width: 1.1rem;
 		height: 1.1rem;
 		padding: 0;
-		border: 1px solid var(--line);
+		border: 1px solid var(--line-strong);
 		border-radius: var(--r-1);
 		background: var(--ink);
 		color: var(--text-3);

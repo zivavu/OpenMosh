@@ -231,7 +231,7 @@
 			{#each STYLES as style (style.id)}
 				<button
 					type="button"
-					class="band-btn"
+					class="pill"
 					class:active={moshStyle === style.id}
 					title={style.title}
 					onclick={() => (moshStyle = style.id)}>{style.label}</button
@@ -300,7 +300,7 @@
 					{#each BANDS as band (band.id)}
 						<button
 							type="button"
-							class="band-btn"
+							class="pill"
 							class:active={moshLinkBand === band.id}
 							title={band.title}
 							onclick={() => (moshLinkBand = band.id)}>{band.label}</button
@@ -400,7 +400,7 @@
 		font-size: 0.58rem;
 		line-height: 1;
 		padding: 2px 4px;
-		border: 1px solid var(--line);
+		border: 1px solid var(--line-strong);
 		border-radius: var(--r-1);
 		color: var(--text-3);
 		background: none;
@@ -486,33 +486,5 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.2rem;
-	}
-
-	.band-btn {
-		padding: 0.1rem 0.5rem;
-		font-family: var(--font-mono);
-		font-size: 0.58rem;
-		letter-spacing: 0.08em;
-		text-transform: uppercase;
-		color: var(--text-2);
-		background: none;
-		border: 1px solid var(--line);
-		border-radius: var(--r-pill);
-		cursor: pointer;
-		transition:
-			color var(--t-fast),
-			border-color var(--t-fast),
-			background var(--t-fast);
-	}
-
-	.band-btn:hover {
-		color: var(--text);
-		border-color: var(--line-strong);
-	}
-
-	.band-btn.active {
-		color: var(--live);
-		border-color: var(--live-dim);
-		background: rgba(110, 231, 192, 0.12);
 	}
 </style>

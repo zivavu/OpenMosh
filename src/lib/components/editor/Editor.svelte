@@ -4110,7 +4110,7 @@
 
 	.save-file-btn:hover {
 		color: var(--text);
-		border-color: var(--line-strong);
+		border-color: var(--line-hover);
 	}
 
 	.output-group {

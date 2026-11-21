@@ -227,7 +227,7 @@
 	}
 
 	.swatch:hover {
-		border-color: var(--text-3);
+		border-color: var(--line-hover);
 	}
 
 	.hex {
@@ -333,7 +333,7 @@
 	}
 
 	.preset:hover {
-		border-color: var(--text-3);
+		border-color: var(--line-hover);
 	}
 
 	.preset.active {

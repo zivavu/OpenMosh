@@ -317,7 +317,7 @@
 		top: 50%;
 		transform: translateY(-50%);
 		background: rgba(0, 0, 0, 0.5);
-		border: 1px solid var(--line);
+		border: 1px solid var(--line-strong);
 		border-radius: 50%;
 		color: var(--text-3);
 		width: 36px;

@@ -159,7 +159,7 @@
 	}
 	.panel :global(.btn:hover:not(:disabled)) {
 		color: var(--text);
-		border-color: var(--text-3);
+		border-color: var(--line-hover);
 	}
 	.panel :global(.btn:disabled) {
 		opacity: 0.5;

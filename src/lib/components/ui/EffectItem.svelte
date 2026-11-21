@@ -787,7 +787,7 @@
 													{#each FREQ_BAND_OPTIONS as preset}
 														<button
 															type="button"
-															class="freq-preset-btn"
+															class="pill"
 															class:active={bandOfLink(link) === preset.id}
 															title={preset.title}
 															onclick={() => {
@@ -1315,7 +1315,7 @@
 		height: 15px;
 		border-radius: var(--r-pill);
 		background: var(--sunken);
-		border: 1px solid var(--line);
+		border: 1px solid var(--line-strong);
 		cursor: pointer;
 		padding: 0;
 		margin-left: 0.3rem;
@@ -1539,7 +1539,7 @@
 		text-transform: uppercase;
 		color: var(--text-2);
 		background: none;
-		border: 1px solid var(--line);
+		border: 1px solid var(--line-strong);
 		border-radius: var(--r-pill);
 		cursor: pointer;
 		transition:
@@ -1647,7 +1647,7 @@
 		text-transform: uppercase;
 		color: var(--text-3);
 		background: none;
-		border: 1px solid var(--line);
+		border: 1px solid var(--line-strong);
 		border-radius: var(--r-pill);
 		cursor: pointer;
 		transition:
@@ -1691,7 +1691,7 @@
 		justify-content: center;
 		padding: 0.25rem;
 		background: none;
-		border: 1px solid var(--line);
+		border: 1px solid var(--line-strong);
 		border-radius: 50%;
 		color: var(--text-3);
 		cursor: pointer;
@@ -1704,7 +1704,7 @@
 	.volume-invert-btn:hover,
 	.volume-unlink-btn:hover {
 		color: var(--text);
-		border-color: var(--line-strong);
+		border-color: var(--line-hover);
 	}
 
 	.volume-invert-btn.active {
@@ -1726,34 +1726,6 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.2rem;
-	}
-
-	.freq-preset-btn {
-		padding: 0.1rem 0.5rem;
-		font-family: var(--font-mono);
-		font-size: 0.58rem;
-		letter-spacing: 0.08em;
-		text-transform: uppercase;
-		color: var(--text-3);
-		background: none;
-		border: 1px solid var(--line);
-		border-radius: var(--r-pill);
-		cursor: pointer;
-		transition:
-			color var(--t-fast),
-			border-color var(--t-fast),
-			background var(--t-fast);
-	}
-
-	.freq-preset-btn:hover {
-		color: var(--text-2);
-		border-color: var(--line-strong);
-	}
-
-	.freq-preset-btn.active {
-		color: var(--live);
-		border-color: var(--live-dim);
-		background: rgba(110, 231, 192, 0.12);
 	}
 
 	.spectrum-wrap {
@@ -1811,7 +1783,7 @@
 		min-width: 0;
 		background: var(--sunken);
 		color: var(--text);
-		border: 1px solid var(--line);
+		border: 1px solid var(--line-strong);
 		border-radius: var(--r-2);
 		padding: 0.25rem 0.45rem;
 		font-family: inherit;

@@ -1043,7 +1043,7 @@
 	.detach {
 		flex: 1;
 		padding: 0.25rem 0.5rem;
-		border: 1px solid var(--line);
+		border: 1px solid var(--line-strong);
 		border-radius: var(--r-1);
 		background: var(--ink);
 		color: var(--text-2);
@@ -1069,7 +1069,7 @@
 		flex-shrink: 0;
 		width: 1.5rem;
 		height: 1.5rem;
-		border: 1px solid var(--line);
+		border: 1px solid var(--line-strong);
 		border-radius: var(--r-1);
 		background: var(--ink);
 		color: var(--text-3);

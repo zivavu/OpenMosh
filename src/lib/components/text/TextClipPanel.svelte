@@ -422,7 +422,7 @@
 		width: 100%;
 		box-sizing: border-box;
 		padding: 0.35rem;
-		border: 1px solid var(--line);
+		border: 1px solid var(--line-strong);
 		border-radius: 4px;
 		background: var(--surface);
 		color: var(--text);

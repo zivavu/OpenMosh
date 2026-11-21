@@ -254,7 +254,7 @@
 		height: 1.4rem;
 		flex-shrink: 0;
 		background: none;
-		border: 1px solid var(--line);
+		border: 1px solid var(--line-strong);
 		border-radius: 4px;
 		color: var(--text-4);
 		cursor: pointer;
@@ -266,7 +266,7 @@
 
 	.lock-btn:hover {
 		color: var(--text-2);
-		border-color: var(--text-4);
+		border-color: var(--line-hover);
 	}
 
 	.lock-btn.active {
@@ -291,7 +291,7 @@
 
 	.reset-btn:hover {
 		color: var(--text);
-		border-color: var(--text-4);
+		border-color: var(--line-hover);
 	}
 
 	.reset-btn:disabled {

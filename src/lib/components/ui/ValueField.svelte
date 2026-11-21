@@ -86,7 +86,7 @@
 	}
 
 	.value-field:hover:not(.disabled) {
-		border-color: var(--text-3);
+		border-color: var(--line-hover);
 	}
 
 	.value-field:focus-within {

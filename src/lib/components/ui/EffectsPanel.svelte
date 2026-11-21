@@ -1152,7 +1152,7 @@
 					<span class="all-bands-label">All links</span>
 					{#each FREQ_BAND_OPTIONS as option}
 						<button
-							class="all-bands-btn"
+							class="pill"
 							class:active={allBand === option.id}
 							onclick={() => setAllBands(option.id)}
 							title="Set every audio link in this chain to {option.title}"
@@ -1374,9 +1374,9 @@
 		height: 28px;
 		padding: 0 0.5rem 0 0.6rem;
 		background: var(--sunken);
-		border: 1px solid var(--line);
+		border: 1px solid var(--line-strong);
 		border-radius: var(--r-2);
-		color: var(--text-3);
+		color: var(--text-2);
 		font-family: inherit;
 		font-size: 0.72rem;
 		text-align: left;
@@ -1388,8 +1388,8 @@
 	}
 
 	.preset-trigger:hover {
-		color: var(--text-2);
-		border-color: var(--line-strong);
+		color: var(--text);
+		border-color: var(--line-hover);
 	}
 
 	/* A chain that came from a preset says so. */
@@ -1410,13 +1410,13 @@
 	.preset-trigger-count {
 		flex-shrink: 0;
 		font-size: 0.6rem;
-		color: var(--text-4);
+		color: var(--text-2);
 	}
 
 	.preset-trigger-chevron {
 		display: flex;
 		flex-shrink: 0;
-		color: var(--text-4);
+		color: var(--text-3);
 		transition: transform var(--t-fast);
 	}
 
@@ -1431,7 +1431,7 @@
 		padding: 0;
 		list-style: none;
 		background: var(--sunken);
-		border: 1px solid var(--line);
+		border: 1px solid var(--line-strong);
 		border-radius: var(--r-2);
 		overflow: hidden;
 	}
@@ -1485,7 +1485,7 @@
 	.preset-row-index {
 		flex-shrink: 0;
 		font-size: 0.6rem;
-		color: var(--text-4);
+		color: var(--text-3);
 	}
 
 	.preset-row.active .preset-row-index {
@@ -1503,7 +1503,7 @@
 	.preset-row-count {
 		flex-shrink: 0;
 		font-size: 0.6rem;
-		color: var(--text-4);
+		color: var(--text-3);
 	}
 
 	.preset-mini {
@@ -1515,7 +1515,7 @@
 		background: none;
 		border: none;
 		border-left: 1px solid var(--line);
-		color: var(--text-4);
+		color: var(--text-3);
 		cursor: pointer;
 		padding: 0;
 		transition:
@@ -1543,7 +1543,7 @@
 		background: none;
 		border: none;
 		border-radius: var(--r-1);
-		color: var(--text-4);
+		color: var(--text-2);
 		cursor: pointer;
 		padding: 0;
 		transition:
@@ -1727,34 +1727,6 @@
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
 		color: var(--live-dim);
-	}
-
-	.all-bands-btn {
-		padding: 0.1rem 0.5rem;
-		font-family: var(--font-mono);
-		font-size: 0.58rem;
-		letter-spacing: 0.08em;
-		text-transform: uppercase;
-		color: var(--text-3);
-		background: none;
-		border: 1px solid var(--line);
-		border-radius: var(--r-pill);
-		cursor: pointer;
-		transition:
-			color var(--t-fast),
-			border-color var(--t-fast),
-			background var(--t-fast);
-	}
-
-	.all-bands-btn:hover {
-		color: var(--text-2);
-		border-color: var(--line-strong);
-	}
-
-	.all-bands-btn.active {
-		color: var(--live);
-		border-color: var(--live-dim);
-		background: rgba(110, 231, 192, 0.12);
 	}
 
 	/* Between the live effects and the switched-off ones under them. */
