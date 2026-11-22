@@ -163,10 +163,6 @@
 		box-shadow: 0 0 0 2px rgba(110, 231, 192, 0.12);
 	}
 
-	.number-field input[type="number"]::placeholder {
-		color: var(--text-4);
-	}
-
 	.number-field input[type="number"]::-webkit-inner-spin-button,
 	.number-field input[type="number"]::-webkit-outer-spin-button {
 		appearance: none;

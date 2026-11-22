@@ -1594,10 +1594,6 @@
 		outline: none;
 	}
 
-	.preset-name-input::placeholder {
-		color: var(--text-4);
-	}
-
 	.preset-empty {
 		display: flex;
 		align-items: center;
@@ -1668,7 +1664,7 @@
 	}
 
 	.search-bar :global(.search-icon) {
-		color: var(--text-4);
+		color: var(--text-3);
 		flex-shrink: 0;
 	}
 
@@ -1682,10 +1678,6 @@
 		font-size: 0.75rem;
 		font-family: inherit;
 		outline: none;
-	}
-
-	.search-input::placeholder {
-		color: var(--text-4);
 	}
 
 	.search-clear {

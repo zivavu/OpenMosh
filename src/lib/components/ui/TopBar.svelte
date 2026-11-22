@@ -6,9 +6,10 @@
 	import YoutubeLink from "./YoutubeLink.svelte";
 	import InstagramLink from "./InstagramLink.svelte";
 	import FeedbackButton from "./FeedbackButton.svelte";
+	import RoundButton from "./RoundButton.svelte";
 
 	/** The strip above the preview: home, the links, then whatever the mode
-	 * puts after the separator. A `.help-btn` in there gets the home button's round look. */
+	 * puts after the separator. */
 	interface Props {
 		onExit?: () => void;
 		/** Whether the edit is saved, right after the links. */
@@ -22,22 +23,17 @@
 <div class="top-bar">
 	<div class="toolbar">
 		{#if onExit}
-			<button class="help-btn" onclick={onExit} title="Back to upload">
+			<RoundButton onclick={onExit} title="Back to upload">
 				<Home size={14} />
-			</button>
+			</RoundButton>
 		{/if}
 		<GithubLink />
 		<YoutubeLink />
 		<InstagramLink />
 		<FeedbackButton />
-		<button
-			class="help-btn"
-			onclick={openSettings}
-			title="Settings"
-			aria-label="Settings"
-		>
+		<RoundButton onclick={openSettings} title="Settings">
 			<Settings size={14} />
-		</button>
+		</RoundButton>
 		<div class="bar-sep"></div>
 		{@render status?.()}
 		{@render children()}
@@ -64,32 +60,6 @@
 		gap: 0.5rem;
 	}
 
-	.toolbar :global(.help-btn) {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 30px;
-		height: 30px;
-		border-radius: 50%;
-		background: var(--glass);
-		backdrop-filter: var(--blur);
-		-webkit-backdrop-filter: var(--blur);
-		border: 1.5px solid var(--line-strong);
-		color: var(--text-2);
-		cursor: pointer;
-		flex-shrink: 0;
-		padding: 0;
-		box-sizing: border-box;
-		transition:
-			border-color var(--t),
-			color var(--t);
-	}
-
-	.toolbar :global(.help-btn:hover) {
-		border-color: var(--text-2);
-		color: var(--text);
-	}
-
 	/* Below this the bar tightens with the pool actions dropping their labels. */
 	@container topbar (max-width: 960px) {
 		.toolbar {
@@ -114,9 +84,8 @@
 	}
 
 	@media (max-width: 800px) {
-		.toolbar :global(.help-btn) {
-			width: 26px;
-			height: 26px;
+		.toolbar {
+			--round-btn-size: 26px;
 		}
 	}
 </style>

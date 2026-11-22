@@ -356,7 +356,7 @@
 		padding: 0.2rem 0.35rem;
 		border: none;
 		background: none;
-		color: var(--text-4);
+		color: var(--text-2);
 		font-size: 0.6rem;
 		letter-spacing: 0.06em;
 		text-transform: uppercase;
@@ -364,11 +364,11 @@
 	}
 
 	.rail-toggle:hover {
-		color: var(--text-2);
+		color: var(--text);
 	}
 
 	.rail-count {
-		color: var(--text-4);
+		color: var(--text-3);
 		font-family: var(--font-mono);
 	}
 
@@ -571,7 +571,7 @@
 	.rail-name {
 		display: block;
 		padding: 1px 2px;
-		color: var(--text-4);
+		color: var(--text-2);
 		font-size: 0.52rem;
 		line-height: 1.3;
 		white-space: nowrap;
@@ -586,10 +586,10 @@
 		justify-content: center;
 		width: 34px;
 		height: 34px;
-		border: 1px dashed #2e2e2e;
+		border: 1px dashed var(--line-strong);
 		border-radius: 3px;
 		background: none;
-		color: var(--text-4);
+		color: var(--text-3);
 		cursor: pointer;
 	}
 

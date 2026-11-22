@@ -46,6 +46,7 @@
 	import DemoBackground from "./DemoBackground.svelte";
 	import GithubLink from "./GithubLink.svelte";
 	import VersionTag from "./VersionTag.svelte";
+	import RoundButton from "./RoundButton.svelte";
 	import YoutubeLink from "./YoutubeLink.svelte";
 	import InstagramLink from "./InstagramLink.svelte";
 	import FeedbackButton from "./FeedbackButton.svelte";
@@ -990,8 +991,8 @@
 
 	<footer class="corner-bar">
 		{#if demoReady}
-			<button
-				class="demo-toggle"
+			<RoundButton
+				pill
 				onclick={toggleDemo}
 				title={demoPlaying
 					? "Black out the background demo"
@@ -1004,26 +1005,20 @@
 					<Play size={12} />
 					ANIMATE
 				{/if}
-			</button>
+			</RoundButton>
 		{/if}
 		<div class="corner-version"><VersionTag /></div>
 		<div class="corner-links">
-			<button
-				class="storage-btn"
+			<RoundButton
 				onclick={() => (storageOpen = true)}
 				title="Manage stored projects and media"
-				aria-label="Manage storage"
+				label="Manage storage"
 			>
 				<HardDrive size={14} />
-			</button>
-			<a
-				class="storage-btn"
-				href="/about"
-				title="About OpenMosh"
-				aria-label="About OpenMosh"
-			>
+			</RoundButton>
+			<RoundButton href="/about" title="About OpenMosh">
 				<Info size={14} />
-			</a>
+			</RoundButton>
 			<GithubLink />
 			<YoutubeLink />
 			<InstagramLink />
@@ -1114,57 +1109,6 @@
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-	}
-
-	.demo-toggle {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.4rem;
-		padding: 0.35rem 0.75rem;
-		border: 1.5px solid rgba(255, 255, 255, 0.14);
-		border-radius: 999px;
-		background: rgba(10, 10, 12, 0.5);
-		backdrop-filter: blur(16px);
-		-webkit-backdrop-filter: blur(16px);
-		color: #7d7d7d;
-		font-family: inherit;
-		font-size: 0.66rem;
-		font-weight: 600;
-		letter-spacing: 0.08em;
-		cursor: pointer;
-		transition:
-			color 0.2s,
-			border-color 0.2s;
-	}
-
-	.demo-toggle:hover {
-		border-color: rgba(255, 255, 255, 0.32);
-		color: #ccc;
-	}
-
-	/* Same shape as the links beside it. */
-	.storage-btn {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 30px;
-		height: 30px;
-		padding: 0;
-		border-radius: 50%;
-		background: rgba(18, 18, 18, 0.85);
-		border: 1.5px solid var(--line-strong);
-		color: var(--text-3);
-		flex-shrink: 0;
-		box-sizing: border-box;
-		cursor: pointer;
-		transition:
-			border-color 0.2s,
-			color 0.2s;
-	}
-
-	.storage-btn:hover {
-		border-color: var(--line-hover);
-		color: var(--text);
 	}
 
 	.compat {
@@ -1562,7 +1506,7 @@
 		border: none;
 		border-radius: var(--r-pill);
 		background: transparent;
-		color: var(--text-3);
+		color: var(--text-2);
 		font-family: inherit;
 		font-size: 0.8rem;
 		font-weight: 600;
@@ -1573,7 +1517,7 @@
 	}
 
 	.mode-btn:hover {
-		color: var(--text-2);
+		color: var(--text);
 	}
 
 	.mode-btn.active {
@@ -1589,7 +1533,7 @@
 	.mode-n {
 		font-family: var(--font-mono);
 		font-size: 0.6rem;
-		color: var(--text-4);
+		color: var(--text-3);
 		transition: color var(--t);
 	}
 
@@ -1725,7 +1669,7 @@
 	.drop-hint {
 		margin: 0;
 		font-size: 0.78rem;
-		color: var(--text-3);
+		color: var(--text-2);
 		text-align: center;
 		transition: color var(--t);
 	}
@@ -1751,7 +1695,7 @@
 		padding: 0.2rem 0.4rem;
 		border: none;
 		background: none;
-		color: var(--text-3);
+		color: var(--text-2);
 		font-size: 0.78rem;
 		text-decoration: underline;
 		text-underline-offset: 3px;
@@ -1777,7 +1721,7 @@
 		border: none;
 		border-top: 1px solid var(--line);
 		background: rgba(0, 0, 0, 0.25);
-		color: var(--text-3);
+		color: var(--text-2);
 		font-family: inherit;
 		font-size: 0.78rem;
 		text-align: left;
@@ -1809,7 +1753,7 @@
 		font-size: 0.6rem;
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
-		color: var(--text-4);
+		color: var(--text-3);
 	}
 
 	.song-name {

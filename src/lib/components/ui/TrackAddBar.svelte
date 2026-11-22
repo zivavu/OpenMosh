@@ -61,7 +61,7 @@
 		background: none;
 		border: 1px solid var(--line-strong);
 		border-radius: 5px;
-		color: var(--text-3);
+		color: var(--text-2);
 		cursor: pointer;
 		transition:
 			color 0.15s,
@@ -69,7 +69,7 @@
 	}
 
 	.track-add-btn:hover {
-		color: var(--text-2);
+		color: var(--text);
 		border-color: var(--line-hover);
 	}
 
@@ -82,7 +82,7 @@
 		background: rgba(255, 255, 255, 0.02);
 		border-top: 1px solid var(--line);
 		font-size: 0.68rem;
-		color: var(--text-4);
+		color: var(--text-2);
 		line-height: 1.4;
 		flex-shrink: 0;
 	}
@@ -90,7 +90,7 @@
 	.music-hint-dismiss {
 		background: none;
 		border: none;
-		color: var(--text-4);
+		color: var(--text-3);
 		cursor: pointer;
 		font-size: 0.7rem;
 		padding: 0;
@@ -99,6 +99,6 @@
 	}
 
 	.music-hint-dismiss:hover {
-		color: var(--text-3);
+		color: var(--text);
 	}
 </style>
