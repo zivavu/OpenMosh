@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.0.6](https://github.com/zivavu/OpenMosh/compare/v1.0.5...v1.0.6) (2026-11-22)
+
+Tracking has a second look, Blocks, which splits the picture into boxes that follow light, motion or detail and fills them with Invert, Heat, Hue Shift or Mix. The HUD look gets more controls: what its targets follow, brackets, a frame or a reticle around each one, links between them, text size and label type, a crosshair switch, and any color. Line width runs from 0 to 10, and there can be up to 16 targets. Dim text and the edges of buttons, toggles and fields are brighter across the app. Pasting a clip copy that spans several lanes now puts it back on all of them.
+
+Tracking effects already in a project keep their settings and color, and take the defaults for the HUD's new controls, so they now draw links between targets. Set Links to 0 to drop them.
+
+
+### Added
+
+* Give Tracking a Blocks look, and give its HUD a choice of what to follow, brackets, a frame or a reticle, links, text size, labels, a crosshair switch, any color, up to 16 targets and lines from 0 to 10 wide ([c646289](https://github.com/zivavu/OpenMosh/commit/c6462893fe0d5d26f67c810e1c466b1efc369c16), [5786802](https://github.com/zivavu/OpenMosh/commit/5786802165551fe049eefcd8a3e67e652b985a14), [660629c](https://github.com/zivavu/OpenMosh/commit/660629c8b90eed6091bdfaf54b58b26d0302ab15))
+* Brighten dim text and the edges of buttons, toggles and fields, and make the round buttons match ([c8e2782](https://github.com/zivavu/OpenMosh/commit/c8e2782f60857e0400e5457101f80395200e968c), [4cc6a67](https://github.com/zivavu/OpenMosh/commit/4cc6a6798666555f198908cb1a983d34638d047a))
+
+
+### Fixed
+
+* Paste multi-lane clip copies onto all their lanes ([a467f52](https://github.com/zivavu/OpenMosh/commit/a467f52ae22fecff74e23f481f998286c837c4a9))
+
 ## [1.0.5](https://github.com/zivavu/OpenMosh/compare/v1.0.4...v1.0.5) (2026-11-18)
 
 The editor has keyframes. Effect sliders can change over their clip, and a media layer's position, size, rotation and opacity over the timeline. Each animated setting gets its own row under its lane, where you can move, copy, ease and repeat keys, snap them to the song's beat, or record a slider's moves while the song plays. Settings can also be grouped to follow one curve. Outside keyframes: hold Ctrl to drag sliders, clips and keys slowly, and Ctrl+scroll zooms the timeline from anywhere over it. Trimming a clip's start leaves its footage where it was. Projects can run up to ten hours, and removing media or deleting a preset can be undone. Effects no longer pixelate a media layer, and sliders stay smooth in long projects.
