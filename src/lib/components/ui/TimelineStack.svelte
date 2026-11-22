@@ -808,7 +808,7 @@
 
 	.tl-selbar-hint {
 		margin: 0 auto;
-		color: var(--text-4);
+		color: var(--text-2);
 		font-size: 0.62rem;
 		letter-spacing: 0.03em;
 	}
@@ -824,7 +824,7 @@
 		font-size: 0.58rem;
 		font-weight: 600;
 		letter-spacing: 0.14em;
-		color: var(--text-3);
+		color: var(--text-2);
 		text-transform: uppercase;
 		flex-shrink: 0;
 		/* Centres the caps rather than the line box, which sat them high beside icons. */
@@ -905,7 +905,7 @@
 		font-size: 0.58rem;
 		font-weight: 600;
 		letter-spacing: 0.14em;
-		color: var(--text-3);
+		color: var(--text-2);
 		text-transform: uppercase;
 	}
 
@@ -1109,7 +1109,7 @@
 		position: absolute;
 		bottom: calc(-1 * var(--tl-scale-h));
 		left: 3px;
-		color: var(--text-3);
+		color: var(--text-2);
 		font-family: var(--font-mono);
 		font-size: 0.53rem;
 		font-variant-numeric: tabular-nums;

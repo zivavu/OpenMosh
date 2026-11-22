@@ -802,7 +802,7 @@
 		height: 100%;
 		background: none;
 		border: none;
-		color: var(--text-4);
+		color: var(--text-3);
 		cursor: pointer;
 		display: flex;
 		align-items: center;
@@ -812,7 +812,7 @@
 	}
 
 	.expand-btn:hover {
-		color: var(--text-3);
+		color: var(--text);
 		background: var(--surface);
 	}
 
@@ -862,7 +862,7 @@
 	.collapse-btn {
 		background: none;
 		border: none;
-		color: var(--text-4);
+		color: var(--text-3);
 		cursor: pointer;
 		width: 18px;
 		height: 18px;
@@ -874,7 +874,7 @@
 	}
 
 	.add-btn {
-		border: 1px solid var(--line);
+		border: 1px solid var(--line-strong);
 	}
 
 	.add-btn.held {
@@ -887,7 +887,7 @@
 	}
 
 	.collapse-btn:hover {
-		color: var(--text-2);
+		color: var(--text);
 		background: var(--raised);
 	}
 
@@ -901,7 +901,7 @@
 	}
 
 	.search-bar :global(.search-icon) {
-		color: var(--text-4);
+		color: var(--text-3);
 		flex-shrink: 0;
 	}
 
@@ -915,10 +915,6 @@
 		font-size: 0.65rem;
 		font-family: inherit;
 		outline: none;
-	}
-
-	.search-input::placeholder {
-		color: var(--text-4);
 	}
 
 	.search-clear {
@@ -943,7 +939,7 @@
 	.empty {
 		padding: 1rem 0.8rem;
 		font-size: 0.65rem;
-		color: var(--text-4);
+		color: var(--text-2);
 		line-height: 1.6;
 	}
 
@@ -1028,7 +1024,7 @@
 		background: none;
 		border: none;
 		border-radius: var(--r-1);
-		color: var(--text-3);
+		color: var(--text-2);
 		font-family: inherit;
 		font-size: 0.65rem;
 		font-weight: 600;
@@ -1039,7 +1035,7 @@
 	}
 
 	.tab:hover {
-		color: var(--text-2);
+		color: var(--text);
 	}
 
 	.tab.active {

@@ -249,7 +249,7 @@
 		background: none;
 		border: none;
 		border-radius: var(--r-2);
-		color: var(--text-3);
+		color: var(--text-2);
 		font-family: var(--font-ui);
 		font-size: 0.8rem;
 		text-align: left;
@@ -261,7 +261,7 @@
 	}
 
 	.tab:hover {
-		color: var(--text-2);
+		color: var(--text);
 		background: var(--raised);
 	}
 
@@ -296,7 +296,7 @@
 	.tab-n {
 		font-family: var(--font-mono);
 		font-size: 0.6rem;
-		color: var(--text-4);
+		color: var(--text-3);
 		width: 0.6rem;
 	}
 
@@ -309,7 +309,7 @@
 		padding: 0.75rem 0.6rem 0;
 		font-size: 0.68rem;
 		line-height: 1.45;
-		color: var(--text-4);
+		color: var(--text-2);
 		text-wrap: pretty;
 	}
 

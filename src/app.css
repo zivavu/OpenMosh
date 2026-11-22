@@ -165,6 +165,12 @@ button:active {
 
 /* Every select: our own chevron, and a dark list. Hosts set the colors, the font,
    padding-block and padding-left; the shorthands would wipe the chevron. */
+/* Bright enough to read, a step under what gets typed over it. */
+::placeholder {
+	color: var(--text-2);
+	opacity: 1;
+}
+
 select {
 	appearance: none;
 	color-scheme: dark;

@@ -324,7 +324,7 @@
 		background: none;
 		border: none;
 		border-radius: var(--r-1);
-		color: var(--text-3);
+		color: var(--text-2);
 		font-family: inherit;
 		font-size: 0.72rem;
 		font-weight: 600;
@@ -335,7 +335,7 @@
 	}
 
 	.tab:hover {
-		color: var(--text-2);
+		color: var(--text);
 	}
 
 	.tab.active {
@@ -352,7 +352,7 @@
 	.tab-count {
 		font-family: var(--font-mono);
 		font-size: 0.6rem;
-		color: var(--text-4);
+		color: var(--text-3);
 	}
 
 	.hint {

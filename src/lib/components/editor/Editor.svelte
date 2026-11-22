@@ -245,6 +245,7 @@
 	import SequenceGridView from "./SequenceGridView.svelte";
 	import MediaPoolActions from "../ui/MediaPoolActions.svelte";
 	import TopBar from "../ui/TopBar.svelte";
+	import RoundButton from "../ui/RoundButton.svelte";
 	import SaveIndicator from "../ui/SaveIndicator.svelte";
 	import { SaveTracker } from "../../editor/save-status.svelte";
 	import SourceRail from "./SourceRail.svelte";
@@ -3058,13 +3059,12 @@
 					onClear={() => (showClearSourcesConfirm = true)}
 				/>
 			{:else}
-				<button
-					class="help-btn"
+				<RoundButton
 					title="Generate a new source image"
 					onclick={() => (generateOpen = true)}
 				>
 					<Palette size={14} />
-				</button>
+				</RoundButton>
 				<div class="output-group">
 					<span class="rack-label">Output</span>
 					{@render formatPicker()}
