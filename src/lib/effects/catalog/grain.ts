@@ -37,12 +37,13 @@ export const shader: EffectShaderDef = {
 uniform float u_rgb;
 uniform int u_blendMode;
 uniform vec2 u_resolution;
-// Sine-free hash (Dave Hoskins): stable on ANGLE/D3D where fract(sin(x)*K)
-// collapses to a constant for large x, which pixel coords hit.
-float hash(vec2 p) {
-  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
-  p3 += dot(p3, p3.yzx + 33.33);
-  return fract((p3.x + p3.y) * p3.z);
+// PCG integer hash: no float precision loss, so no visible tiling at any size.
+uvec3 pcg3d(uvec3 v) {
+  v = v * 1664525u + 1013904223u;
+  v.x += v.y * v.z; v.y += v.z * v.x; v.z += v.x * v.y;
+  v ^= v >> 16u;
+  v.x += v.y * v.z; v.y += v.z * v.x; v.z += v.x * v.y;
+  return v;
 }
 vec3 blendSoftLight(vec3 base, vec3 blend) {
   return mix(
@@ -53,16 +54,28 @@ vec3 blendSoftLight(vec3 base, vec3 blend) {
 }
 void main() {
   vec4 c = texture(u_texture, v_uv);
-  float frame = floor(u_time * 24.0);
-
-  // Hard per-pixel speckle: one hash per pixel, no interpolation, so grains
-  // re-seat every frame and boil like film.
-  vec2 p = floor(v_uv * u_resolution) + frame * vec2(13.7, 57.3);
-
-  // RGB mode gives each channel its own grain -> colored speckle
-  vec3 g = u_rgb > 0.5
-    ? vec3(hash(p), hash(p + 19.19), hash(p + 47.47))
-    : vec3(hash(p));
+  // Per-pixel noise, then a gaussian blur sized in effect-frame pixels: soft grains with
+  // no hard pixel edges, so a scaled preview can't beat them into a grid, and the grain
+  // keeps its size in an export.
+  float scale = 1.0 / (abs(dFdx(v_uv.x)) * u_resolution.x);
+  float sigma = clamp(0.7 * scale, 0.7, 1.2);
+  uint frame = uint(max(floor(u_time * 24.0), 0.0));
+  ivec2 px = ivec2(gl_FragCoord.xy) + 4;
+  vec3 sum = vec3(0.0);
+  float wSum = 0.0;
+  float w2Sum = 0.0;
+  for (int y = -2; y <= 2; y++) {
+    for (int x = -2; x <= 2; x++) {
+      float w = exp(-float(x * x + y * y) / (2.0 * sigma * sigma));
+      uvec3 h = pcg3d(uvec3(uvec2(px + ivec2(x, y)), frame));
+      sum += w * vec3(h) * (1.0 / 4294967296.0);
+      wSum += w;
+      w2Sum += w * w;
+    }
+  }
+  // Blurring lowers the spread; scale it back to that of one pixel's noise.
+  vec3 n = (sum / wSum - 0.5) * (wSum / sqrt(w2Sum));
+  vec3 g = clamp(0.5 + (u_rgb > 0.5 ? n : vec3(n.x)), 0.0, 1.0);
 
   vec3 result;
   if (u_blendMode == 0) {
@@ -75,7 +88,6 @@ void main() {
   }
   outColor = vec4(clamp(result, 0.0, 1.0), c.a);
 }`,
-	animated: true,
 	setUniforms: (gl, l, v) => {
 		setFloat(gl, l, "u_amount", v.amount as number);
 		setFloat(gl, l, "u_rgb", v.rgb as number);
@@ -83,4 +95,5 @@ void main() {
 			v.blendMode === "softlight" ? 1 : v.blendMode === "multiply" ? 2 : 0;
 		setInt(gl, l, "u_blendMode", mode);
 	},
+	animated: true,
 };
