@@ -2,15 +2,18 @@ import { describe, expect, it } from "bun:test";
 import {
 	EFFECT_DEFINITIONS,
 	FREQ_PRESETS,
+	getDefinition,
 	loadInitialEffects,
 } from "../effects";
 import { withSeededRandom } from "./sequence";
 import { MASK_EFFECT_ID } from "../effects/catalog/mask";
 import {
 	applyRandomAudioLinks,
+	canReroll,
 	clearEffects,
 	generateMosh,
 	randomizeParams,
+	rerollEffect,
 	type MoshOptions,
 } from "./mosh";
 
@@ -84,6 +87,87 @@ describe("randomizeParams", () => {
 		randomizeParams(values, def);
 		expect(typeof values.a).toBe("number");
 		expect(Number.isFinite(values.a as number)).toBe(true);
+	});
+});
+
+describe("rerollEffect", () => {
+	/** The first effect with a slider, switched off, its first slider keyed and linked. */
+	function keyedAndLinked() {
+		const effect = loadInitialEffects().find(
+			(e) =>
+				canReroll(e) &&
+				getDefinition(e.defId)!.params.some((p) => p.type === "range"),
+		)!;
+		const param = getDefinition(effect.defId)!.params.find(
+			(p) => p.type === "range",
+		)!;
+		effect.enabled = false;
+		effect.keys = { [param.key]: [{ t: 0, v: 0 }] };
+		effect.volumeLinks = {
+			[param.key]: { min: -1, max: -1, freqMin: 20, freqMax: 500 },
+		};
+		return { effect, key: param.key };
+	}
+
+	it("switches the effect on and drops its keys", () => {
+		const { effect } = keyedAndLinked();
+		rerollEffect(effect);
+		expect(effect.enabled).toBe(true);
+		expect(effect.keys).toBeUndefined();
+	});
+
+	it("rolls a linked slider's range and keeps its band", () => {
+		const { effect, key } = keyedAndLinked();
+		rerollEffect(effect);
+		const link = effect.volumeLinks![key];
+		expect(link.min).not.toBe(-1);
+		expect(link.max).toBeGreaterThan(link.min);
+		expect(link.freqMin).toBe(20);
+		expect(link.freqMax).toBe(500);
+	});
+
+	it("rolls only the effect it's given", () => {
+		const effects = loadInitialEffects();
+		const before = structuredClone(effects);
+		const at = effects.findIndex(canReroll);
+		withSeededRandom(3, () => rerollEffect(effects[at]));
+		effects.forEach((e, i) => {
+			if (i !== at) expect(e).toEqual(before[i]);
+		});
+		expect(effects[at].values).not.toEqual(before[at].values);
+	});
+
+	it("rolls an effect's colors", () => {
+		const trio = loadInitialEffects().find((e) => e.defId === "trio-tone")!;
+		const colorKeys = getDefinition(trio.defId)!
+			.params.filter((p) => p.type === "color")
+			.map((p) => p.key);
+		const before = colorKeys.map((k) => trio.values[k]);
+		withSeededRandom(5, () => rerollEffect(trio));
+		const after = colorKeys.map((k) => trio.values[k]);
+		expect(after).not.toEqual(before);
+		for (const c of after) expect(c).toMatch(/^#[0-9a-f]{6}$/);
+	});
+
+	it("rolls an effect's checkboxes", () => {
+		const strobe = loadInitialEffects().find((e) => e.defId === "rgb-strobe")!;
+		const seen = new Set<string>();
+		for (let seed = 1; seed <= 20; seed++) {
+			withSeededRandom(seed, () => rerollEffect(strobe));
+			seen.add(
+				`${strobe.values.red}${strobe.values.green}${strobe.values.blue}`,
+			);
+		}
+		expect(seen.size).toBeGreaterThan(1);
+		for (const combo of seen) expect(combo).toMatch(/^[01]{3}$/);
+	});
+
+	it("leaves a Mask alone", () => {
+		const mask = loadInitialEffects().find((e) => e.defId === MASK_EFFECT_ID)!;
+		const before = structuredClone(mask);
+		expect(canReroll(mask)).toBe(false);
+		rerollEffect(mask);
+		expect(mask).toEqual(before);
 	});
 });
 

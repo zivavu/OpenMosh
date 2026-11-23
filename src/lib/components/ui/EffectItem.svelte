@@ -10,6 +10,7 @@
 		ChevronRight,
 		ChevronUp,
 		Copy,
+		Dices,
 		Eye,
 		EyeOff,
 		GripVertical,
@@ -122,6 +123,8 @@
 		/** Hide from the effect list (a persisted preference, not a chain edit). */
 		onHide: () => void;
 		onDuplicate: () => void;
+		/** Roll this effect's settings and switch it on. Unset where there's nothing to roll. */
+		onReroll?: () => void;
 		/** True when the chain holds other copies of this effect; hiding one copy
 		 * would be a chain edit, so it removes instead. */
 		isCopy?: boolean;
@@ -177,6 +180,7 @@
 		onToggleExpand,
 		onHide,
 		onDuplicate,
+		onReroll,
 		isCopy = false,
 		onMove,
 		canMoveUp,
@@ -476,6 +480,16 @@
 				{/if}
 
 				<div class="controls">
+					{#if onReroll && !rolledChain}
+						<button
+							class="icon-btn"
+							onclick={onReroll}
+							title="Reroll: rolls fresh settings and switches it on"
+							aria-label="Reroll effect"
+						>
+							<Dices size={13} />
+						</button>
+					{/if}
 					<button
 						class="icon-btn"
 						onclick={onDuplicate}

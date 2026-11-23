@@ -4,11 +4,13 @@ import {
 	type EffectDefinition,
 	type EffectInstance,
 	type FreqBand,
+	type RangeParam,
 	type VolumeLink,
 } from "../effects";
 import { TRANSFORM_3D_ID } from "../mesh/camera";
 import { isMaskEffect } from "../effects/catalog/mask";
 import { shuffleInPlace } from "../utils";
+import { hsvToHex } from "../color";
 import type { Family } from "../effects/curation";
 import { curationOf, isCurated } from "../effects/curation";
 import { applyHierarchy, curatedOrder, pickCurated } from "./curated-mosh";
@@ -90,6 +92,31 @@ export function randomizeParams(
 	}
 }
 
+/** A random range for a param's music link; `strength` (0-1) sets how wide it runs. */
+function randomLinkRange(
+	param: RangeParam,
+	strength: number,
+): { min: number; max: number } {
+	const pMin = param.moshMin ?? param.min;
+	const pMax = param.moshMax ?? param.max;
+	const span = pMax - pMin;
+	// Center position is independent of width so they don't limit each other
+	const centerT = Math.random();
+	// Width is guaranteed [50%-100%] of span at strength=1, scaled down linearly
+	const widthFraction = strength * (0.5 + Math.random() * 0.5);
+	const halfW = widthFraction / 2;
+	let min = pMin + Math.max(0, centerT - halfW) * span;
+	let max = pMin + Math.min(1, centerT + halfW) * span;
+	if (param.step > 0) {
+		const snap = (v: number) =>
+			Math.round((v - pMin) / param.step) * param.step + pMin;
+		min = snap(min);
+		max = snap(max);
+		if (max <= min) max = Math.min(pMax, min + param.step);
+	}
+	return { min, max };
+}
+
 /** Link a random share of range params to the music, all on the same band. */
 export function applyRandomAudioLinks(
 	effects: EffectInstance[],
@@ -121,24 +148,7 @@ export function applyRandomAudioLinks(
 			// Probability scales with strength: at 1.0 all params linked, at 0.0 none
 			if (Math.random() > strength) continue;
 
-			const pMin = param.moshMin ?? param.min;
-			const pMax = param.moshMax ?? param.max;
-			const span = pMax - pMin;
-			// Center position is independent of width so they don't limit each other
-			const centerT = Math.random();
-			// Width is guaranteed [50%-100%] of span at strength=1, scaled down linearly
-			const widthFraction = strength * (0.5 + Math.random() * 0.5);
-			const halfW = widthFraction / 2;
-			let vMin = pMin + Math.max(0, centerT - halfW) * span;
-			let vMax = pMin + Math.min(1, centerT + halfW) * span;
-
-			if (param.step > 0) {
-				const snap = (v: number) =>
-					Math.round((v - pMin) / param.step) * param.step + pMin;
-				vMin = snap(vMin);
-				vMax = snap(vMax);
-				if (vMax <= vMin) vMax = Math.min(pMax, vMin + param.step);
-			}
+			const { min: vMin, max: vMax } = randomLinkRange(param, strength);
 
 			// One band for the whole roll, chosen by the user; a random band per param reads as noise.
 			links[param.key] =
@@ -326,6 +336,51 @@ function rollCurated(
 		(e) => pool.includes(e),
 		(e) => order.indexOf(e),
 	);
+}
+
+/** Text is the user's words, and paint, images and keys belong to a Mask. */
+const ROLLED_TYPES = new Set(["range", "select", "color", "checkbox"]);
+
+/** A vivid color: any hue, never grey or near black. */
+function randomColor(): string {
+	return hsvToHex({
+		h: Math.random() * 360,
+		s: 0.6 + Math.random() * 0.4,
+		v: 0.55 + Math.random() * 0.45,
+	});
+}
+
+/** Effects with a per-effect reroll: a Mask is only what the user drew, and an
+ * effect with only words has nothing to roll. */
+export function canReroll(effect: EffectInstance): boolean {
+	const def = getDefinition(effect.defId);
+	return (
+		!!def &&
+		!isMaskEffect(effect) &&
+		def.params.some((p) => ROLLED_TYPES.has(p.type))
+	);
+}
+
+/** One effect rolled on its own, in place, and switched on. Its music links keep
+ * their params and band and get fresh ranges; its keys go, as with any roll. */
+export function rerollEffect(effect: EffectInstance): void {
+	const def = getDefinition(effect.defId);
+	if (!def || !canReroll(effect)) return;
+	randomizeParams(effect.values, def);
+	for (const param of def.params) {
+		if (param.type === "color") effect.values[param.key] = randomColor();
+		if (param.type === "checkbox")
+			effect.values[param.key] = Math.random() < 0.5 ? 0 : 1;
+		const link = effect.volumeLinks?.[param.key];
+		if (!link || param.type !== "range") continue;
+		effect.volumeLinks![param.key] = {
+			...link,
+			...randomLinkRange(param, 0.8),
+		};
+	}
+	delete effect.keys;
+	delete effect.keyLinks;
+	effect.enabled = true;
 }
 
 export function clearEffects(effects: EffectInstance[]): void {
