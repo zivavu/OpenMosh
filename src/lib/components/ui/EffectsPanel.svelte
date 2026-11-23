@@ -52,7 +52,7 @@
 	} from "../../effects/link-bands";
 	import type { FreqBand } from "../../effects";
 	import { linkBand } from "../../editor/link-band.svelte";
-	import { isMoshable } from "../../editor/mosh";
+	import { canReroll, isMoshable, rerollEffect } from "../../editor/mosh";
 	import { keepLockedInPreset } from "../../editor/sequence";
 	import EffectItem from "./EffectItem.svelte";
 	import { showToast, UNDO_TOAST_MS } from "./toast.svelte";
@@ -440,6 +440,15 @@
 
 	function isCopy(effect: EffectInstance): boolean {
 		return (defCounts.get(effect.defId) ?? 0) > 1;
+	}
+
+	function reroll(index: number) {
+		onBeforeUserEdit?.();
+		const effect = effects[index];
+		hold(effect);
+		rerollEffect(effect);
+		appliedIndex = null;
+		onUserEdit?.();
 	}
 
 	function duplicate(index: number) {
@@ -1209,6 +1218,7 @@
 					onToggleExpand={() => toggleExpand(i)}
 					onHide={() => hide(i)}
 					onDuplicate={() => duplicate(i)}
+					onReroll={canReroll(effect) ? () => reroll(i) : undefined}
 					isCopy={isCopy(effect)}
 					onParamChange={(key, value, history) =>
 						paramChange(i, key, value, history)}
