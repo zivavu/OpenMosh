@@ -24,6 +24,24 @@ export const definition: EffectDefinition = {
 			step: 0.01,
 			defaultValue: 0.5,
 		},
+		{
+			key: "centerX",
+			label: "Center X",
+			type: "range",
+			min: 0,
+			max: 1,
+			step: 0.01,
+			defaultValue: 0.5,
+		},
+		{
+			key: "centerY",
+			label: "Center Y",
+			type: "range",
+			min: 0,
+			max: 1,
+			step: 0.01,
+			defaultValue: 0.5,
+		},
 	],
 };
 
@@ -32,8 +50,11 @@ export const shader: EffectShaderDef = {
 		H +
 		`uniform float u_amount;
 uniform float u_radius;
+uniform float u_centerX;
+uniform float u_centerY;
 void main() {
-  vec2 uv = v_uv - 0.5;
+  vec2 c = vec2(u_centerX, u_centerY);
+  vec2 uv = v_uv - c;
   float p = length(uv) / u_radius;
   if (p < 1.0) {
     // Bounded zoom (at most ~16x) so the centre magnifies instead of smearing into rays.
@@ -41,7 +62,7 @@ void main() {
     float q = 1.0 - p * p;
     uv *= 1.0 - a * q * q;
   }
-  outColor = texture(u_texture, uv + 0.5);
+  outColor = texture(u_texture, uv + c);
 }`,
-	setUniforms: floats("amount", "radius"),
+	setUniforms: floats("amount", "radius", "centerX", "centerY"),
 };
