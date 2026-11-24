@@ -1408,40 +1408,32 @@
 		color: var(--text-2);
 	}
 
-	/* At rest a strip is its number, its name and its switch. The rest of the tools
-	   keep their space but only show for the strip under the pointer, the one with
-	   focus, or an open one, so the chain reads as a list rather than a control
-	   panel. Touch has no hover, so there they are always on. */
-	.icon-btn,
-	.move-btns,
-	.drag-handle {
-		opacity: 0;
-		transition: opacity var(--t-fast);
+	/* At rest a strip is its number, its name and its switch; the name gets the room
+	   the other tools take. They show for the strip under the pointer, the one with
+	   focus, or an open one. Touch has no hover, so there they are always on. */
+	.controls {
+		min-height: 22px;
 	}
 
-	.effect-item:hover .icon-btn,
-	.effect-item:hover .move-btns,
-	.effect-item:hover .drag-handle,
-	.effect-item:focus-within .icon-btn,
-	.effect-item:focus-within .move-btns,
-	.effect-item:focus-within .drag-handle,
-	.effect-item.expanded .icon-btn,
-	.effect-item.expanded .move-btns,
-	.effect-item.expanded .drag-handle {
-		opacity: 1;
+	.controls > .icon-btn,
+	.controls > .move-btns,
+	.controls > .drag-handle {
+		display: none;
+	}
+
+	.effect-item:is(:hover, :focus-within, .expanded) .controls > * {
+		display: flex;
 	}
 
 	/* A lock stays in sight: it changes what the next mosh does. */
-	.effect-item .lock-btn.locked {
-		opacity: 1;
+	.controls > .lock-btn.locked {
+		display: flex;
 		color: var(--mosh);
 	}
 
 	@media (pointer: coarse) {
-		.icon-btn,
-		.move-btns,
-		.drag-handle {
-			opacity: 1;
+		.effect-item .controls > * {
+			display: flex;
 		}
 	}
 
