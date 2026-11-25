@@ -71,7 +71,7 @@
 		border: 1px solid var(--line);
 		color: var(--text);
 		font-size: 0.85rem;
-		max-width: 320px;
+		max-width: min(320px, calc(100vw - 2rem));
 		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 		animation: slideIn 0.2s ease;
 	}
@@ -92,7 +92,9 @@
 
 	.message {
 		flex: 1;
+		min-width: 0;
 		line-height: 1.4;
+		overflow-wrap: anywhere;
 	}
 
 	.action {
@@ -120,6 +122,7 @@
 	}
 
 	.close {
+		flex-shrink: 0;
 		background: none;
 		border: none;
 		color: var(--text-3);
