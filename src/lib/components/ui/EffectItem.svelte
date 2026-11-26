@@ -1293,6 +1293,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 1px;
+		height: 22px;
 	}
 
 	.move-btn {
@@ -1300,7 +1301,8 @@
 		align-items: center;
 		justify-content: center;
 		width: 18px;
-		height: 11px;
+		flex: 1 1 0;
+		min-height: 0;
 		background: none;
 		border: none;
 		color: var(--text-4);
@@ -1410,9 +1412,10 @@
 
 	/* At rest a strip is its number, its name and its switch; the name gets the room
 	   the other tools take. They show for the strip under the pointer, the one with
-	   focus, or an open one. Touch has no hover, so there they are always on. */
+	   focus, or an open one. Touch has no hover, so there they are always on. The
+	   height is pinned, not a minimum: a tool taller than the rest grew the strip. */
 	.controls {
-		min-height: 22px;
+		height: 22px;
 	}
 
 	.controls > .icon-btn,
