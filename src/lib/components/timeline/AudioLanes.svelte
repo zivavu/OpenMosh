@@ -32,12 +32,13 @@
 	import LaneWaveform from "./LaneWaveform.svelte";
 	import RepeatButton from "./RepeatButton.svelte";
 	import ClipVolume from "./ClipVolume.svelte";
+	import ClipFades from "./ClipFades.svelte";
+	import { AudioClipSelection } from "../../editor/audio-clip-selection.svelte";
 
 	const LANE_HEIGHT = 30;
 	const LANE_FOLDED_HEIGHT = 14;
 	const NO_FOLDS: ReadonlySet<string> = new Set();
 	const MIN_LABEL_PX = 44;
-	const FADES = [0.1, 0.25, 0.5, 1, 2, 5, 10];
 
 	interface Props {
 		lanes: AudioLane[];
@@ -180,52 +181,19 @@
 		return stack.registerSelectionBar("audio", clipBar);
 	});
 
-	function common<T>(values: T[]): T | undefined {
-		return values.every((v) => v === values[0]) ? values[0] : undefined;
-	}
-
-	let allLoop = $derived(selectedClips.every((c) => c.loop));
-	/** The one source the selection plays, if that's all it plays. */
-	let commonSource = $derived(common(selectedClips.map((c) => c.sourceId)));
-	let commonGain = $derived(common(selectedClips.map((c) => c.gain ?? 1)));
-	let commonFadeIn = $derived(
-		common(selectedClips.map((c) => c.fadeInSec ?? 0)),
-	);
-	let commonFadeOut = $derived(
-		common(selectedClips.map((c) => c.fadeOutSec ?? 0)),
-	);
-
-	function updateSelected(
-		fn: (clip: AudioClip) => AudioClip,
-		coalesceKey?: string,
-	) {
-		const ids = new Set(selectedClipIds);
-		onBeforeEdit?.(coalesceKey);
-		onChange(
-			lanes.map((l) =>
-				l.clips.some((c) => ids.has(c.id))
-					? { ...l, clips: l.clips.map((c) => (ids.has(c.id) ? fn(c) : c)) }
-					: l,
-			),
-		);
-	}
-
-	/** The lanes the selected clips sit on, whose Drives switch the bar sets. */
-	let selectedLanes = $derived(
-		lanes.filter((l) => l.clips.some((c) => selectedClipIds.includes(c.id))),
-	);
-	let allDrive = $derived(
-		selectedLanes.length > 0 && selectedLanes.every((l) => l.drives),
-	);
+	const selection = new AudioClipSelection({
+		get lanes() {
+			return lanes;
+		},
+		get clipIds() {
+			return selectedClipIds;
+		},
+		onChange: (next) => onChange(next),
+		onBeforeEdit: (key) => onBeforeEdit?.(key),
+	});
 	let laneNoun = $derived(
-		selectedLanes.length > 1 ? "these clips' lanes" : "this clip's lane",
+		selection.lanes.length > 1 ? "these clips' lanes" : "this clip's lane",
 	);
-
-	function setDrives(drives: boolean) {
-		const ids = new Set(selectedLanes.map((l) => l.id));
-		onBeforeEdit?.();
-		onChange(lanes.map((l) => (ids.has(l.id) ? { ...l, drives } : l)));
-	}
 
 	function segmentsOf(laneId: string): MixSegment[] {
 		return plan.filter((s) => s.laneId === laneId);
@@ -507,31 +475,25 @@
 				>{selectionName}</span
 			>
 			<ClipVolume
-				value={commonGain}
-				onInput={(v) =>
-					updateSelected(
-						(c) => ({ ...c, gain: v === 1 ? undefined : v }),
-						`audio-gain-${selectedClipIds.join(",")}`,
-					)}
-				onReset={() => updateSelected((c) => ({ ...c, gain: undefined }))}
+				value={selection.gain}
+				onInput={(v) => selection.setGain(v)}
+				onReset={() => selection.resetGain()}
 			/>
 			<div class="tl-tool-sep"></div>
 			<button
 				class="tl-tool-btn"
-				class:active={allLoop}
-				aria-pressed={allLoop}
-				title={allLoop
+				class:active={selection.allLoop}
+				aria-pressed={selection.allLoop}
+				title={selection.allLoop
 					? "Looping: the sound starts over when it runs out. Click to play it once."
 					: "Loop: start the sound over when it runs out, then drag the clip's end out as far as you want"}
-				onclick={() => {
-					const loop = !allLoop;
-					updateSelected((c) => ({ ...c, loop: loop || undefined }));
-				}}
+				onclick={() => selection.setLoop(!selection.allLoop)}
 			>
 				<Repeat size={12} /> Loop
 			</button>
-			{#if commonSource && onSetBpmSource}
-				{@const isSource = commonSource === bpmSourceId}
+			{#if selection.sourceId && onSetBpmSource}
+				{@const sourceId = selection.sourceId}
+				{@const isSource = sourceId === bpmSourceId}
 				<button
 					class="tl-tool-btn"
 					class:active={isSource}
@@ -539,45 +501,27 @@
 					title={isSource
 						? "The BPM comes from this sound"
 						: "Measure the BPM from this sound instead, and time the beat grid by it"}
-					onclick={() => onSetBpmSource(commonSource)}
+					onclick={() => onSetBpmSource(sourceId)}
 				>
 					<Metronome size={12} /> BPM source
 				</button>
 			{/if}
 			<button
 				class="tl-tool-btn drives"
-				class:active={allDrive}
-				aria-pressed={allDrive}
-				title={allDrive
+				class:active={selection.allDrive}
+				aria-pressed={selection.allDrive}
+				title={selection.allDrive
 					? `Effects react to the sound on ${laneNoun}. Click to stop.`
 					: `Let the sound on ${laneNoun} drive the audio links, so effects react to it`}
-				onclick={() => setDrives(!allDrive)}
+				onclick={() => selection.setDrives(!selection.allDrive)}
 			>
 				<Activity size={12} /> Drives FX
 			</button>
-			<div class="tl-tool-sep"></div>
-			{#each [["Fade in", "fadeInSec", commonFadeIn], ["Fade out", "fadeOutSec", commonFadeOut]] as const as [label, key, value] (key)}
-				<span class="tl-tool-label">{label}</span>
-				<select
-					class="audio-select"
-					aria-label={label}
-					value={value === undefined ? "" : String(value)}
-					onchange={(e) => {
-						const v = e.currentTarget.value;
-						if (v === "") return;
-						const sec = Number(v);
-						updateSelected((c) => ({ ...c, [key]: sec > 0 ? sec : undefined }));
-					}}
-				>
-					{#if value === undefined}
-						<option value="" disabled>—</option>
-					{/if}
-					<option value="0">none</option>
-					{#each FADES as sec}
-						<option value={String(sec)}>{sec}s</option>
-					{/each}
-				</select>
-			{/each}
+			<ClipFades
+				fadeInSec={selection.fadeInSec}
+				fadeOutSec={selection.fadeOutSec}
+				onFade={(edge, sec) => selection.setFade(edge, sec)}
+			/>
 			<RepeatButton clipIds={selectedClipIds} />
 		</div>
 	{/if}
@@ -657,7 +601,7 @@
 		min-width: 0;
 		display: flex;
 		align-items: center;
-		justify-content: center;
+		justify-content: safe center;
 		gap: 0.35rem;
 		padding: 0 0.25rem;
 	}
@@ -667,15 +611,5 @@
 		font-weight: 600;
 		color: var(--live);
 		white-space: nowrap;
-	}
-
-	.audio-select {
-		padding-block: 0.15rem;
-		padding-left: 0.25rem;
-		border-radius: 4px;
-		background-color: var(--surface);
-		color: var(--text-2);
-		font-size: 0.65rem;
-		font-family: inherit;
 	}
 </style>

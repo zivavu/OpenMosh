@@ -28,6 +28,8 @@
 		children?: Snippet;
 		/** The lane kind's own controls, after the clip's name. */
 		leading?: Snippet;
+		/** The lane kind's own controls, just before Repeat. */
+		trailing?: Snippet;
 		/** Every selected clip plays a slideshow, whose auto mosh rolls on its cuts. */
 		rollsOnCuts?: boolean;
 	}
@@ -43,6 +45,7 @@
 		onModeChange,
 		children,
 		leading,
+		trailing,
 		rollsOnCuts = false,
 	}: Props = $props();
 
@@ -203,6 +206,7 @@
 				{/each}
 			</select>
 		{/if}
+		{@render trailing?.()}
 		<RepeatButton clipIds={ids} />
 	</div>
 {/if}
@@ -214,7 +218,8 @@
 		min-width: 0;
 		display: flex;
 		align-items: center;
-		justify-content: center;
+		/* Safe: plain centring spills a wide bar past the left edge, out of scroll reach. */
+		justify-content: safe center;
 		gap: 0.35rem;
 		padding: 0 0.25rem;
 	}

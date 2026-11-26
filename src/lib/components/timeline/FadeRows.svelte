@@ -1,6 +1,7 @@
 <script lang="ts">
 	import RangeSlider from "../ui/RangeSlider.svelte";
 	import { seconds } from "../../value-field";
+	import type { FadeEdge } from "../../timeline/clips";
 
 	/** Fade in / fade out for a layer clip, each edge on its own. */
 	interface Props {
@@ -8,7 +9,7 @@
 		/** What ramps: "this layer", "this text". */
 		noun: string;
 		idPrefix: string;
-		onFade: (edge: "fadeInSec" | "fadeOutSec", sec: number) => void;
+		onFade: (edge: FadeEdge, sec: number) => void;
 	}
 
 	let { clip, noun, idPrefix, onFade }: Props = $props();

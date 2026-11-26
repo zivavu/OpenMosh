@@ -613,6 +613,9 @@ export function replaceClipIn<C extends TimelineClip, L extends ClipLane<C>>(
 	return updateClipsIn(lanes, new Set([next.id]), () => next);
 }
 
+/** A clip edge that can ramp: its fade in or its fade out. */
+export type FadeEdge = "fadeInSec" | "fadeOutSec";
+
 /** How strongly a clip applies at `time`: 1 across the body, ramping from 0 at
  * each edge that has a fade. */
 export function clipFadeWeight(
