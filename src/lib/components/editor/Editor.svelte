@@ -239,6 +239,7 @@
 	import TextTimelineLane from "../text/TextTimeline.svelte";
 	import MediaTimelineLane from "../media/MediaTimeline.svelte";
 	import MediaClipPanel from "../media/MediaClipPanel.svelte";
+	import AudioClipPanel from "../timeline/AudioClipPanel.svelte";
 	import type { LyricsSyncProps } from "../text/LyricsSyncModal.svelte";
 	import TextClipPanel from "../text/TextClipPanel.svelte";
 	import GlCanvas from "./GlCanvas.svelte";
@@ -2616,6 +2617,9 @@
 
 	let selectedAudioClipId = $state<string | null>(null);
 	let selectedAudioClipIds = $state<string[]>([]);
+	let audioClipSelected = $derived(
+		isSequenceMode && selectedAudioLanes.length > 0,
+	);
 
 	// One selection across the whole stack: filling any lane's selection empties every other's.
 	type SelectionKind = "fx" | "media" | "text" | "audio";
@@ -3890,15 +3894,38 @@
 				onAllBands={textState.setClipsBand}
 				bpm={tempo.bpm}
 			/>
+		{:else if audioClipSelected}
+			<AudioClipPanel
+				lanes={mediaState.timeline.audioLanes ?? []}
+				clipIds={selectedAudioClipIds}
+				primaryClipId={selectedAudioClipId}
+				onChange={(audioLanes) =>
+					mediaState.set({ ...mediaState.timeline, audioLanes })}
+				onBeforeEdit={mediaState.pushHistory}
+				sourceName={audioSourceName}
+				bpmSourceId={tempo.poolSource ?? songSourceId}
+				onSetBpmSource={projectSongs.setBpmSource}
+				onClose={() => {
+					selectedAudioClipId = null;
+					selectedAudioClipIds = [];
+				}}
+			/>
 		{/if}
 	{/snippet}
 
 	<MobileSheet
-		topPanel={mediaState.selectedClip || textState.selectedClip
+		topPanel={mediaState.selectedClip ||
+		textState.selectedClip ||
+		audioClipSelected
 			? layerPanel
 			: undefined}
+		topPanelChain={!!(mediaState.selectedClip || textState.selectedClip)}
 		settingsLabel="Mosh"
-		topPanelLabel={mediaState.selectedClip ? "Media clip" : "Text clip"}
+		topPanelLabel={mediaState.selectedClip
+			? "Media clip"
+			: textState.selectedClip
+				? "Text clip"
+				: "Audio clip"}
 	>
 		{#snippet settings()}
 			{@render moshSettings()}

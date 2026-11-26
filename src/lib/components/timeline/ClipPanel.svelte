@@ -15,7 +15,8 @@
 		onClose?: () => void;
 		closeLabel: string;
 		controls: Snippet;
-		chain: Snippet;
+		/** Left out by a clip kind with no chain, which never opens on it. */
+		chain?: Snippet;
 	}
 
 	let {
@@ -54,7 +55,7 @@
 			</div>
 			{@render controls()}
 		{:else}
-			{@render chain()}
+			{@render chain?.()}
 		{/if}
 	</div>
 {/if}
