@@ -8,6 +8,9 @@
 		/** An editor for whatever the user just picked, a clip say. While one is showing it
 		 * takes two tabs of its own, its controls and its chain, in front of the settings. */
 		topPanel?: Snippet<[section: "clip" | "chain"]>;
+		/** Off for a top panel with no chain of its own, an audio clip's: the chain tab
+		 * keeps the effects panel. */
+		topPanelChain?: boolean;
 		/** Tab names. The first tab is the top panel's while one is showing. */
 		settingsLabel?: string;
 		effectsLabel?: string;
@@ -19,6 +22,7 @@
 		settings,
 		effectsPanel,
 		topPanel,
+		topPanelChain = true,
 		settingsLabel = "Settings",
 		effectsLabel = "Chain",
 		topPanelLabel = "Clip",
@@ -177,7 +181,7 @@
 		<div class="tab-content">
 			{#if activeTab === "settings"}
 				{@render settings!()}
-			{:else if topPanel}
+			{:else if topPanel && (activeTab === "clip" || topPanelChain)}
 				{@render topPanel(activeTab === "clip" ? "clip" : "chain")}
 			{:else}
 				{@render effectsPanel!()}
