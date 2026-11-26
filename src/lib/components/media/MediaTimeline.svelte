@@ -1,7 +1,7 @@
 <script lang="ts">
 	import KeyRows from "../timeline/KeyRows.svelte";
 	import KeyRowsToggle from "../timeline/KeyRowsToggle.svelte";
-	import { clipAt } from "../../timeline/clips";
+	import { clipAt, type FadeEdge } from "../../timeline/clips";
 	import { effectFocus } from "../../effects/effect-focus.svelte";
 	import {
 		chainKeyRows,
@@ -78,6 +78,7 @@
 	import { draggedSourceId } from "../../editor/source-drag.svelte";
 	import { stackIndex, type LayerRef } from "../../timeline/layer-order";
 	import ChainClipBar from "../timeline/ChainClipBar.svelte";
+	import ClipFades from "../timeline/ClipFades.svelte";
 	import ClipVolume from "../timeline/ClipVolume.svelte";
 	import ClipBoundaries from "../timeline/ClipBoundaries.svelte";
 	import ClipLaneGutter from "../timeline/ClipLaneGutter.svelte";
@@ -454,6 +455,22 @@
 			})),
 		);
 	}
+
+	function commonFade(edge: FadeEdge): number | undefined {
+		const fades = selectedClips.map((c) => (c as MediaClip)[edge] ?? 0);
+		return fades.every((f) => f === fades[0]) ? fades[0] : undefined;
+	}
+
+	function setFade(edge: FadeEdge, sec: number) {
+		onBeforeEdit?.();
+		onChange(
+			updateMediaClips(timeline, new Set(selectedClipIds), (c) => ({
+				...c,
+				[edge]: sec > 0 ? sec : undefined,
+			})),
+		);
+	}
+
 	$effect(() => {
 		if (selectedClips.length === 0 || !onModeChange) return;
 		return stack.registerSelectionBar("media", clipBar);
@@ -1115,6 +1132,13 @@
 					onReset={() => setSoundGain(undefined)}
 				/>
 			{/if}
+		{/snippet}
+		{#snippet trailing()}
+			<ClipFades
+				fadeInSec={commonFade("fadeInSec")}
+				fadeOutSec={commonFade("fadeOutSec")}
+				onFade={setFade}
+			/>
 		{/snippet}
 	</ChainClipBar>
 {/snippet}
