@@ -50,7 +50,8 @@
 	/* Longhands only: the global select rule keeps its chevron in padding-right
 	   and background-image. Sized as the toolbar buttons beside it. */
 	.division {
-		padding-block: 0.15rem;
+		/* A pixel lower than even: Chrome sits a select's capitals about 1px high. */
+		padding-block: calc(0.15rem + 1px) calc(0.15rem - 1px);
 		padding-left: 0.4rem;
 		font-family: var(--font-mono);
 		font-size: 0.6rem;
