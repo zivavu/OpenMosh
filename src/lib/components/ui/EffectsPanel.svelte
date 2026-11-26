@@ -1033,14 +1033,16 @@
 							<X size={13} />
 						</button>
 					</form>
-				{:else if presets.length === 0}
+				{/if}
+				<!-- The picker stays as it was while a name is typed. -->
+				{#if presets.length === 0 && !saving}
 					<div class="preset-empty">
 						<span>No presets yet</span>
 						<button class="preset-empty-action" onclick={() => (saving = true)}>
 							Save this chain
 						</button>
 					</div>
-				{:else}
+				{:else if presets.length > 0}
 					<button
 						class="preset-trigger"
 						class:loaded={activePresetName !== null}
