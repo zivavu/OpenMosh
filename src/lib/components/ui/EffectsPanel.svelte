@@ -571,23 +571,28 @@
 			: hiddenDefs,
 	);
 
-	function addEffect(defId: string) {
-		const def = EFFECT_DEFINITIONS.find((d) => d.id === defId);
-		if (!def) return;
-		if (hiddenIds.has(defId)) {
-			hiddenIds = new Set([...hiddenIds].filter((id) => id !== defId));
+	/** Back into the chain with the settings they were hidden with, as one undo step. */
+	function addEffects(defIds: string[]) {
+		const defs = EFFECT_DEFINITIONS.filter((d) => defIds.includes(d.id));
+		if (defs.length === 0) return;
+		if (defs.some((d) => hiddenIds.has(d.id))) {
+			hiddenIds = new Set(
+				[...hiddenIds].filter((id) => !defs.some((d) => d.id === id)),
+			);
 			persistHiddenIds();
 		}
 		onBeforeUserEdit?.();
-		const instance = createEffectInstance(def);
-		const stashed = stashedValues.get(defId);
-		if (stashed) {
-			instance.values = { ...instance.values, ...stashed.values };
-			if (stashed.volumeLinks)
-				instance.volumeLinks = { ...stashed.volumeLinks };
-			stashedValues.delete(defId);
+		for (const def of defs) {
+			const instance = createEffectInstance(def);
+			const stashed = stashedValues.get(def.id);
+			if (stashed) {
+				instance.values = { ...instance.values, ...stashed.values };
+				if (stashed.volumeLinks)
+					instance.volumeLinks = { ...stashed.volumeLinks };
+				stashedValues.delete(def.id);
+			}
+			effects.push(instance);
 		}
-		effects.push(instance);
 		appliedIndex = null;
 		onUserEdit?.();
 	}
@@ -1267,16 +1272,25 @@
 			{/if}
 
 			{#if filteredHiddenDefs.length > 0}
-				<button
-					class="hidden-header"
-					onclick={() => (showHidden = !showHidden)}
-				>
-					<span
-						class="hidden-arrow"
-						class:expanded={showHidden || !!searchQuery}>&#9654;</span
+				<div class="hidden-head">
+					<button
+						class="hidden-header"
+						onclick={() => (showHidden = !showHidden)}
 					>
-					<span>Hidden effects ({filteredHiddenDefs.length})</span>
-				</button>
+						<span
+							class="hidden-arrow"
+							class:expanded={showHidden || !!searchQuery}>&#9654;</span
+						>
+						<span>Hidden effects ({filteredHiddenDefs.length})</span>
+					</button>
+					<button
+						class="unhide-all"
+						title="Put these effects back in the chain, with the settings they had"
+						onclick={() => addEffects(filteredHiddenDefs.map((d) => d.id))}
+					>
+						Unhide all
+					</button>
+				</div>
 
 				{#if showHidden || searchQuery}
 					<div class="hidden-list">
@@ -1285,7 +1299,7 @@
 								<span class="hidden-name">{def.name}</span>
 								<button
 									class="add-btn"
-									onclick={() => addEffect(def.id)}
+									onclick={() => addEffects([def.id])}
 									title="Add to chain"
 								>
 									<Plus size={14} />
@@ -1657,6 +1671,29 @@
 		color: var(--mosh);
 	}
 
+	.unhide-all {
+		flex-shrink: 0;
+		margin-right: 0.6rem;
+		padding: 0.15rem 0.4rem;
+		background: none;
+		border: 1px solid var(--line-strong);
+		border-radius: var(--r-1);
+		color: var(--text-3);
+		font-family: var(--font-mono);
+		font-size: 0.58rem;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		cursor: pointer;
+		transition:
+			color var(--t-fast),
+			border-color var(--t-fast);
+	}
+
+	.unhide-all:hover {
+		color: var(--mosh);
+		border-color: var(--mosh-dim);
+	}
+
 	.hidden-arrow {
 		font-size: 0.5rem;
 		transition: transform var(--t);
@@ -1789,7 +1826,9 @@
 		background: rgba(110, 231, 192, 0.1);
 	}
 
-	.hidden-header {
+	.hidden-head {
+		display: flex;
+		align-items: center;
 		border-top: 1px solid var(--line);
 	}
 
