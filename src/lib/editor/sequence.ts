@@ -82,22 +82,28 @@ export function isHandBuiltLabel(span: {
 	return !span.presetName && span.label !== "mosh" && span.label !== "auto";
 }
 
-/** Kept through a roll or a clear: what the user locked, and Masks in use. */
+/** Kept through a roll or a preset Fill: what the user locked, and Masks in use.
+ * A Clear keeps only what's locked. */
 export function isHeld(e: EffectInstance): boolean {
 	return !!e.locked || (isMaskEffect(e) && e.enabled);
+}
+
+export function isLocked(e: EffectInstance): boolean {
+	return !!e.locked;
 }
 
 /** A fresh chain that keeps `from`'s held effects as they are, where they sat. */
 export function keepLocked(
 	fresh: EffectInstance[],
 	from: EffectInstance[],
+	held: (e: EffectInstance) => boolean = isHeld,
 ): EffectInstance[] {
-	if (!from.some(isHeld)) return fresh;
+	if (!from.some(held)) return fresh;
 	const byDef = new Map(fresh.map((e) => [e.defId, e]));
-	for (const e of from) if (isHeld(e)) byDef.delete(e.defId);
+	for (const e of from) if (held(e)) byDef.delete(e.defId);
 	const out: EffectInstance[] = [];
 	for (const e of from) {
-		if (isHeld(e)) {
+		if (held(e)) {
 			out.push(cloneEffectInstance(e));
 			continue;
 		}

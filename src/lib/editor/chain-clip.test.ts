@@ -1,11 +1,16 @@
 import { describe, expect, it } from "bun:test";
-import type { EffectInstance } from "../effects";
+import { loadInitialEffects, type EffectInstance } from "../effects";
 import {
 	resizeBoundary,
 	resizeClipsIn,
 	type SourceAnchor,
 } from "../timeline/clips";
-import { chainClipAnchor, type ChainClip } from "./chain-clip";
+import { MASK_EFFECT_ID } from "../effects/catalog/mask";
+import {
+	chainClipAnchor,
+	clearedChainClip,
+	type ChainClip,
+} from "./chain-clip";
 
 function keyed(id: string, start: number, end: number, times: number[]) {
 	const effect = {
@@ -73,5 +78,23 @@ describe("chainClipAnchor", () => {
 		const [left, right] = next.clips;
 		expect(keyTimes(left)).toEqual([1]);
 		expect(keyTimes(right)).toEqual([5]);
+	});
+});
+
+describe("clearedChainClip", () => {
+	it("switches a Mask in use off, and keeps what's locked", () => {
+		const effects = loadInitialEffects();
+		const mask = effects.find((e) => e.defId === MASK_EFFECT_ID)!;
+		mask.enabled = true;
+		mask.values.shape = "rect";
+		const locked = effects.find((e) => e.defId !== MASK_EFFECT_ID)!;
+		locked.enabled = true;
+		locked.locked = true;
+		const clip = { id: "a", start: 0, end: 4, label: "x", effects };
+		const out = clearedChainClip(clip as ChainClip).effects;
+		const byDef = (id: string) => out.find((e) => e.defId === id)!;
+		expect(byDef(MASK_EFFECT_ID).enabled).toBe(false);
+		expect(byDef(MASK_EFFECT_ID).values.shape).not.toBe("rect");
+		expect(byDef(locked.defId)).toMatchObject({ enabled: true, locked: true });
 	});
 });

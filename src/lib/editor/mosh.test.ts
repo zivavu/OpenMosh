@@ -342,7 +342,7 @@ describe("Mask effects", () => {
 		hasAudio: true,
 	};
 
-	it("ride through every roll and clear exactly as they were", () => {
+	it("ride through every roll exactly as they were", () => {
 		for (const moshStyle of ["random", "curated"] as const) {
 			for (let seed = 1; seed <= 30; seed++) {
 				const effects = loadInitialEffects();
@@ -354,10 +354,27 @@ describe("Mask effects", () => {
 				withSeededRandom(seed, () =>
 					generateMosh(effects, { ...options, moshStyle }),
 				);
-				clearEffects(effects);
 				expect(effects[at]).toEqual(before);
 			}
 		}
+	});
+
+	it("go off and back to their defaults on a clear, unless locked", () => {
+		const effects = loadInitialEffects();
+		const mask = effects.find((e) => e.defId === MASK_EFFECT_ID)!;
+		const pristine = structuredClone(mask.values);
+		mask.enabled = true;
+		mask.values.shape = "rect";
+		clearEffects(effects);
+		expect(mask.enabled).toBe(false);
+		expect(mask.values).toEqual(pristine);
+
+		mask.enabled = true;
+		mask.values.shape = "rect";
+		mask.locked = true;
+		const before = structuredClone(mask);
+		clearEffects(effects);
+		expect(mask).toEqual(before);
 	});
 
 	it("never move an effect across one, which would change what it clips", () => {

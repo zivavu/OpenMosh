@@ -96,7 +96,8 @@ Outside CI a run reuses whatever already serves its port, so when my dev server 
 - A backup (`.openmosh-backup`, `lib/backup/backup.ts`) is the same stored zip holding every
   IndexedDB record and the `openmosh*` localStorage keys, with its own `BACKUP_VERSION`.
   Loading one merges: records keep their ids and replace same-keyed ones; proxies stay out.
-- Locked effects and Masks in use survive a preset Fill or update, the same as a Clear or a mosh.
+- Locked effects and Masks in use survive a preset Fill or update, the same as a mosh. A Clear
+  keeps only locked effects and resets Masks too, on purpose.
 - Chain-clip behavior (fill/mosh/clear/static/auto) lives once in `lib/editor/chain-clip.ts`;
   `media/chain.ts` and `fx-lanes.ts` are thin wrappers. New chain-editing paths go through
   `chain-fanout.ts`, or a multi-selection edits only the primary clip. An auto clip rolls a
@@ -147,8 +148,8 @@ Outside CI a run reuses whatever already serves its port, so when my dev server 
   editor unreleased and came back out: I didn't like its look. It stays in the lab only.
 - Area masking is the Mask effect (`effects/catalog/mask.ts`), not a per-effect toggle. It
   limits the effects above it, back to the previous Mask or the top of its own chain (an FX
-  lane's chain too), and blends the rest back to how that scope began. Moshes, clears and
-  rolls never touch a Mask. Presets keep its painting and image. On a media clip it paints in the
+  lane's chain too), and blends the rest back to how that scope began. Moshes and rolls
+  never touch a Mask; a Clear resets it. Presets keep its painting and image. On a media clip it paints in the
   layer's box.
 - Keyframes (`lib/keyframes.ts`): an effect slider's keys (`EffectInstance.keys`) count
   seconds from its clip's start and travel with the clip. A split or a start trim (shared
