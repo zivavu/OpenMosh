@@ -25,6 +25,7 @@ import {
 	DEFAULT_INTERVAL_SEC,
 	handBuiltLabel,
 	isHeld,
+	isLocked,
 	keepLocked,
 	keepLockedInPreset,
 	randomSeed,
@@ -119,9 +120,9 @@ export function rolledChainClip<C extends ChainClip>(
 	};
 }
 
-/** Reset to an all-disabled static chain; locked effects stay. */
+/** Reset to an all-disabled static chain, Masks too; locked effects stay. */
 export function clearedChainClip<C extends ChainClip>(clip: C): C {
-	const effects = keepLocked(cleanEffects(), clip.effects);
+	const effects = keepLocked(cleanEffects(), clip.effects, isLocked);
 	return {
 		...clip,
 		mode: "static",

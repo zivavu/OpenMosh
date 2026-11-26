@@ -220,7 +220,7 @@ describe("keepLockedInPreset", () => {
 		expect(out[1]).toMatchObject({ locked: true, values: { v: 1 } });
 	});
 
-	test("keeps a Mask in use, painting and all, like a Clear does", () => {
+	test("keeps a Mask in use, painting and all, like a roll does", () => {
 		const mask = {
 			...fx(MASK_EFFECT_ID),
 			values: { paint: "data:image/png;base64,AAAA" },

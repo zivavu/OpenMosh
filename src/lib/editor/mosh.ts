@@ -383,9 +383,10 @@ export function rerollEffect(effect: EffectInstance): void {
 	effect.enabled = true;
 }
 
+/** Everything but locked effects goes back to off and its defaults, Masks too. */
 export function clearEffects(effects: EffectInstance[]): void {
 	for (const effect of effects) {
-		if (!isMoshable(effect)) continue;
+		if (effect.locked) continue;
 		effect.enabled = false;
 		const def = getDefinition(effect.defId);
 		if (!def) continue;

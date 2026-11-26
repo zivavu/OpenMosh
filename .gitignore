@@ -20,6 +20,7 @@ docs
 .claude
 .agents
 skills-lock.json
+skills
 
 #misc
 ZEN*
