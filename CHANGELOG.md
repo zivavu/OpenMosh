@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.0.7](https://github.com/zivavu/OpenMosh/compare/v1.0.6...v1.0.7) (2026-11-27)
+
+
+### Added
+
+* Clear Masks along with the other effects ([68006b7](https://github.com/zivavu/OpenMosh/commit/68006b7c49962335fdfd59b2b79a073d3fbdc468))
+* Edit audio clips in the sidebar ([5de73e4](https://github.com/zivavu/OpenMosh/commit/5de73e43f075c919c775569813cd4fd4b0048020))
+* Fade media clips from the timeline bar ([17f889f](https://github.com/zivavu/OpenMosh/commit/17f889ff94767359845a109cf627e47a7829c54a))
+* Move Bulge's center anywhere in the frame ([85b3366](https://github.com/zivavu/OpenMosh/commit/85b336603b3b931d660c17dca85df4c74b9f562e))
+* Reroll any effect on its own ([8d0f280](https://github.com/zivavu/OpenMosh/commit/8d0f28008cda9be85df15810a4ad762b1b82e87e))
+* Show more effects in the upload screen's demo ([eb56d6f](https://github.com/zivavu/OpenMosh/commit/eb56d6fc2bfcba9b6ef92cdee0d3a706ab30ea92))
+* Unhide all hidden effects at once ([b91ac31](https://github.com/zivavu/OpenMosh/commit/b91ac31d45539494c807d6eeb552274d1bd909fd))
+
+
+### Fixed
+
+* Center the key grid spacing picker's text ([ec987bb](https://github.com/zivavu/OpenMosh/commit/ec987bb5beb24ae019a406a837a3176d437ab278))
+* Keep effect rows the same height when their tools show ([92279d8](https://github.com/zivavu/OpenMosh/commit/92279d81400f941281210e9864034fc9a712ba2c))
+* Keep the presets list open while you name a new preset ([0b571fd](https://github.com/zivavu/OpenMosh/commit/0b571fd893d214434855d8824fab3b7b36dacdd0))
+* Show whole effect names when the row isn't hovered ([d98083c](https://github.com/zivavu/OpenMosh/commit/d98083c9810f84856f99f901eabcbe0169548354))
+* Stop Grain repeating in a pattern and sliding ([a229bdc](https://github.com/zivavu/OpenMosh/commit/a229bdcd85f527aa80bd4f4e9cee706469185dc5))
+* Wrap long error messages inside their toast ([6ac12ac](https://github.com/zivavu/OpenMosh/commit/6ac12ac14f1bc1fa504a779e9f3eba4775e2288b))
+
 ## [1.0.6](https://github.com/zivavu/OpenMosh/compare/v1.0.5...v1.0.6) (2026-11-22)
 
 Tracking has a second look, Blocks, which splits the picture into boxes that follow light, motion or detail and fills them with Invert, Heat, Hue Shift or Mix. The HUD look gets more controls: what its targets follow, brackets, a frame or a reticle around each one, links between them, text size and label type, a crosshair switch, and any color. Line width runs from 0 to 10, and there can be up to 16 targets. Dim text and the edges of buttons, toggles and fields are brighter across the app. Pasting a clip copy that spans several lanes now puts it back on all of them.
