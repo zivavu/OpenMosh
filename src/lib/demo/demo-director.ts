@@ -13,13 +13,15 @@ const ANIMATED_POOL = [
 	"ripple",
 	"swirl",
 	"tunnel",
-	"vhs",
 	"tile",
 	"melt",
 	"jitter",
 	"shockwave",
-	"liquid-light",
 	"data-bend",
+	"rgb-burst",
+	"screen-jump",
+	"ring-warp",
+	"stylize-glitch",
 ];
 
 /** Moving effects roll from the top of their ranges, so the motion reads. */
@@ -36,16 +38,26 @@ const STATIC_POOL = [
 	"color-halves",
 	"slices",
 	"smear",
-	"data-bend",
-	"pixel-sort",
 	"halftone",
 	"edges",
 	"neon-edges",
 	"mirror",
 	"bulge",
 	"bleach",
+	"vhs",
 	"soft-glitch",
 	"scanlines",
+	"kaleido",
+	"thermal",
+	"hsv-swap",
+	"trio-tone",
+	"insta-color",
+	"sobel-neon",
+	"emboss",
+	"relief",
+	"stereoscopic",
+	"fiber-displace",
+	"radial-blur",
 ];
 
 /** Every transition the app ships; "cut" is excluded since the demo already cuts. */
@@ -74,7 +86,8 @@ function buildChain(): EffectInstance[] {
 	const ids = new Set<string>([pick(ANIMATED_POOL)]);
 	// A second animated effect most of the time: one alone reads as a loop.
 	if (Math.random() > 0.35) ids.add(pick(ANIMATED_POOL));
-	const extras = 1 + Math.floor(Math.random() * 2);
+	if (Math.random() > 0.7) ids.add(pick(ANIMATED_POOL));
+	const extras = 2 + Math.floor(Math.random() * 2);
 	for (let i = 0; i < extras; i++) ids.add(pick(STATIC_POOL));
 
 	const chain: EffectInstance[] = [];
